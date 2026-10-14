@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
+import Producer from "./pages/Producer";
 import Restaurant from "./pages/Restaurant";
 
-// 画面は2つだけなので、URL の # で切り替える（#/restaurant）
+// 画面は少ないので、URL の # で切り替える（#/restaurant、#/producer）
 function useHashRoute() {
   const [hash, setHash] = useState(() => window.location.hash);
   useEffect(() => {
@@ -21,10 +22,10 @@ function Home() {
           <strong>仕入れ案を作る</strong>
           <span>飲食店：必要な食材・数量・希望日から、複数の生産者を組み合わせた仕入れ案を作ります</span>
         </a>
-        <div className="entry disabled" aria-disabled="true">
+        <a href="#/producer" className="entry">
           <strong>販売できるものを登録</strong>
-          <span>生産者：準備中です</span>
-        </div>
+          <span>生産者：今回販売に回せる量と受渡条件を登録・変更します</span>
+        </a>
       </div>
       <p className="muted small">表示されるのは取引相談に使う案です。注文確定・在庫予約・決済・配送は行いません。</p>
     </>
@@ -39,7 +40,7 @@ export default function App() {
         <a href="#/">AI地域商社</a>
         <span className="demo-tag">デモ・架空データ</span>
       </header>
-      <main className="container">{route === "/restaurant" ? <Restaurant /> : <Home />}</main>
+      <main className="container">{route === "/restaurant" ? <Restaurant /> : route === "/producer" ? <Producer /> : <Home />}</main>
     </>
   );
 }

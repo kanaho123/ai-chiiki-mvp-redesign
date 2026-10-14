@@ -359,6 +359,7 @@ function PlanView({ shown, stale, busy, onRecalc }: { shown: Shown; stale: boole
         </p>
       </div>
 
+      <p className="small"><a href="#/producer">生産者の登録画面へ（数量の変更・公開停止）</a></p>
     </section>
   );
 }

@@ -128,5 +128,3 @@ ul.plain { margin: 0.25rem 0 0; padding-left: 1.2rem; }
 .listing-meta { font-size: 0.85rem; color: var(--muted); margin: 0.3rem 0 0.6rem; }
 .inline-edit { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .inline-edit input { width: 6rem; }
-.entry.disabled { opacity: 0.55; }
-.entry.disabled strong { color: var(--muted); }
