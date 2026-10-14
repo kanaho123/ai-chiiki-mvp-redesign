@@ -17,3 +17,6 @@ dist/
 
 # Prisma が生成するコード（npm install 時に自動生成）
 /server/generated/
+
+# デザイン確認用のスクリーンショット（Git には含めない）
+/screenshots/

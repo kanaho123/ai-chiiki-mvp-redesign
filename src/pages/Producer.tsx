@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { SupplyListing } from "../lib/allocate.js";
 import { DEMO_PLACE, IRREGULAR_REASONS, REGIONS, UNITS } from "../lib/constants.js";
 import { formatDateJa, jstDate } from "../lib/dates.js";
+import { Label } from "../components/Label";
 
 type Producer = { id: string; name: string };
 
@@ -100,47 +101,43 @@ export default function ProducerPage() {
   return (
     <>
       <h1>販売できるものを登録</h1>
-      <p className="muted small">
+      <p className="lead">
         登録するのは、既存の注文分を除いて今回販売に回せる量です。仕入れ案に使われただけでは数量は減りません。
       </p>
 
       <section className="card">
         <form className="form" onSubmit={register}>
-          <div className="stack">
+          <label className="field">
+            <Label required>生産者</Label>
+            <select value={form.producerId} onChange={(e) => set("producerId", e.target.value)} aria-required="true">
+              <option value="">新しい生産者を登録</option>
+              {producers.map((p) => <option key={p.id} value={p.id}>{producerLabel(p)}</option>)}
+            </select>
+          </label>
+          {!form.producerId && (
             <label className="field">
-              <span>生産者</span>
-              <select value={form.producerId} onChange={(e) => set("producerId", e.target.value)}>
-                <option value="">新しい生産者を登録</option>
-                {producers.map((p) => <option key={p.id} value={p.id}>{producerLabel(p)}</option>)}
-              </select>
+              <Label required>生産者名</Label>
+              <input value={form.producerName} onChange={(e) => set("producerName", e.target.value)} maxLength={30} placeholder="例：D農家" aria-required="true" />
             </label>
-            {!form.producerId && (
-              <label className="field">
-                <span>生産者名</span>
-                <input value={form.producerName} onChange={(e) => set("producerName", e.target.value)} maxLength={30} placeholder="例：D農家" />
-              </label>
-            )}
-          </div>
+          )}
+
+          <label className="field">
+            <Label required>品目</Label>
+            <input value={form.item} onChange={(e) => set("item", e.target.value)} maxLength={30} placeholder="例：トマト" aria-required="true" />
+          </label>
+          <label className="field">
+            <Label>品種</Label>
+            <input value={form.variety} onChange={(e) => set("variety", e.target.value)} maxLength={30} placeholder="例：桃太郎（空欄なら登録しない）" />
+          </label>
 
           <div className="row">
             <label className="field">
-              <span>品目</span>
-              <input value={form.item} onChange={(e) => set("item", e.target.value)} maxLength={30} placeholder="例：トマト" />
+              <Label required>販売可能日</Label>
+              <input type="date" min={jstDate()} value={form.availableDate} onChange={(e) => set("availableDate", e.target.value)} aria-required="true" />
             </label>
             <label className="field">
-              <span>品種（任意）</span>
-              <input value={form.variety} onChange={(e) => set("variety", e.target.value)} maxLength={30} placeholder="例：桃太郎" />
-            </label>
-          </div>
-
-          <div className="row">
-            <label className="field">
-              <span>販売可能日（受渡日）</span>
-              <input type="date" min={jstDate()} value={form.availableDate} onChange={(e) => set("availableDate", e.target.value)} />
-            </label>
-            <label className="field">
-              <span>地域</span>
-              <select value={form.region} onChange={(e) => set("region", e.target.value)}>
+              <Label required>地域</Label>
+              <select value={form.region} onChange={(e) => set("region", e.target.value)} aria-required="true">
                 <option value="">選択</option>
                 {REGIONS.map((r) => <option key={r}>{r}</option>)}
               </select>
@@ -149,68 +146,74 @@ export default function ProducerPage() {
 
           <div className="row">
             <label className="field">
-              <span>販売可能量</span>
-              <input type="number" inputMode="numeric" min={0} step={1} value={form.quantity} onChange={(e) => set("quantity", e.target.value)} />
+              <Label required>販売可能量</Label>
+              <input type="number" inputMode="numeric" min={0} step={1} value={form.quantity} onChange={(e) => set("quantity", e.target.value)} placeholder="例：5" aria-required="true" />
             </label>
             <label className="field">
-              <span>単位</span>
-              <select value={form.unit} onChange={(e) => set("unit", e.target.value)}>
+              <Label required>単位</Label>
+              <select value={form.unit} onChange={(e) => set("unit", e.target.value)} aria-required="true">
                 {UNITS.map((u) => <option key={u}>{u}</option>)}
               </select>
             </label>
           </div>
 
           <label className="field">
-            <span>税込単価</span>
+            <Label required>税込単価</Label>
             <div className="with-unit">
-              <input type="number" inputMode="numeric" min={0} step={1} value={form.unitPrice} onChange={(e) => set("unitPrice", e.target.value)} />
+              <input type="number" inputMode="numeric" min={0} step={1} value={form.unitPrice} onChange={(e) => set("unitPrice", e.target.value)} placeholder="例：600" aria-required="true" />
               <em>円/{form.unit}</em>
             </div>
           </label>
 
           <label className="field">
-            <span>受渡場所</span>
-            <input list="places" value={form.handoverPlace} onChange={(e) => set("handoverPlace", e.target.value)} maxLength={50} />
+            <Label required>受渡場所</Label>
+            <input list="places" value={form.handoverPlace} onChange={(e) => set("handoverPlace", e.target.value)} maxLength={50} aria-required="true" />
             <datalist id="places">{places.map((p) => <option key={p} value={p} />)}</datalist>
           </label>
 
           <div className="field">
-            <span>受渡時間</span>
+            <Label required>受渡時間</Label>
             <div className="row">
-              <input type="time" aria-label="受渡開始" value={form.handoverStart} onChange={(e) => set("handoverStart", e.target.value)} />
-              <input type="time" aria-label="受渡終了" value={form.handoverEnd} onChange={(e) => set("handoverEnd", e.target.value)} />
+              <label className="field">
+                <span className="sub-label">開始</span>
+                <input type="time" aria-label="受渡開始" value={form.handoverStart} onChange={(e) => set("handoverStart", e.target.value)} aria-required="true" />
+              </label>
+              <label className="field">
+                <span className="sub-label">終了</span>
+                <input type="time" aria-label="受渡終了" value={form.handoverEnd} onChange={(e) => set("handoverEnd", e.target.value)} aria-required="true" />
+              </label>
             </div>
           </div>
 
           <div className="row">
             <label className="field">
-              <span>最低販売量</span>
+              <Label required>最低販売量</Label>
               <div className="with-unit">
-                <input type="number" inputMode="numeric" min={1} step={1} value={form.minQuantity} onChange={(e) => set("minQuantity", e.target.value)} />
+                <input type="number" inputMode="numeric" min={1} step={1} value={form.minQuantity} onChange={(e) => set("minQuantity", e.target.value)} aria-required="true" />
                 <em>{form.unit}</em>
               </div>
             </label>
             <label className="field">
-              <span>販売刻み</span>
+              <Label required>販売刻み</Label>
               <div className="with-unit">
-                <input type="number" inputMode="numeric" min={1} step={1} value={form.step} onChange={(e) => set("step", e.target.value)} />
+                <input type="number" inputMode="numeric" min={1} step={1} value={form.step} onChange={(e) => set("step", e.target.value)} aria-required="true" />
                 <em>{form.unit}</em>
               </div>
             </label>
           </div>
-          <small className="muted">配分は「最低販売量」から「販売刻み」ごとに行います（例：最低2kg・2kg刻みなら 2kg・4kg・6kg…）</small>
+          <span className="hint">配分は「最低販売量」から「販売刻み」ごとに行います（例：最低2kg・2kg刻みなら 2kg・4kg・6kg…）</span>
 
           <div className="row">
             <label className="field">
-              <span>受渡手数料</span>
+              <Label required>受渡手数料</Label>
               <div className="with-unit">
-                <input type="number" inputMode="numeric" min={0} step={1} value={form.handoverFee} onChange={(e) => set("handoverFee", e.target.value)} />
+                <input type="number" inputMode="numeric" min={0} step={1} value={form.handoverFee} onChange={(e) => set("handoverFee", e.target.value)} aria-required="true" />
                 <em>円</em>
               </div>
             </label>
             <label className="field">
-              <span>規格外・余剰</span>
-              <select value={form.irregularReason} onChange={(e) => set("irregularReason", e.target.value)}>
+              <Label required>規格外・余剰</Label>
+              <select value={form.irregularReason} onChange={(e) => set("irregularReason", e.target.value)} aria-required="true">
                 <option value="">通常品</option>
                 {IRREGULAR_REASONS.map((r) => <option key={r}>{r}</option>)}
               </select>
@@ -218,14 +221,14 @@ export default function ProducerPage() {
           </div>
 
           {error && <div className="alert bad" role="alert">{error}</div>}
-          {created && <div className="alert ok" role="status">{created}。飲食店への仕入れ案に使われます。</div>}
+          {created && <div className="alert ok" role="status">✓ {created}。飲食店への仕入れ案に使われます。</div>}
 
-          <button type="submit" className="primary" disabled={busy}>{busy ? "登録中…" : "登録する"}</button>
+          <button type="submit" className="primary block" disabled={busy}>{busy ? "登録中…" : "登録する"}</button>
         </form>
       </section>
 
       <h2>登録済みの出品</h2>
-      <p className="muted small">
+      <p className="lead">
         数量の変更・公開停止をすると、飲食店に表示中の仕入れ案は無効になり、再計算が必要になります。
       </p>
       {loadError && <div className="alert bad">出品を読み込めませんでした。再読み込みしてください。</div>}
@@ -234,7 +237,7 @@ export default function ProducerPage() {
         {!loadError && listings.length === 0 && <p className="muted">まだ出品はありません。</p>}
       </div>
 
-      <p className="small"><a href="#/restaurant">飲食店の仕入れ案の画面へ</a></p>
+      <p><a href="#/restaurant">飲食店の仕入れ案の画面へ</a></p>
     </>
   );
 }
@@ -256,30 +259,44 @@ function ListingCard({ listing: l, onChanged }: { listing: SupplyListing; onChan
   }
 
   return (
-    <div className="card" style={l.isPublic ? undefined : { opacity: 0.7 }}>
+    <div className={`card listing ${l.isPublic ? "" : "paused"}`}>
       <div className="listing-head">
         <strong>{l.producerName}：{l.item}{l.variety && `（${l.variety}）`}</strong>
-        <span className={l.isPublic ? "tag" : "status-badge"}>{l.isPublic ? "公開中" : "公開停止中"}</span>
+        <span className={`tag ${l.isPublic ? "on" : "off"}`}>{l.isPublic ? "● 公開中" : "■ 公開停止中"}</span>
       </div>
-      <div className="listing-meta">
-        {l.quantity}{l.unit}・{yen(l.unitPrice)}/{l.unit}（税込）・{formatDateJa(l.availableDate)} {l.handoverStart}〜{l.handoverEnd}・{l.handoverPlace}
-        <br />
-        {l.region}・最低{l.minQuantity}{l.unit}・{l.step}{l.unit}刻み・受渡手数料{yen(l.handoverFee)}
-        {l.irregularReason && <> ・<span className="tag">規格外：{l.irregularReason}</span></>}
+      <dl className="listing-facts">
+        <dt>販売可能量</dt>
+        <dd className="stock">{l.quantity}{l.unit}</dd>
+        <dt>税込単価</dt>
+        <dd>{yen(l.unitPrice)}/{l.unit}</dd>
+        <dt>受渡し</dt>
+        <dd>{formatDateJa(l.availableDate)} {l.handoverStart}〜{l.handoverEnd}・{l.handoverPlace}</dd>
+        <dt>条件</dt>
+        <dd>{l.region}・最低{l.minQuantity}{l.unit}・{l.step}{l.unit}刻み・受渡手数料{yen(l.handoverFee)}</dd>
+      </dl>
+      {l.irregularReason && <div><span className="tag irregular">規格外：{l.irregularReason}</span></div>}
+
+      <div className="qty-editor">
+        <div className="field">
+          <span className="label">販売可能量を変更</span>
+          <div className="inline">
+            <span className="with-unit">
+              <input type="number" inputMode="numeric" min={0} step={1} value={qty} aria-label={`${l.producerName}の販売可能量`} onChange={(e) => setQty(e.target.value)} />
+              <em>{l.unit}</em>
+            </span>
+            <button className="primary" onClick={() => patch({ quantity: qty }, `数量を${qty}${l.unit}に変更しました`)} disabled={busy || qty === String(l.quantity)}>
+              数量を変更
+            </button>
+          </div>
+          <span className="hint">新しい数量を入れると押せるようになります</span>
+        </div>
       </div>
-      <div className="inline-edit">
-        <label className="with-unit">
-          <input type="number" inputMode="numeric" min={0} step={1} value={qty} aria-label={`${l.producerName}の販売可能量`} onChange={(e) => setQty(e.target.value)} />
-          <em>{l.unit}</em>
-        </label>
-        <button onClick={() => patch({ quantity: qty }, `数量を${qty}${l.unit}に変更しました`)} disabled={busy || qty === String(l.quantity)}>
-          数量を変更
-        </button>
+      <div className="listing-actions">
         <button onClick={() => patch({ isPublic: !l.isPublic }, l.isPublic ? "公開を止めました" : "公開を再開しました")} disabled={busy}>
           {l.isPublic ? "公開を止める" : "公開を再開"}
         </button>
       </div>
-      {msg && <div className={`alert ${msg.tone} small`} role="status" style={{ marginTop: 8 }}>{msg.text}</div>}
+      {msg && <div className={`alert ${msg.tone} small`} role="status">{msg.tone === "ok" ? "✓ " : "× "}{msg.text}</div>}
     </div>
   );
 }

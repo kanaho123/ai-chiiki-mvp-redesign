@@ -17,17 +17,20 @@ function Home() {
   return (
     <>
       <h1>どちらで使いますか？</h1>
+      <p className="lead">地域の農家が少しずつ出せる食材を、飲食店が使える1つの仕入れ案にまとめます。</p>
       <div className="entry-grid">
         <a href="#/restaurant" className="entry">
+          <span className="who">飲食店の方</span>
           <strong>仕入れ案を作る</strong>
           <span>飲食店：必要な食材・数量・希望日から、複数の生産者を組み合わせた仕入れ案を作ります</span>
         </a>
         <a href="#/producer" className="entry">
+          <span className="who">生産者の方</span>
           <strong>販売できるものを登録</strong>
           <span>生産者：今回販売に回せる量と受渡条件を登録・変更します</span>
         </a>
       </div>
-      <p className="muted small">表示されるのは取引相談に使う案です。注文確定・在庫予約・決済・配送は行いません。</p>
+      <p className="muted small" style={{ marginTop: 20 }}>表示されるのは取引相談に使う案です。注文確定・在庫予約・決済・配送は行いません。</p>
     </>
   );
 }
