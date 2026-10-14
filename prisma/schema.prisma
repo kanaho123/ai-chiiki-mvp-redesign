@@ -1,0 +1,46 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../server/generated/prisma"
+  moduleFormat = "esm"
+  // native: 手元の Windows、rhel-openssl-3.0.x: Vercel Functions（Node.js 22）
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL") // 接続プール経由（アプリ実行時）
+  directUrl = env("DATABASE_URL_UNPOOLED") // 直接接続（マイグレーション時）
+}
+
+// 生産者。名前は重複してよく、ID で区別する。
+model Producer {
+  id       String    @id @default(cuid())
+  name     String
+  listings Listing[]
+}
+
+// 生産者の出品（今回販売に回せる量）。数量・金額は整数で扱う。
+model Listing {
+  id              String   @id @default(cuid())
+  producerId      String
+  producer        Producer @relation(fields: [producerId], references: [id])
+  item            String
+  variety         String? // 品種（任意）
+  quantity        Int
+  unit            String
+  unitPrice       Int // 税込単価（円/単位）
+  availableDate   String // 販売可能日＝受渡日（日本時間 YYYY-MM-DD）
+  region          String
+  irregularReason String? // null は通常品
+  handoverPlace   String
+  handoverStart   String // HH:MM
+  handoverEnd     String // HH:MM
+  minQuantity     Int
+  step            Int
+  handoverFee     Int      @default(0) // 1出品あたりの受渡手数料（円）
+  isPublic        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([item])
+}

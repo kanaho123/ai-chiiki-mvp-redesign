@@ -14,3 +14,6 @@ dist/
 
 # 自己紹介ページの素材（このアプリとは別。ローカルにだけ置く）
 /kowareta-jikoshokai (1).zip
+
+# Prisma が生成するコード（npm install 時に自動生成）
+/server/generated/
