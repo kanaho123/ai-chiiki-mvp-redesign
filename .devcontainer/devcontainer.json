@@ -1,0 +1,54 @@
+{
+  "name": "ai-tiiki (AI地域商社 MVP)",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/ai-tiiki",
+  "shutdownAction": "stopCompose",
+
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+
+  // 5173: Vite 開発サーバー / 3000: vercel dev（Vercel Functions 込み） / 5432: PostgreSQL
+  "forwardPorts": [5173, 3000, 5432],
+  "portsAttributes": {
+    "5173": { "label": "Vite", "onAutoForward": "notify" },
+    "3000": { "label": "vercel dev", "onAutoForward": "notify" },
+    "5432": { "label": "PostgreSQL", "onAutoForward": "silent" }
+  },
+
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "Prisma.prisma",
+        "mtxr.sqltools",
+        "mtxr.sqltools-driver-pg",
+        "mikestead.dotenv",
+        "EditorConfig.EditorConfig"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "files.eol": "\n",
+        "sqltools.connections": [
+          {
+            "name": "ai-tiiki (dev)",
+            "driver": "PostgreSQL",
+            "server": "db",
+            "port": 5432,
+            "database": "ai_tiiki",
+            "username": "postgres",
+            "password": "postgres"
+          }
+        ]
+      }
+    }
+  },
+
+  "remoteUser": "node"
+}

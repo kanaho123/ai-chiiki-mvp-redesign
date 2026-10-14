@@ -1,0 +1,37 @@
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/typescript-node:1-22-bookworm
+    volumes:
+      - ..:/workspaces/ai-tiiki:cached
+      # node_modules はコンテナ内ボリュームに置く（OneDrive同期・Windows側I/Oの影響を避ける）
+      - node_modules:/workspaces/ai-tiiki/node_modules
+      # Vercel CLI のログイン情報を保持（コンテナを作り直しても再ログイン不要）
+      - vercel-auth:/home/node/.local/share/com.vercel.cli
+    command: sleep infinity
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/ai_tiiki
+      TZ: Asia/Tokyo
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ai_tiiki
+      TZ: Asia/Tokyo
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ai_tiiki"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  node_modules:
+  postgres-data:
+  vercel-auth:

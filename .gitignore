@@ -1,0 +1,16 @@
+# 依存・ビルド成果物
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# 環境変数（値を含むため Git に入れない。.env.example は値なしのひな形なので対象にする）
+.env
+.env.*
+!.env.example
+
+# Vercel CLI のプロジェクト紐付け情報
+.vercel/
+
+# 自己紹介ページの素材（このアプリとは別。ローカルにだけ置く）
+/kowareta-jikoshokai (1).zip

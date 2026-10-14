@@ -1,0 +1,37 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Producer {
+  id       String    @id @default(cuid())
+  name     String    @unique
+  listings Listing[]
+}
+
+// 生産者の出品（今回販売に回せる量）。数量は整数で扱う。
+model Listing {
+  id              String   @id @default(cuid())
+  producerId      String
+  producer        Producer @relation(fields: [producerId], references: [id])
+  item            String
+  quantity        Int
+  unit            String
+  unitPrice       Int // 税込単価（円/単位）
+  availableDate   String // 販売可能日＝受渡日（日本時間 YYYY-MM-DD）
+  region          String
+  irregularReason String? // null は通常品
+  handoverPlace   String
+  handoverStart   String // HH:MM
+  handoverEnd     String // HH:MM
+  minQuantity     Int
+  step            Int
+  handoverFee     Int      @default(0) // 1出品あたりの受渡手数料（円）
+  isPublic        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
