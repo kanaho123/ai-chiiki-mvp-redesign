@@ -177,6 +177,8 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .status-note .status-desc { grid-column: 2; font-size: 0.88rem; color: var(--muted); line-height: 1.6; }
 .status-icon { color: var(--warn-text); font-weight: 700; }
 
+.suggestion { display: grid; gap: 12px; border: 2px solid var(--ok-border); background: #f7fbf6; }
+.suggestion-text { font-size: 1.05rem; font-weight: 700; line-height: 1.6; margin: 0; }
 .handover { display: grid; gap: 12px; }
 .handover-row { display: grid; grid-template-columns: 28px 1fr; gap: 4px 10px; align-items: start; }
 .handover-row svg { margin-top: 3px; color: var(--primary); }

@@ -3,6 +3,7 @@ import type { PlanRequest, PlanResult } from "../lib/allocate.js";
 import { REGIONS, STATUS_LABEL, UNITS } from "../lib/constants.js";
 import { formatDateJa, jstDate } from "../lib/dates.js";
 import { Label } from "../components/Label";
+import type { Suggestion } from "../lib/suggest.js";
 
 type Form = {
   item: string;
@@ -18,7 +19,7 @@ type Form = {
   handoverTo: string;
 };
 
-type Shown = { plan: PlanResult; version: string; request: PlanRequest };
+type Shown = { plan: PlanResult; version: string; request: PlanRequest; suggestions?: Suggestion[] };
 
 const EMPTY: Form = {
   item: "", variety: "", quantity: "", unit: "kg", deadline: "", region: "", allowIrregular: "",
@@ -257,6 +258,11 @@ export default function RestaurantPage() {
           stale={stale}
           busy={busy}
           onRecalc={() => requestPlan(shown.request)}
+          onAllowIrregular={() => {
+            // 利用者が押したときだけ条件を変え、最新の DB から計算し直す
+            set("allowIrregular", "yes");
+            requestPlan({ ...shown.request, allowIrregular: true });
+          }}
         />
       )}
     </>
@@ -291,8 +297,11 @@ function Num({ children, stale }: { children: React.ReactNode; stale: boolean })
   );
 }
 
-function PlanView({ shown, stale, busy, onRecalc }: { shown: Shown; stale: boolean; busy: boolean; onRecalc: () => void }) {
+function PlanView({ shown, stale, busy, onRecalc, onAllowIrregular }: {
+  shown: Shown; stale: boolean; busy: boolean; onRecalc: () => void; onAllowIrregular: () => void;
+}) {
   const { plan, request } = shown;
+  const irregularSuggestion = shown.suggestions?.find((x) => x.type === "allow_irregular");
   const u = plan.unit;
   const ok = plan.status === "fulfilled";
 
@@ -348,6 +357,19 @@ function PlanView({ shown, stale, busy, onRecalc }: { shown: Shown; stale: boole
             <span className="status-desc">この案は取引相談に使う候補です。農家の承認・在庫の確保・決済・配送はまだ行われていません。</span>
           </div>
         </div>
+
+        {irregularSuggestion && !stale && (
+          <div className="card suggestion" role="note">
+            <span className="chip ok">→ 条件を変えると満たせます</span>
+            <p className="suggestion-text">{irregularSuggestion.message}</p>
+            <p className="hint" style={{ margin: 0 }}>
+              上は今の条件（規格外不可）で計算した結果です。ボタンを押すと、規格外を「可」に変えて、ほかの条件はそのまま最新の在庫で計算し直します。
+            </p>
+            <button className="primary block" onClick={onAllowIrregular} disabled={busy}>
+              {busy ? "計算中…" : "規格外も含めて再計算"}
+            </button>
+          </div>
+        )}
 
         <div className="card handover">
           <h3>受渡し</h3>
@@ -417,7 +439,7 @@ function PlanView({ shown, stale, busy, onRecalc }: { shown: Shown; stale: boole
               <li>数量を減らす</li>
               <li>希望日を遅らせる</li>
               {request.variety && <li>品種の指定を外す</li>}
-              {!request.allowIrregular && <li>規格外を「可」にする</li>}
+              {!request.allowIrregular && !irregularSuggestion && <li>規格外を「可」にする（今の在庫では、これだけでは希望量に届きません）</li>}
               {(request.handoverPlace || request.handoverFrom || request.handoverTo) && <li>受渡場所・時間の指定を変える</li>}
               {request.maxUnitPrice !== null && <li>税込単価の上限を上げる</li>}
             </ul>
