@@ -62,6 +62,16 @@ function toBody(f: Form) {
   };
 }
 
+/** 「詳しい条件」を閉じていても設定内容が分かるように要約する */
+function optionalSummary(f: Form): string {
+  const parts: string[] = [];
+  if (f.variety.trim()) parts.push(`品種 ${f.variety.trim()}`);
+  if (f.maxUnitPrice) parts.push(`上限 ${Number(f.maxUnitPrice).toLocaleString("ja-JP")}円/${f.unit}`);
+  if (f.handoverPlace) parts.push(f.handoverPlace);
+  if (f.handoverFrom || f.handoverTo) parts.push(`${f.handoverFrom || "—"}〜${f.handoverTo || "—"}`);
+  return parts.length ? parts.join("・") : "品種・価格上限・受渡場所・時間帯：指定なし";
+}
+
 export default function RestaurantPage() {
   const [form, setForm] = useState<Form>(EMPTY);
   const [shown, setShown] = useState<Shown | null>(null);
@@ -168,6 +178,8 @@ export default function RestaurantPage() {
             例を入力：明後日までに大阪近郊のトマト10kg、規格外OK
           </button>
 
+          <p className="group-title">必須の条件</p>
+
           <label className="field">
             <Label required>品目</Label>
             <input value={form.item} onChange={(e) => set("item", e.target.value)} placeholder="例：トマト" maxLength={30} aria-required="true" />
@@ -207,42 +219,50 @@ export default function RestaurantPage() {
             </div>
           </fieldset>
 
-          <label className="field">
-            <Label>品種</Label>
-            <input value={form.variety} onChange={(e) => set("variety", e.target.value)} placeholder="例：桃太郎（空欄なら指定なし）" maxLength={30} />
-            <span className="hint">指定すると、同じ品種が登録された出品だけを使います</span>
-          </label>
-
-          <label className="field">
-            <Label>税込単価の上限</Label>
-            <div className="with-unit">
-              <input type="number" inputMode="numeric" min={1} step={1} value={form.maxUnitPrice} onChange={(e) => set("maxUnitPrice", e.target.value)} placeholder="空欄なら指定なし" />
-              <em>円/{form.unit}</em>
+          <details className="more">
+            <summary>
+              <span className="more-title">詳しい条件<span className="opt" aria-hidden="true">任意</span></span>
+              <span className="more-value">{optionalSummary(form)}</span>
+            </summary>
+            <div className="more-body">
+            <label className="field">
+              <Label>品種</Label>
+              <input value={form.variety} onChange={(e) => set("variety", e.target.value)} placeholder="例：桃太郎（空欄なら指定なし）" maxLength={30} />
+              <span className="hint">指定すると、同じ品種が登録された出品だけを使います</span>
+            </label>
+  
+            <label className="field">
+              <Label>税込単価の上限</Label>
+              <div className="with-unit">
+                <input type="number" inputMode="numeric" min={1} step={1} value={form.maxUnitPrice} onChange={(e) => set("maxUnitPrice", e.target.value)} placeholder="空欄なら指定なし" />
+                <em>円/{form.unit}</em>
+              </div>
+            </label>
+  
+            <label className="field">
+              <Label>受渡場所</Label>
+              <select value={form.handoverPlace} onChange={(e) => set("handoverPlace", e.target.value)}>
+                <option value="">指定なし</option>
+                {[...new Set([...places, ...(form.handoverPlace ? [form.handoverPlace] : [])])].map((p) => <option key={p}>{p}</option>)}
+              </select>
+            </label>
+  
+            <div className="field">
+              <Label>受け取れる時間帯</Label>
+              <div className="row">
+                <label className="field">
+                  <span className="sub-label">開始</span>
+                  <input type="time" aria-label="開始" value={form.handoverFrom} onChange={(e) => set("handoverFrom", e.target.value)} />
+                </label>
+                <label className="field">
+                  <span className="sub-label">終了</span>
+                  <input type="time" aria-label="終了" value={form.handoverTo} onChange={(e) => set("handoverTo", e.target.value)} />
+                </label>
+              </div>
+              <span className="hint">指定すると、受渡時間がこの時間帯に収まる出品だけを使います</span>
             </div>
-          </label>
-
-          <label className="field">
-            <Label>受渡場所</Label>
-            <select value={form.handoverPlace} onChange={(e) => set("handoverPlace", e.target.value)}>
-              <option value="">指定なし</option>
-              {[...new Set([...places, ...(form.handoverPlace ? [form.handoverPlace] : [])])].map((p) => <option key={p}>{p}</option>)}
-            </select>
-          </label>
-
-          <div className="field">
-            <Label>受け取れる時間帯</Label>
-            <div className="row">
-              <label className="field">
-                <span className="sub-label">開始</span>
-                <input type="time" aria-label="開始" value={form.handoverFrom} onChange={(e) => set("handoverFrom", e.target.value)} />
-              </label>
-              <label className="field">
-                <span className="sub-label">終了</span>
-                <input type="time" aria-label="終了" value={form.handoverTo} onChange={(e) => set("handoverTo", e.target.value)} />
-              </label>
-            </div>
-            <span className="hint">指定すると、受渡時間がこの時間帯に収まる出品だけを使います</span>
-          </div>
+              </div>
+          </details>
 
           {error && <div className="alert bad" role="alert">{error}</div>}
 
@@ -309,10 +329,10 @@ function PlanView({ shown, stale, busy, onRecalc, onAllowIrregular }: {
   const chip = stale
     ? { tone: "bad", text: "× 無効な案（在庫が変わる前の計算）" }
     : ok
-      ? { tone: "ok", text: "✓ 必要量を満たしています" }
+      ? { tone: "ok", text: "✓ 希望量を満たしています" }
       : plan.status === "handover_mismatch"
         ? { tone: "warn", text: "！ 同じ日時・場所では揃いません" }
-        : { tone: "warn", text: "！ 必要量に足りません" };
+        : { tone: "warn", text: "！ 希望量に足りません" };
   const headline = ok
     ? `希望${plan.requested}${u}を満たす仕入れ案です`
     : plan.status === "none"
@@ -321,22 +341,21 @@ function PlanView({ shown, stale, busy, onRecalc, onAllowIrregular }: {
 
   return (
     <section className="result" aria-live="polite">
-      <h2>仕入れ案</h2>
+      <p className="kicker">仕入れ案</p>
 
       {stale && (
         <div className="alert bad stale-banner" role="alert">
           <div className="stale-title">× この仕入れ案は無効です</div>
           <p>出品の数量や公開状態が変わったため、下の数量・金額はもう使えません。最新の在庫で再計算してください。</p>
-          <div className="actions" style={{ marginTop: 10 }}>
-            <button className="primary block" onClick={onRecalc} disabled={busy}>
-              {busy ? "計算中…" : "同じ条件で再計算"}
-            </button>
-          </div>
+          <button className="primary block" onClick={onRecalc} disabled={busy} style={{ marginTop: 10 }}>
+            {busy ? "計算中…" : "同じ条件で再計算"}
+          </button>
         </div>
       )}
 
-      <div className={`stack ${stale ? "is-stale" : ""}`}>
-        <div className={`card hero summary ${stale ? "" : ok ? "ok" : "warn"}`}>
+      <div className={`result-body ${stale ? "is-stale" : ""}`}>
+        {/* ① 希望量を満たすか */}
+        <div className={`hero summary ${stale ? "" : ok ? "ok" : "warn"}`}>
           <span className={`chip ${chip.tone}`}>{chip.text}</span>
           <p className="headline">{stale && "【無効】"}{headline}</p>
           {!ok && <p className="headline-sub">{plan.message}</p>}
@@ -344,22 +363,14 @@ function PlanView({ shown, stale, busy, onRecalc, onAllowIrregular }: {
             案の数量 <b><Num stale={stale}>{plan.totalQuantity}{u}</Num></b>
             <span className="muted">／ 希望 {plan.requested}{u}</span>
           </p>
-          <div className="price-box">
-            <div className="price-label">商品代</div>
-            <div className="price"><Num stale={stale}>{yen(plan.subtotal)}</Num><small>（税込）</small></div>
-            <div className="price-note">
-              受渡手数料 <Num stale={stale}>{yen(plan.handoverFee)}</Num>・お支払いの目安 <Num stale={stale}>{yen(plan.total)}</Num>
-            </div>
-          </div>
-          <div className="status-note" role="note">
+          <p className="status-line" role="note">
             <span className="status-icon" aria-hidden="true">ⓘ</span>
-            <strong>状態：{STATUS_LABEL}</strong>
-            <span className="status-desc">この案は取引相談に使う候補です。農家の承認・在庫の確保・決済・配送はまだ行われていません。</span>
-          </div>
+            <span><strong>{STATUS_LABEL}</strong>　取引相談に使う候補です。注文・在庫の確保・決済・配送はまだ行われていません。</span>
+          </p>
         </div>
 
         {irregularSuggestion && !stale && (
-          <div className="card suggestion" role="note">
+          <div className="suggestion" role="note">
             <span className="chip ok">→ 条件を変えると満たせます</span>
             <p className="suggestion-text">{irregularSuggestion.message}</p>
             <p className="hint" style={{ margin: 0 }}>
@@ -371,8 +382,55 @@ function PlanView({ shown, stale, busy, onRecalc, onAllowIrregular }: {
           </div>
         )}
 
-        <div className="card handover">
-          <h3>受渡し</h3>
+        {/* ② 農家別の配分 */}
+        {plan.allocations.length > 0 && (
+          <div className="panel">
+            <h3 className="block-title">農家別の配分<span className="muted">（{plan.allocations.length}軒）</span></h3>
+            <p className="formula" aria-label="内訳の合計">
+              {plan.allocations.map((a, i) => (
+                <span key={a.listingId}>
+                  {i > 0 && <span className="op">＋ </span>}
+                  {a.producerName} <Num stale={stale}>{a.quantity}{u}</Num>
+                </span>
+              ))}
+              <span><span className="op">＝ </span><Num stale={stale}>{plan.totalQuantity}{u}</Num></span>
+            </p>
+            <ul className="alloc-list">
+              {plan.allocations.map((a) => (
+                <li key={a.listingId}>
+                  <div className="alloc">
+                    <span className="name">
+                      {a.producerName}
+                      {a.irregularReason && <span className="tag irregular">規格外：{a.irregularReason}</span>}
+                    </span>
+                    <span className="qty"><Num stale={stale}>{a.quantity}<small>{u}</small></Num></span>
+                  </div>
+                  <div className="alloc meta">
+                    <span>{a.unitPrice.toLocaleString("ja-JP")}円/{u}（税込）</span>
+                    <span><Num stale={stale}>{yen(a.subtotal)}</Num></span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* ③ 金額 */}
+        {plan.allocations.length > 0 && (
+          <div className="panel">
+            <h3 className="block-title">金額</h3>
+            <div className="price-label">商品代（税込）</div>
+            <div className="price"><Num stale={stale}>{yen(plan.subtotal)}</Num></div>
+            <dl className="price-rows">
+              <dt>受渡手数料</dt><dd><Num stale={stale}>{yen(plan.handoverFee)}</Num></dd>
+              <dt>お支払いの目安</dt><dd><Num stale={stale}>{yen(plan.total)}</Num></dd>
+            </dl>
+          </div>
+        )}
+
+        {/* ④ 受渡し */}
+        <div className="panel handover">
+          <h3 className="block-title">受渡し</h3>
           {plan.handover ? (
             <>
               <div className="handover-row">
@@ -391,50 +449,9 @@ function PlanView({ shown, stale, busy, onRecalc, onAllowIrregular }: {
           )}
         </div>
 
-        {plan.allocations.length > 0 && (
-          <>
-            <div className="section-title">
-              <h3 style={{ margin: 0 }}>内訳（{plan.allocations.length}軒の農家）</h3>
-            </div>
-            <div className="formula" aria-label="内訳の合計">
-              {plan.allocations.map((a, i) => (
-                <span key={a.listingId}>
-                  {i > 0 && <span className="op">＋ </span>}
-                  {a.producerName} <Num stale={stale}>{a.quantity}{u}</Num>
-                </span>
-              ))}
-              <span><span className="op">＝ </span><Num stale={stale}>{plan.totalQuantity}{u}</Num></span>
-            </div>
-
-            {plan.allocations.map((a) => (
-              <div className="card alloc-card" key={a.listingId}>
-                <div className="alloc">
-                  <span className="name">{a.producerName}</span>
-                  <span className="qty"><Num stale={stale}>{a.quantity}<small>{u}</small></Num></span>
-                </div>
-                {a.irregularReason && <div><span className="tag irregular">規格外：{a.irregularReason}</span></div>}
-                <div className="alloc meta">
-                  <span>{a.unitPrice.toLocaleString("ja-JP")}円/{u}（税込）</span>
-                  <span>商品代 <b><Num stale={stale}>{yen(a.subtotal)}</Num></b></span>
-                </div>
-              </div>
-            ))}
-
-            <div className="card">
-              <div className="total-row">
-                <span>合計</span>
-                <span><Num stale={stale}>{plan.totalQuantity}{u}・{yen(plan.subtotal)}</Num>（税込）</span>
-              </div>
-              <p className="small muted" style={{ marginBottom: 0 }}>
-                受渡手数料 {yen(plan.handoverFee)}（登録条件）。農家への連絡・承認、在庫確保、決済、配送はこのアプリでは行いません。
-              </p>
-            </div>
-          </>
-        )}
-
         {plan.status !== "fulfilled" && (
-          <div className="card card-soft">
-            <h3>条件を変えて再計算できます</h3>
+          <div className="panel soft">
+            <h3 className="block-title">条件を変えて再計算できます</h3>
             <ul className="plain">
               <li>数量を減らす</li>
               <li>希望日を遅らせる</li>
@@ -449,8 +466,8 @@ function PlanView({ shown, stale, busy, onRecalc, onAllowIrregular }: {
         {plan.notices.map((n) => <div className="alert warn" key={n}>！ {n}</div>)}
 
         {plan.excluded.length > 0 && (
-          <div className="card card-soft">
-            <h3>使わなかった出品</h3>
+          <div className="panel soft">
+            <h3 className="block-title">使わなかった出品</h3>
             <ul className="plain small">
               {plan.excluded.map((e) => (
                 <li key={e.listingId}>{e.producerName}（{e.quantity}{e.unit}）：{e.reasons.join("、")}</li>
@@ -465,6 +482,7 @@ function PlanView({ shown, stale, busy, onRecalc, onAllowIrregular }: {
           {request.handoverPlace && `／${request.handoverPlace}`}
           {(request.handoverFrom || request.handoverTo) && `／${request.handoverFrom ?? ""}〜${request.handoverTo ?? ""}`}
         </p>
+        <p className="small muted">受渡手数料は登録条件です。農家への連絡・承認、在庫確保、決済、配送はこのアプリでは行いません。</p>
       </div>
 
       <p><a href="#/producer">生産者の登録画面へ（数量の変更・公開停止）</a></p>
