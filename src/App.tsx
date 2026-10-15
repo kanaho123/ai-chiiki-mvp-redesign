@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Icon, Logo } from "./components/Icon";
 import type { SupplyListing } from "./lib/allocate.js";
-import { formatDateJa } from "./lib/dates.js";
+import { formatDateJa, jstDate } from "./lib/dates.js";
 import Producer from "./pages/Producer";
 import Restaurant from "./pages/Restaurant";
 
@@ -26,9 +26,12 @@ function usePreview() {
     fetch("/api/listings", { cache: "no-store" })
       .then((r) => r.json())
       .then((d: { listings: SupplyListing[] }) => {
+        const today = jstDate();
+        // 品目と単位ごとにまとめる（kg と個は合算しない）
         const map = new Map<string, PreviewRow>();
         for (const l of d.listings) {
-          if (!l.isPublic || l.quantity <= 0) continue;
+          // 公開停止・在庫0・受渡日を過ぎた出品は「今受け取れる食材」として出さない
+          if (!l.isPublic || l.quantity <= 0 || l.availableDate < today) continue;
           const key = `${l.item}|${l.unit}`;
           const cur = map.get(key) ?? { item: l.item, unit: l.unit, quantity: 0, listings: 0, firstDate: l.availableDate };
           cur.quantity += l.quantity;
@@ -77,7 +80,7 @@ function Home() {
             <span className="icon-wrap"><Icon name="box" size={22} /></span>
             <span>
               <span className="role">生産者の方</span>
-              <span className="title">出品の登録・数量の変更</span>
+              <span className="title">販売する野菜を登録・変更する</span>
             </span>
             <Icon name="chevronRight" className="chev" />
           </a>
@@ -108,7 +111,7 @@ function Home() {
             ))}
           </ul>
         )}
-        <p className="preview-note">公開中の出品の販売可能量です。仕入れ案を作っても、この数量は確保されません。</p>
+        <p className="preview-note">公開中で、受渡日がこれからの出品の販売可能量です。単位が違うもの（kgと個）は分けて表示します。仕入れ案を作っても、この数量は確保されません。</p>
       </section>
 
       <p className="home-about">

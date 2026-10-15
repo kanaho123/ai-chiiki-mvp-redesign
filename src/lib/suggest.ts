@@ -32,7 +32,7 @@ export function suggestAllowIrregular(
   const parts = irregular.map((i) => `${i.producerName}の${i.quantity}${i.unit}（${i.reason}）`).join("、");
   return {
     type: "allow_irregular",
-    message: `形の不揃いなどの規格外品も許容すると、${parts}を含めて希望${req.quantity}${req.unit}を満たす案を作れます`,
+    message: `形の不揃い・余剰も使うと、${parts}を含めて希望${req.quantity}${req.unit}を満たす案を作れます`,
     irregular,
   };
 }

@@ -261,69 +261,158 @@ details.more[open] > summary .chev { transform: rotate(180deg); }
 @media (min-width: 900px) { .home-about { grid-column: 1; } }
 
 /* =========================================================================
-   以下は入力・結果・生産者画面の既存の部品（次の段階で構成を作り直す）
+   画面共通の見出し
    ========================================================================= */
-.group-title { font-size: 1.125rem; font-weight: 700; }
-.kicker { font-size: 0.9375rem; font-weight: 700; color: var(--text-sub); margin: 0 0 var(--s1); }
+.page { max-width: 680px; margin: 0 auto; }
+.page-head { margin-bottom: var(--s3); }
+.page-role { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 0.9375rem; margin-bottom: 4px; }
+.page-role.buyer { color: var(--buyer); }
+.page-role.grower { color: var(--grower); }
+.page-head h1 { font-size: 1.75rem; }
+.page-head .lead { margin: var(--s1) 0 0; }
+.text-link { display: inline-flex; align-items: center; gap: 4px; margin-top: var(--s3); font-weight: 500; min-height: 44px; }
 
-.result { margin-top: var(--s4); scroll-margin-top: 72px; }
-.result-body { display: grid; gap: var(--s2); }
-.hero { display: grid; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: var(--s3) var(--s2); }
+/* =========================================================================
+   入力：順番に答えるフォーム（カードで囲わず、見出しと余白で区切る）
+   ========================================================================= */
+.qform { display: grid; gap: var(--s4); }
+.qform-tools { margin: calc(var(--s2) * -1) 0 calc(var(--s1) * -1); }
+.qform-tools .ghost { font-weight: 500; font-size: 0.9375rem; min-height: 44px; padding: 0 4px; text-align: left; }
+.q { display: grid; gap: var(--s2); }
+.q-title { display: flex; align-items: center; gap: 10px; font-size: 1.25rem; padding-bottom: var(--s1); border-bottom: 1px solid var(--line); }
+.q-title .req { margin-left: auto; }
+.q-no {
+  display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
+  background: var(--buyer); color: #fff; font-size: 0.9375rem; font-weight: 700; flex-shrink: 0;
+}
+.choice label > span { display: grid; gap: 2px; font-size: 1.0625rem; }
+
+/* =========================================================================
+   仕入れ案の結果：案の数量・商品代・受渡しをひと目で → 説明 → 内訳
+   ========================================================================= */
+.result { margin-top: 48px; scroll-margin-top: 72px; }
+.result-title { font-size: 1.375rem; margin-bottom: var(--s2); }
+.result-body { display: grid; gap: var(--s3); }
+
+.hero {
+  display: grid; gap: var(--s2); background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r); padding: var(--s3) var(--s2); box-shadow: var(--shadow-sm);
+}
+@media (min-width: 600px) { .hero { padding: var(--s3); } }
 .hero.ok { border-top: 4px solid var(--ok); }
-.hero.warn { border-top: 4px solid var(--caution-line); }
-.chip { justify-self: start; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 0.9375rem; padding: 4px 10px; border-radius: 6px; }
-.chip.ok { color: var(--ok); background: var(--ok-tint); }
-.chip.warn { color: var(--caution); background: var(--caution-tint); }
-.chip.bad { color: var(--danger); background: var(--danger-tint); }
-.headline { font-size: 1.5rem; font-weight: 700; line-height: 1.4; }
-.headline-sub { color: var(--text-sub); }
-.qty-line b { font-size: 1.25rem; }
-.status-line { display: flex; gap: 8px; align-items: flex-start; padding-top: 12px; border-top: 1px dashed var(--line-strong); font-size: 0.9375rem; color: var(--text-sub); }
-.status-line strong { color: var(--caution); }
-.status-icon { color: var(--caution); font-weight: 700; }
-.suggestion { display: grid; gap: 12px; padding: var(--s3) var(--s2); border-radius: var(--r); background: var(--action-tint); border: 1px solid var(--action-line); }
-.suggestion .chip.ok { color: var(--action); background: var(--surface); }
-.suggestion-text { font-weight: 700; font-size: 1.0625rem; }
-.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: var(--s3) var(--s2); }
-.panel.soft { background: #eef2f4; border-color: transparent; }
-.block-title { font-size: 1.0625rem; margin-bottom: 12px; }
-.block-title .muted { font-weight: 500; margin-left: 4px; }
-.formula { color: var(--text-sub); margin-bottom: 6px; display: flex; flex-wrap: wrap; gap: 4px 8px; }
-.formula .op { color: var(--text-sub); }
-.alloc-list { list-style: none; margin: 0; padding: 0; }
-.alloc-list li { padding: 12px 0; border-top: 1px solid var(--line); display: grid; gap: 2px; }
-.alloc-list li:first-child { border-top: none; }
-.alloc { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-.alloc .name { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: 700; }
-.alloc .qty { font-size: 1.5rem; font-weight: 700; line-height: 1.2; }
-.alloc .qty small { font-size: 0.9375rem; }
-.alloc.meta { font-size: 0.9375rem; color: var(--text-sub); }
-.price-label { font-size: 0.9375rem; font-weight: 700; color: var(--text-sub); }
-.price { font-size: 2.25rem; font-weight: 700; line-height: 1.2; margin: 2px 0 10px; }
-.price-rows { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; margin: 0; padding-top: 10px; border-top: 1px solid var(--line); }
+.hero.warn { border-top: 4px solid #d9a400; }
+.hero.bad { border-top: 4px solid var(--danger); }
+.status { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 1rem; justify-self: start; }
+.status.ok { color: var(--ok); }
+.status.warn { color: var(--caution); }
+.status.bad { color: var(--danger); }
+.headline { font-size: 1.5rem; font-weight: 700; line-height: 1.45; }
+.hero.warn .headline { font-size: 1.75rem; }
+.headline-sub { color: var(--text-sub); margin-top: -8px; }
+
+.keyfacts { display: grid; gap: var(--s2); margin: 0; padding-top: var(--s2); border-top: 1px solid var(--line); }
+.kf { display: grid; gap: 2px; }
+.kf dt { font-size: 0.875rem; font-weight: 700; color: var(--text-sub); }
+.kf dd { margin: 0; }
+.kf-qty dd { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
+.figure { font-size: 2.5rem; font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.figure small { font-size: 1.125rem; font-weight: 700; margin-left: 2px; }
+.of { color: var(--text-sub); font-size: 1rem; }
+.hero.warn .figure { color: var(--caution); }
+.price { font-size: 2rem; font-weight: 700; line-height: 1.2; }
+.price.price-sub { font-size: 1.25rem; color: var(--text-sub); }
+.kf-handover dd { display: grid; gap: 2px; font-weight: 700; font-size: 1.0625rem; }
+.kf-line { display: inline-flex; align-items: center; gap: 8px; }
+.kf-line svg { color: var(--buyer); flex-shrink: 0; }
+@media (min-width: 600px) {
+  .keyfacts { grid-template-columns: 1fr 1fr; }
+  .kf-handover { grid-column: 1 / -1; }
+}
+
+.status-line {
+  display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 12px; border-radius: var(--r-sm);
+  background: var(--caution-tint); color: var(--caution); font-size: 1rem;
+}
+.status-detail { color: var(--text-sub); font-size: 0.9375rem; margin-top: calc(var(--s2) * -1); }
+
+/* 条件変更の提案（オレンジ＝次に取れる行動） */
+.suggestion {
+  display: grid; gap: 12px; padding: var(--s3) var(--s2); border-radius: var(--r);
+  background: var(--action-tint); border: 1px solid var(--action-line);
+}
+.suggestion-head { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--action); }
+.suggestion-text { font-weight: 700; font-size: 1.0625rem; line-height: 1.65; }
+.suggestion-change { font-size: 0.9375rem; color: var(--text); }
+.suggestion-change b { color: var(--action); }
+
+/* 内訳などの区画：枠ではなく見出しと罫線で区切る */
+.section { display: grid; gap: 12px; padding-top: var(--s3); border-top: 1px solid var(--line); }
+.section h3 { font-size: 1.125rem; }
+.section h3 .muted { font-weight: 500; margin-left: 4px; }
+
+.alloc-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.alloc-table thead th { font-size: 0.875rem; font-weight: 700; color: var(--text-sub); text-align: right; padding: 0 0 8px; border-bottom: 1px solid var(--line-strong); }
+.alloc-table thead th:first-child { text-align: left; }
+.alloc-table tbody th, .alloc-table tbody td { padding: 14px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.alloc-table tbody th { text-align: left; font-weight: 400; }
+.alloc-table .name { display: block; font-weight: 700; font-size: 1.0625rem; }
+.alloc-table .unit-price { display: block; font-size: 0.875rem; color: var(--text-sub); }
+.alloc-table .tag { margin-top: 4px; }
+.alloc-table td { text-align: right; white-space: nowrap; padding-left: 12px; }
+.alloc-table td.qty { font-size: 1.375rem; font-weight: 700; line-height: 1.3; width: 5.5em; }
+.alloc-table td.qty small { font-size: 0.9375rem; margin-left: 1px; }
+.alloc-table td.yen { font-size: 1rem; font-weight: 500; width: 6.5em; padding-top: 18px; }
+.alloc-table tfoot th, .alloc-table tfoot td { padding-top: 14px; font-weight: 700; }
+.alloc-table tfoot th { text-align: left; }
+.alloc-table tfoot td.yen { font-weight: 700; padding-top: 18px; }
+
+.price-rows { display: grid; grid-template-columns: 1fr auto; gap: 8px var(--s2); margin: 0; font-variant-numeric: tabular-nums; }
 .price-rows dt { color: var(--text-sub); }
 .price-rows dd { margin: 0; font-weight: 700; text-align: right; }
-.handover { display: grid; gap: 12px; }
-.handover-row { display: grid; grid-template-columns: 28px 1fr; gap: 2px 10px; align-items: start; }
-.handover-row svg { margin-top: 3px; color: var(--buyer); }
-.handover-row .k { font-size: 0.875rem; font-weight: 700; color: var(--text-sub); }
-.handover-row .v { grid-column: 2; font-size: 1.125rem; font-weight: 700; }
-ul.plain { margin: 6px 0 0; padding-left: 1.2rem; }
-.stale-banner { display: grid; gap: 8px; }
-.stale-title { font-size: 1.125rem; font-weight: 700; }
-.is-stale .hero, .is-stale .panel { background: #f1f3f4; }
-.is-stale .num { text-decoration: line-through; text-decoration-thickness: 2px; color: var(--text-sub); }
-.void-mark { display: inline-block; margin-left: 6px; padding: 0 6px; font-size: 0.875rem; font-weight: 700; color: var(--danger); background: var(--danger-tint); border-radius: 4px; }
+ul.plain { margin: 0; padding-left: 1.2rem; display: grid; gap: 4px; }
+.used-conditions { font-size: 0.875rem; color: var(--text-sub); }
 
-.listing { display: grid; gap: 12px; }
-.listing.paused { background: #f4f6f7; }
-.listing-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-items: center; }
-.listing-head strong { font-size: 1.125rem; }
-.listing-facts { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 0.9375rem; margin: 0; }
-.listing-facts dt { color: var(--text-sub); }
-.listing-facts dd { margin: 0; }
-.listing-facts .stock { font-size: 1.25rem; font-weight: 700; }
-.qty-editor { display: grid; gap: 8px; padding: 12px 14px; border-radius: var(--r-sm); background: var(--grower-tint); border: 1px solid var(--grower-line); }
-.qty-editor .inline { display: flex; gap: 8px; align-items: center; }
-.qty-editor .inline .with-unit { flex: 1; }
-.listing-actions { display: flex; justify-content: flex-end; }
+/* 旧案無効：上部で明示し、古い数字には取り消し線と「無効」 */
+.stale-banner { border-width: 2px; margin-bottom: var(--s3); }
+.stale-banner > div { flex: 1; }
+.stale-title { display: block; font-size: 1.125rem; }
+.is-stale .hero { background: #f1f3f4; box-shadow: none; }
+.is-stale .num { text-decoration: line-through; text-decoration-thickness: 2px; color: var(--text-sub); }
+.is-stale .figure, .is-stale .price { color: var(--text-sub); }
+.void-mark {
+  display: inline-block; margin-left: 6px; padding: 0 6px; font-size: 0.875rem; font-weight: 700; line-height: 1.6;
+  color: var(--danger); background: var(--danger-tint); border-radius: 4px; text-decoration: none; vertical-align: middle;
+}
+
+/* =========================================================================
+   生産者
+   ========================================================================= */
+.grower-page .q-no { background: var(--grower); }
+.grower-page input:focus, .grower-page select:focus { border-color: var(--grower); box-shadow: 0 0 0 3px rgba(47, 125, 79, 0.18); }
+.listing-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.listing {
+  display: grid; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: var(--s2);
+}
+.listing.paused { background: #f1f3f4; }
+.listing-top { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: start; }
+.listing-item { font-size: 1.1875rem; font-weight: 700; line-height: 1.35; }
+.listing-producer { font-size: 0.9375rem; color: var(--text-sub); }
+.listing-stock { text-align: right; }
+.listing-stock .figure { font-size: 2rem; }
+.listing-stock .figure small { font-size: 1rem; }
+.listing-state { display: inline-flex; align-items: center; gap: 4px; font-size: 0.9375rem; font-weight: 700; }
+.listing-state.on { color: var(--grower); }
+.listing-state.off { color: var(--text-sub); }
+.listing-meta { font-size: 0.9375rem; color: var(--text-sub); display: grid; gap: 2px; }
+.qty-editor { display: grid; grid-template-columns: 1fr auto; gap: var(--s1); align-items: end; }
+.qty-editor .field { gap: 4px; }
+.qty-editor .label { font-size: 0.9375rem; }
+.qty-editor button { min-width: 7.5em; }
+.listing-foot { display: flex; justify-content: space-between; align-items: center; gap: var(--s1); padding-top: 12px; border-top: 1px solid var(--line); }
+.listing-foot button { min-height: 44px; font-size: 0.9375rem; padding: 0 14px; }
+.list-title { font-size: 1.375rem; }
+.listing-stock { display: grid; justify-items: end; gap: 2px; }
+.listing-foot button { white-space: nowrap; flex-shrink: 0; }
+.more-title { display: inline-flex; align-items: center; gap: 8px; }
+.passphrase-box { display: grid; gap: 6px; padding: var(--s2); margin-bottom: var(--s4); border: 1px solid var(--caution-line); background: var(--caution-tint); border-radius: var(--r); }
+.passphrase-box .label { color: var(--text); }

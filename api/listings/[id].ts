@@ -1,9 +1,12 @@
 import { parseListingPatch } from "../../src/lib/validate.js";
 import { prisma } from "../../server/db.js";
+import { requireEditPassphrase } from "../../server/auth.js";
 import { handle, json, readJson } from "../../server/http.js";
 
 // 出品の数量変更・公開停止／再開
 export const PATCH = handle(async (request) => {
+  const denied = requireEditPassphrase(request);
+  if (denied) return denied;
   const id = decodeURIComponent(new URL(request.url).pathname.split("/").pop() ?? "");
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) return json({ error: "出品が見つかりません" }, 404);
   const parsed = parseListingPatch(await readJson(request));

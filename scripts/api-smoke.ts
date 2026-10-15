@@ -15,10 +15,14 @@ const request = (o: Record<string, unknown> = {}) => ({
   item: "トマト", quantity: 10, unit: "kg", deadline: jstDate(2), region: "大阪近郊", allowIrregular: true, ...o,
 });
 
-async function call(path: string, method: string, body?: unknown) {
+// 編集用合言葉は .env.local の EDIT_PASSPHRASE を使う（値は表示しない）
+const PASS = process.env.EDIT_PASSPHRASE ?? "";
+
+async function call(path: string, method: string, body?: unknown, opts: { pass?: string | null } = {}) {
+  const pass = opts.pass === undefined ? PASS : opts.pass;
   const res = await fetch(BASE + path, {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(pass === null ? {} : { "X-Edit-Passphrase": encodeURIComponent(pass) }) },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   return { status: res.status, data: await res.json() };
@@ -76,6 +80,19 @@ try {
   const r4 = await plan();
   const usedQ = r4.plan.allocations.some((a: any) => a.producerName === TEST_PRODUCER);
   check("4. 受渡条件が合わない出品", add.status === 201 && !usedQ && r4.plan.status === "handover_mismatch" && r4.plan.totalQuantity === 9, describe(r4.plan));
+
+  // 編集用合言葉：なし・違う合言葉では更新できない（閲覧と仕入れ案は合言葉なしで使える）
+  const beforeAuth = await quantities();
+  const noPass = await Promise.all([
+    call("/api/listings/demo-listing-a", "PATCH", { quantity: 1 }, { pass: null }),
+    call("/api/listings/demo-listing-a", "PATCH", { isPublic: false }, { pass: "ちがう合言葉" }),
+    call("/api/listings", "POST", { producerName: TEST_PRODUCER, item: "トマト", quantity: 1, unit: "kg", unitPrice: 1, availableDate: jstDate(2), region: "大阪近郊", handoverPlace: "P", handoverStart: "10:00", handoverEnd: "11:00", minQuantity: 1, step: 1 }, { pass: null }),
+  ]);
+  const unchanged = JSON.stringify(await quantities()) === JSON.stringify(beforeAuth);
+  const readOk = (await call("/api/listings", "GET", undefined, { pass: null })).status === 200 && (await call("/api/plan", "POST", request(), { pass: null })).status === 200;
+  check("   合言葉なし・違う合言葉では更新できない", noPass.every((r) => r.status === 401 || r.status === 503) && unchanged,
+    noPass.map((r) => r.status).join("/") + (unchanged ? "、データは変化なし" : "、データが変わった！"));
+  check("   閲覧と仕入れ案は合言葉なしで使える", readOk, readOk ? "OK" : "NG");
 
   // サーバー側の入力検証
   const bad = await Promise.all([

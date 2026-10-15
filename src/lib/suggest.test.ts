@@ -28,7 +28,7 @@ describe("不足時の条件変更候補：規格外の許容", () => {
   it("規格外不可で8kg不足のとき、規格外可なら満たせるので、C農家の2kgを示して案内する", () => {
     const s = suggest(request(), demo());
     expect(s).toMatchObject({ type: "allow_irregular", irregular: [{ producerName: "C農家", quantity: 2, unit: "kg" }] });
-    expect(s!.message).toBe("形の不揃いなどの規格外品も許容すると、C農家の2kg（余剰・形の不揃い）を含めて希望10kgを満たす案を作れます");
+    expect(s!.message).toBe("形の不揃い・余剰も使うと、C農家の2kg（余剰・形の不揃い）を含めて希望10kgを満たす案を作れます");
   });
 
   it("C農家が1kgなら規格外を許容しても9kgで届かないので、案内しない", () => {
