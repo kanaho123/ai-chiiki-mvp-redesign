@@ -80,6 +80,7 @@ export type ReasonCode =
   // 内部コード（表示文は reasons.ts）
   | "FEE_UNCONFIRMED" // 受渡費が未確認（総額未確定）
   | "SLOT_CONDITIONS_UNCONFIRMED" // 受渡枠の条件が未確認
+  | "PARTICIPATION_UNCONFIRMED" // 生産者の受渡枠への参加が未確認
   | "SLOT_WEIGHT_LIMIT" // 枠の重量上限が希望量より小さい
   | "TOO_MANY_SUPPLIES" // 対象供給が多すぎて計算しない
   | "MIXING_NOT_ALLOWED" // 品種・規格の混在を許可していないため合算しない
@@ -96,7 +97,7 @@ export type ExclusionDetail =
   | "OTHER_SLOT"
   | "SLOT_NOT_FOUND"
   | "SLOT_DATE_MISMATCH"
-  | "NOT_SLOT_PARTICIPANT"
+  | "NOT_SLOT_PARTICIPANT" // 枠の参加者として登録されていない（未確認ではなく不一致）
   | "DEADLINE_PASSED"
   | "FIRST_TIME"
   | "MIN_EXCEEDS_STOCK"
@@ -140,6 +141,7 @@ export type PlanAllocation = {
   varietyName: string;
   grade: Grade;
   irregularReason: string | null;
+  participationConfirmed: boolean; // false なら受渡枠への参加確認が必要
   kg: number;
   priceYenPerKg: number;
   subtotalYen: number;
@@ -176,6 +178,8 @@ export type PlanResult = {
   overBudget: { kg: number; totalYen: number | null } | null;
   rankingReason: RankingReason | null;
   excluded: Exclusion[];
+  /** 既知の不一致は無いが、受渡枠への参加が未確認の供給（確認が必要） */
+  unconfirmedParticipants: { supplyId: string; producerId: string; producerName: string; availableKg: number }[];
   notices: NoticeCode[];
   slot: Pick<PlanSlot, "id" | "label" | "placeName" | "startAt" | "endAt" | "confirmDeadlineAt"> | null;
   /** 計算に使った供給の version（表示中の案が古いかの判定・説明用） */
@@ -196,7 +200,7 @@ export type AllocateInput = {
 // 探索
 // ---------------------------------------------------------------------------
 
-type Cand = { s: PlanSupply; prior: boolean; preferred: boolean };
+type Cand = { s: PlanSupply; prior: boolean; preferred: boolean; unconfirmed: boolean };
 type Option = {
   picks: { c: Cand; kg: number }[];
   kg: number;
@@ -348,9 +352,8 @@ export function allocatePlan({ request: req, supplies, slot, participants, relat
       : now.getTime() > new Date(slot.confirmDeadlineAt).getTime()
         ? "DEADLINE_PASSED"
         : null;
-  const confirmedParticipants = new Set(
-    participants.filter((p) => p.slotId === req.slotId && p.confirmed).map((p) => p.producerId),
-  );
+  // 枠の参加者として登録済みか、その参加が確認済みか。未登録は既知の不一致、登録済み・未確認は「確認が必要」
+  const participation = new Map(participants.filter((p) => p.slotId === req.slotId).map((p) => [p.producerId, p.confirmed]));
   const maxKg = slot?.maxKg ?? 0;
 
   const excluded: Exclusion[] = [];
@@ -365,7 +368,7 @@ export function allocatePlan({ request: req, supplies, slot, participants, relat
     if (s.slotId !== req.slotId) d.push("OTHER_SLOT");
     else {
       if (slotIssue) d.push(slotIssue);
-      if (!confirmedParticipants.has(s.producerId)) d.push("NOT_SLOT_PARTICIPANT");
+      if (!participation.has(s.producerId)) d.push("NOT_SLOT_PARTICIPANT");
     }
     if (!isPrior(s.producerId) && !req.allowFirstTime) d.push("FIRST_TIME");
     if (s.availableKg <= 0) d.push("NO_STOCK");
@@ -378,7 +381,8 @@ export function allocatePlan({ request: req, supplies, slot, participants, relat
         supplyId: s.id, producerId: s.producerId, producerName: s.producerName, availableKg: s.availableKg,
         priceYenPerKg: s.priceYenPerKg, details: d, reasonCodes: [...new Set(d.map((x) => DETAIL_CATEGORY[x]))],
       });
-    else eligible.push({ s, prior: isPrior(s.producerId), preferred: s.producerId === preferredId });
+    // 既知の不一致が1つでもあれば上で除外済み。参加未確認だけの供給は候補に残し、確認待ちとして扱う
+    else eligible.push({ s, prior: isPrior(s.producerId), preferred: s.producerId === preferredId, unconfirmed: participation.get(s.producerId) !== true });
   }
   if (req.preferredProducerId && preferredId && !eligible.some((c) => c.preferred)) notices.push("PREFERRED_NOT_AVAILABLE");
 
@@ -400,6 +404,8 @@ export function allocatePlan({ request: req, supplies, slot, participants, relat
     allocations: [], requestedKg: req.quantityKg, fulfilledKg: 0, shortageKg: req.quantityKg, producerCount: 0,
     productSubtotalYen: 0, handoverFeeYen: feeKnown ? 0 : null, totalYen: feeKnown ? 0 : null, budgetYen: req.budgetYen,
     budgetStatus: req.budgetYen === null ? "NO_LIMIT" : "UNKNOWN", overBudget: null, rankingReason: null, excluded, notices,
+    unconfirmedParticipants: eligible.filter((c) => c.unconfirmed)
+      .map((c) => ({ supplyId: c.s.id, producerId: c.s.producerId, producerName: c.s.producerName, availableKg: c.s.availableKg })),
     slot: slot ? { id: slot.id, label: slot.label, placeName: slot.placeName, startAt: slot.startAt, endAt: slot.endAt, confirmDeadlineAt: slot.confirmDeadlineAt } : null,
     supplySnapshot: supplies.map((s) => ({ supplyId: s.id, version: s.version, updatedAt: s.updatedAt })),
     computedAt: now.toISOString(),
@@ -413,19 +419,25 @@ export function allocatePlan({ request: req, supplies, slot, participants, relat
     return result({ status: "NOT_MATCHED", reasonCodes: ["TOO_MANY_SUPPLIES"] });
 
   // 品種・規格の混在を許可しない場合は、同じ品種・規格どうしのグループ内だけで組む
-  const groupMap = new Map<string, Cand[]>();
-  for (const c of eligible) {
-    const key = `${req.allowMixedVarieties ? "*" : c.s.varietyId}|${req.allowMixedGrades ? "*" : isIrregular(c.s) ? "irregular" : "regular"}`;
-    groupMap.set(key, [...(groupMap.get(key) ?? []), c]);
-  }
-  const groups = [...groupMap.values()];
+  const groupsOf = (cands: Cand[]) => {
+    const groupMap = new Map<string, Cand[]>();
+    for (const c of cands) {
+      const key = `${req.allowMixedVarieties ? "*" : c.s.varietyId}|${req.allowMixedGrades ? "*" : isIrregular(c.s) ? "irregular" : "regular"}`;
+      groupMap.set(key, [...(groupMap.get(key) ?? []), c]);
+    }
+    return [...groupMap.values()];
+  };
+  // 適合判定・不足時の最大量は確認済みの供給だけで計算する。参加未確認を含めた案は「確認が必要」の参考案
+  const confirmedEligible = eligible.filter((c) => !c.unconfirmed);
+  const groups = groupsOf(confirmedEligible);
+  const groupsWithUnconfirmed = groupsOf(eligible);
 
-  const toResult = (opt: Option, k: number, target: number, status: PlanStatus, reasonCodes: ReasonCode[], extra: Partial<PlanResult> = {}): PlanResult => {
+  const toResult = (opt: Option, k: number, target: number, status: PlanStatus, reasonCodes: ReasonCode[], extra: Partial<PlanResult> = {}, searched = groups): PlanResult => {
     const allocations: PlanAllocation[] = opt.picks
       .map(({ c, kg }) => ({
         supplyId: c.s.id, producerId: c.s.producerId, producerName: c.s.producerName, priorTrade: c.prior, preferred: c.preferred,
         varietyName: c.s.varietyName, grade: isIrregular(c.s) ? ("irregular" as const) : ("regular" as const), irregularReason: c.s.irregularReason,
-        kg, priceYenPerKg: c.s.priceYenPerKg, subtotalYen: kg * c.s.priceYenPerKg, version: c.s.version, updatedAt: c.s.updatedAt,
+        participationConfirmed: !c.unconfirmed, kg, priceYenPerKg: c.s.priceYenPerKg, subtotalYen: kg * c.s.priceYenPerKg, version: c.s.version, updatedAt: c.s.updatedAt,
       }))
       .sort((a, b) => b.kg - a.kg || Number(b.priorTrade) - Number(a.priorTrade) || (a.supplyId < b.supplyId ? -1 : 1));
     const fee = feeKnown ? slot!.feeYen : null; // 固定費は農家数にかかわらず1案に1回
@@ -433,7 +445,7 @@ export function allocatePlan({ request: req, supplies, slot, participants, relat
       status, reasonCodes, allocations, fulfilledKg: opt.kg, shortageKg: req.quantityKg - opt.kg, producerCount: opt.producers,
       productSubtotalYen: opt.subtotal, handoverFeeYen: fee, totalYen: fee === null ? null : opt.subtotal + fee,
       budgetStatus: req.budgetYen === null ? "NO_LIMIT" : fee === null ? "UNKNOWN" : "WITHIN",
-      rankingReason: rankingReasonFor(groups, opt, k, target, subtotalLimit),
+      rankingReason: rankingReasonFor(searched, opt, k, target, subtotalLimit),
       ...extra,
     });
   };
@@ -445,6 +457,10 @@ export function allocatePlan({ request: req, supplies, slot, participants, relat
     const status: PlanStatus = confirmCodes.length > 0 ? "NEEDS_CONFIRMATION" : "MATCHED";
     return toResult(exact.opt, exact.k, target, status, confirmCodes);
   }
+  // 確認済みの供給では揃わないが、参加未確認の供給も含めれば揃う → 参考案として「確認が必要」
+  const pending = target <= maxKg && confirmedEligible.length < eligible.length ? bestExact(groupsWithUnconfirmed, target, subtotalLimit) : null;
+  if (pending)
+    return toResult(pending.opt, pending.k, target, "NEEDS_CONFIRMATION", unique(["PARTICIPATION_UNCONFIRMED", ...confirmCodes]), {}, groupsWithUnconfirmed);
 
   // 2. ちょうどにできない原因（数量不足と予算不足を区別する）
   const reasons: ReasonCode[] = [];
@@ -458,8 +474,9 @@ export function allocatePlan({ request: req, supplies, slot, participants, relat
   else if (groups.some((g) => g.reduce((s, c) => s + c.s.availableKg, 0) >= target)) reasons.push("LOT_CONSTRAINT");
   else reasons.push("INSUFFICIENT_QUANTITY");
   const mixingRestricted = !req.allowMixedVarieties || !req.allowMixedGrades;
-  if (mixingRestricted && groups.length > 1 && eligible.reduce((s, c) => s + c.s.availableKg, 0) >= target) reasons.push("MIXING_NOT_ALLOWED");
-  const reasonCodes = unique([...reasons, ...inSlotExclusionCodes, ...confirmCodes]);
+  if (mixingRestricted && groups.length > 1 && confirmedEligible.reduce((s, c) => s + c.s.availableKg, 0) >= target) reasons.push("MIXING_NOT_ALLOWED");
+  const pendingCodes: ReasonCode[] = confirmedEligible.length < eligible.length ? ["PARTICIPATION_UNCONFIRMED"] : [];
+  const reasonCodes = unique([...reasons, ...inSlotExclusionCodes, ...confirmCodes, ...pendingCodes]);
 
   // 3. 確認済み条件・予算内で、希望量以下の最大量（過剰購入はしない）
   for (let t = Math.min(target - 1, maxKg); t >= 1; t--) {

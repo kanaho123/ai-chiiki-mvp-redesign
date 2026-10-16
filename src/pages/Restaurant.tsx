@@ -476,7 +476,13 @@ function PlanView({ shown, stale, busy, busyLabel, onRecalc, onSuggestion }: {
           <section className="section" aria-labelledby="reason-title">
             <h3 id="reason-title">理由</h3>
             <ul className="plain">
-              {plan.reasonCodes.map((c) => <li key={c}>{REASON_TEXT[c]}</li>)}
+              {plan.reasonCodes.map((c) => (
+                <li key={c}>
+                  {REASON_TEXT[c]}
+                  {c === "PARTICIPATION_UNCONFIRMED" && plan.unconfirmedParticipants.length > 0 &&
+                    `（${plan.unconfirmedParticipants.map((u) => u.producerName).join("・")}）`}
+                </li>
+              ))}
               {plan.overBudget && (
                 <li>予算を外すと{plan.overBudget.kg}kgの案は{plan.overBudget.totalYen === null ? "総額未確定" : `総額${yen(plan.overBudget.totalYen)}`}です（予算 {yen(plan.budgetYen ?? 0)}）</li>
               )}
@@ -502,6 +508,7 @@ function PlanView({ shown, stale, busy, busyLabel, onRecalc, onSuggestion }: {
                       <span className="unit-price">{a.priceYenPerKg.toLocaleString("ja-JP")}円/kg・{a.varietyName}</span>
                       <span className={`tag ${a.priorTrade ? "on" : "off"}`}>{a.priorTrade ? "取引経験あり（店の申告）" : "初回"}</span>
                       {a.irregularReason && <span className="tag irregular">規格外：{a.irregularReason}</span>}
+                      {!a.participationConfirmed && <span className="tag irregular">受渡枠への参加確認が必要</span>}
                     </th>
                     <td className="qty"><Num stale={stale}>{a.kg}<small>kg</small></Num></td>
                     <td className="yen"><Num stale={stale}>{yen(a.subtotalYen)}</Num></td>

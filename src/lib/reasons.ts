@@ -20,6 +20,7 @@ export const REASON_TEXT: Record<ReasonCode, string> = {
   PRODUCT_MISMATCH: "品目・産地・品種・規格のいずれかが条件と一致しない供給があります",
   FEE_UNCONFIRMED: "受渡費用が未確認のため、総額が確定していません（予算内かどうかは判定していません）",
   SLOT_CONDITIONS_UNCONFIRMED: "受渡枠の条件が未確認です",
+  PARTICIPATION_UNCONFIRMED: "この生産者の受渡枠への参加確認が必要です",
   SLOT_WEIGHT_LIMIT: "受渡枠の重量上限を超えるため、希望数量では組めません",
   TOO_MANY_SUPPLIES: "対象の供給が多すぎるため計算していません。条件を絞ってください",
   MIXING_NOT_ALLOWED: "品種・規格の混在を許可していないため、異なる品種・規格の供給は合算していません",

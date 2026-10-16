@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   allocatePlan, MAX_CANDIDATE_SUPPLIES, type AllocateInput, type PlanRequest, type PlanResult, type PlanSlot, type PlanSupply,
 } from "./allocate.js";
-import { headlineText, rankingText } from "./reasons.js";
+import { headlineText, rankingText, REASON_TEXT } from "./reasons.js";
 
 // 仕様書 8.1 のデモ設定（架空）。基準日時 2026-10-22 12:00 JST
 const NOW = new Date("2026-10-22T12:00:00+09:00");
@@ -225,17 +225,74 @@ describe("探索・順位の細則", () => {
     expect(p.reasonCodes).toContain("HANDOVER_MISMATCH");
   });
 
-  it("枠への参加が確認されていない農家・産地違い・規格外不可・在庫0 は既知の不一致として除外する", () => {
+  it("産地違い・規格外不可・在庫0 は既知の不一致として除外し、参加未確認だけの E は確認待ちの候補に残す", () => {
     const p = plan(
       [supply("a", 10, { originPrefecture: "京都府" }), supply("b", 10, { grade: "irregular", irregularReason: "形の不揃い" }), supply("c", 0), supply("e", 10)],
       { participants: ["a", "b", "c"].map((k) => ({ slotId: "gp", producerId: `p-${k}`, confirmed: true })).concat([{ slotId: "gp", producerId: "p-e", confirmed: false }]) },
     );
-    expect(p.allocations).toEqual([]);
-    expect(p.status).toBe("NOT_MATCHED");
+    expect(p.status).toBe("NEEDS_CONFIRMATION");
+    expect(kgBy(p)).toEqual({ E農園: 10 });
     expect(excludedOf(p, "A農園")?.details).toEqual(["ORIGIN_MISMATCH"]);
     expect(excludedOf(p, "B農園")?.details).toEqual(["IRREGULAR_NOT_ALLOWED"]);
     expect(excludedOf(p, "C農園")?.details).toEqual(["NO_STOCK"]);
-    expect(excludedOf(p, "E農園")?.details).toEqual(["NOT_SLOT_PARTICIPANT"]);
+    expect(excludedOf(p, "E農園")).toBeUndefined();
+  });
+
+  it("枠参加が未確認なだけの供給は除外せず、それで揃う案は「確認が必要」（NEEDS_CONFIRMATION）の参考案にする", () => {
+    const participants = [{ slotId: "gp", producerId: "p-a", confirmed: true }, { slotId: "gp", producerId: "p-b", confirmed: false }];
+    const p = plan([supply("a", 5), supply("b", 5)], { participants });
+    expect(p.status).toBe("NEEDS_CONFIRMATION");
+    expect(p.reasonCodes).toEqual(["PARTICIPATION_UNCONFIRMED"]);
+    expect(REASON_TEXT.PARTICIPATION_UNCONFIRMED).toBe("この生産者の受渡枠への参加確認が必要です");
+    expect(kgBy(p)).toEqual({ A農園: 5, B農園: 5 });
+    expect(money(p)).toEqual([5750, 800, 6550]);
+    expect(p.allocations.map((a) => [a.producerName, a.participationConfirmed])).toEqual([["A農園", true], ["B農園", false]]);
+    expect(excludedOf(p, "B農園")).toBeUndefined();
+    expect(p.unconfirmedParticipants.map((u) => u.producerName)).toEqual(["B農園"]);
+  });
+
+  it("確認済みの供給だけで揃うなら、参加未確認の供給は使わず MATCHED にする", () => {
+    const participants = [{ slotId: "gp", producerId: "p-a", confirmed: true }, { slotId: "gp", producerId: "p-b", confirmed: false }];
+    const p = plan([supply("a", 10), supply("b", 10)], { participants });
+    expect(p.status).toBe("MATCHED");
+    expect(kgBy(p)).toEqual({ A農園: 10 });
+  });
+
+  it("参加未確認でも揃わない場合の最大量は確認済みの供給だけで計算し、成功扱いにしない", () => {
+    const participants = [{ slotId: "gp", producerId: "p-a", confirmed: true }, { slotId: "gp", producerId: "p-b", confirmed: false }];
+    const p = plan([supply("a", 5), supply("b", 4)], { participants });
+    expect(p.status).toBe("NOT_MATCHED");
+    expect(kgBy(p)).toEqual({ A農園: 5 });
+    expect(p.reasonCodes).toEqual(expect.arrayContaining(["INSUFFICIENT_QUANTITY", "PARTICIPATION_UNCONFIRMED"]));
+  });
+
+  it("参加未確認＋既知の不一致（別の枠・初回不可・産地違い）は確認待ちで救済しない", () => {
+    // 別の枠 G-Q の参加未確認：不一致側（OTHER_SLOT）を優先して除外
+    const otherSlot = plan([supply("a", 5), supply("e", 5, { slotId: "gq" })], {
+      participants: [{ slotId: "gp", producerId: "p-a", confirmed: true }, { slotId: "gq", producerId: "p-e", confirmed: false }],
+    });
+    expect(otherSlot.status).toBe("NOT_MATCHED");
+    expect(excludedOf(otherSlot, "E農園")?.details).toEqual(["OTHER_SLOT"]);
+    expect(otherSlot.reasonCodes).not.toContain("PARTICIPATION_UNCONFIRMED");
+    expect(kgBy(otherSlot)).toEqual({ A農園: 5 });
+
+    const participants = [{ slotId: "gp", producerId: "p-a", confirmed: true }, { slotId: "gp", producerId: "p-b", confirmed: false }];
+    const firstTime = plan([supply("a", 5), supply("b", 5)], { participants, req: { allowFirstTime: false } });
+    expect(firstTime.status).toBe("NOT_MATCHED");
+    expect(excludedOf(firstTime, "B農園")?.details).toEqual(["FIRST_TIME"]);
+    const origin = plan([supply("a", 5), supply("b", 5, { originPrefecture: "京都府" })], { participants });
+    expect(origin.status).toBe("NOT_MATCHED");
+    expect(excludedOf(origin, "B農園")?.details).toEqual(["ORIGIN_MISMATCH"]);
+    // 締切超過の枠は参加未確認でも救済しない
+    const late = plan([supply("a", 5), supply("b", 5)], { participants, now: new Date("2026-10-22T17:00:01+09:00") });
+    expect(late.status).toBe("NOT_MATCHED");
+    expect(late.allocations).toEqual([]);
+  });
+
+  it("枠の参加者として登録されていない供給は、未確認ではなく既知の不一致として除外する", () => {
+    const p = plan([supply("a", 5), supply("b", 5)], { participants: [{ slotId: "gp", producerId: "p-a", confirmed: true }] });
+    expect(excludedOf(p, "B農園")?.details).toEqual(["NOT_SLOT_PARTICIPANT"]);
+    expect(p.status).toBe("NOT_MATCHED");
   });
 
   it("対象供給が20件を超えたら先頭だけで計算せず、条件を絞るよう返す", () => {
