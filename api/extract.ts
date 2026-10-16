@@ -1,6 +1,6 @@
 import { resolveExtraction } from "../src/lib/resolve.js";
 import { parseExtraction, parseRequestText } from "../src/lib/validate.js";
-import { AiError, extractWithGemini, geminiConfig, type AiErrorCode } from "../server/ai/gemini.js";
+import { AiError, extractWithOpenAi, openAiConfig, type AiErrorCode } from "../server/ai/openai.js";
 import { requireRole } from "../server/auth.js";
 import { loadCatalog } from "../server/catalog.js";
 import { serverNow } from "../server/clock.js";
@@ -22,7 +22,7 @@ export const POST = handle(async (request) => {
   const text = parseRequestText(await readJson(request));
   if (!text.ok) return json({ error: text.error, code: "INVALID_INPUT" }, 400); // 空欄・1,000文字超は AI を呼ばない
 
-  const cfg = geminiConfig();
+  const cfg = openAiConfig();
   if (!cfg) return json({ error: AI_ERROR_TEXT, code: "AI_UNAVAILABLE" }, AI_ERROR_STATUS.AI_UNAVAILABLE);
 
   if (!extractLimiter.take(g.user.id))
@@ -30,7 +30,7 @@ export const POST = handle(async (request) => {
 
   let raw: unknown;
   try {
-    raw = await extractWithGemini(text.value, cfg);
+    raw = await extractWithOpenAi(text.value, cfg);
   } catch (e) {
     const code: AiErrorCode = e instanceof AiError ? e.code : "AI_FAILED";
     return json({ error: AI_ERROR_TEXT, code }, AI_ERROR_STATUS[code]);
