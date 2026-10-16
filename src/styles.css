@@ -428,3 +428,32 @@ ul.plain { margin: 0; padding-left: 1.2rem; display: grid; gap: 4px; }
   .session-box { flex-basis: 100%; justify-content: space-between; margin-left: 0; }
   .session-name { max-width: none; }
 }
+
+/* ── 飲食店：3段階（入力 → 確認 → 仕入れ案） ───────────── */
+.steps { display: flex; flex-wrap: wrap; gap: 6px 12px; list-style: none; padding: 0; margin: 12px 0 0; font-size: 0.875rem; color: var(--text-sub); }
+.steps li { display: inline-flex; align-items: center; gap: 6px; }
+.steps li.current { color: var(--buyer); font-weight: 700; }
+.step-no {
+  display: inline-grid; place-items: center; width: 24px; height: 24px; flex-shrink: 0; border-radius: 50%;
+  background: var(--buyer-tint); color: var(--buyer); font-size: 0.8125rem; font-weight: 700; margin-right: 6px;
+}
+.steps li.current .step-no { background: var(--buyer); color: #fff; }
+textarea { width: 100%; min-height: 120px; resize: vertical; line-height: 1.6; }
+.ai-tag { font-size: 0.8125rem; font-weight: 500; color: var(--buyer); background: var(--buyer-tint); border-radius: 6px; padding: 1px 6px; white-space: nowrap; }
+.source-text { font-size: 0.875rem; overflow-wrap: anywhere; }
+.choice-stack { grid-template-columns: 1fr; }
+.qform > .ghost.block, .next-actions .block { min-height: 48px; }
+.next-actions { display: grid; gap: var(--s1); margin-top: 16px; }
+.qform-tools { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* 農家別の配分（カード） */
+.farm-cards { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--s1); }
+.farm-card { border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; background: var(--surface); min-width: 0; }
+.farm-card-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.farm-card .name { font-weight: 700; font-size: 1.0625rem; }
+.farm-kg { font-size: 1.375rem; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.farm-tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.farm-meta { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0; font-size: 0.875rem; }
+.farm-meta dt { color: var(--text-sub); }
+.farm-meta dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+.result, .qform, .page { min-width: 0; overflow-wrap: anywhere; }

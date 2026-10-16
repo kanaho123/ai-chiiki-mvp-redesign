@@ -71,7 +71,7 @@ describe("受入ケース（仕様書 10.1）", () => {
     expect(money(p)).toEqual([5200, 800, 6000]);
     expect([p.fulfilledKg, p.shortageKg]).toEqual([9, 1]);
     expect(p.reasonCodes).toContain("INSUFFICIENT_QUANTITY");
-    expect(headlineText(p)).toBe("この検索条件・最大3農家では9kg。1kg不足");
+    expect(headlineText(p)).toBe("この検索条件・最大3農家では9kg。1kg不足しています");
   });
 
   it("4: A5kg・B3kg・C2kg公開 → A5＋B3＋C2、5,650＋800＝6,450円（固定費は1案に1回）", () => {
@@ -119,7 +119,7 @@ describe("受入ケース（仕様書 10.1）", () => {
     expect(kgBy(p)).toEqual({ A農園: 5, B農園: 4 }); // 9kg案のうち取引済みAの数量が多い案
     expect(money(p)).toEqual([5200, 800, 6000]);
     expect(p.totalYen!).toBeLessThanOrEqual(6000);
-    expect(headlineText(p)).toBe("予算内では9kgまで。1kg不足");
+    expect(headlineText(p)).toBe("予算内では9kgまで。1kg不足しています");
   });
 
   it("9: 共通枠の費用が未確認 → 確認が必要・総額未確定。予算内と判定しない", () => {

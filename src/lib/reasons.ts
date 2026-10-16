@@ -34,7 +34,7 @@ export const EXCLUSION_TEXT: Record<ExclusionDetail, string> = {
   ORIGIN_MISMATCH: "産地が条件と異なる",
   VARIETY_MISMATCH: "品種が異なる（混在を許可していない）",
   IRREGULAR_NOT_ALLOWED: "規格外品（規格外を許可していない）",
-  OTHER_SLOT: "別の受渡枠（同じ案には組み合わせない）",
+  OTHER_SLOT: "別の受渡枠のため対象外（受渡枠が違う供給は同じ案に組み合わせない）",
   SLOT_NOT_FOUND: "受渡枠が見つからない",
   SLOT_DATE_MISMATCH: "受渡枠の日付が希望日と異なる",
   NOT_SLOT_PARTICIPANT: "この受渡枠への参加が確認されていない",
@@ -73,6 +73,6 @@ export function headlineText(p: PlanResult): string {
   if (p.status === "NEEDS_CONFIRMATION") return `${p.fulfilledKg}kgの案はありますが、確認が必要です`;
   if (p.reasonCodes.includes("TOO_MANY_SUPPLIES")) return "条件を絞ってください";
   if (p.fulfilledKg === 0) return "この条件で組める案はありません";
-  if (p.reasonCodes.includes("OVER_BUDGET")) return `予算内では${p.fulfilledKg}kgまで。${p.shortageKg}kg不足`;
-  return `この検索条件・最大3農家では${p.fulfilledKg}kg。${p.shortageKg}kg不足`;
+  if (p.reasonCodes.includes("OVER_BUDGET")) return `予算内では${p.fulfilledKg}kgまで。${p.shortageKg}kg不足しています`;
+  return `この検索条件・最大3農家では${p.fulfilledKg}kg。${p.shortageKg}kg不足しています`;
 }

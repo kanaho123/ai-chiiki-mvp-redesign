@@ -257,3 +257,80 @@ export function parseSupplyInput(body: unknown): Result<SupplyInput> {
     value: { itemId, varietyId, grade, irregularReason, originPrefecture, availableKg, priceYenPerKg, minKg, slotId, published: body.published },
   };
 }
+
+// ---------------------------------------------------------------------------
+// 自然文の条件抽出（AI）。AI の出力は信用せず、ここで厳密に検証する
+// ---------------------------------------------------------------------------
+
+export const REQUEST_TEXT_MAX = 1000;
+export const EXTRACT_TEXT_FIELD_MAX = 100;
+
+/** AI が返してよい項目。文章に無いものは null。ID・計算結果・推薦は含めない */
+export type ExtractedRequest = {
+  itemText: string | null;
+  varietyText: string | null;
+  quantityKg: number | null;
+  dateText: string | null;
+  budgetYen: number | null;
+  budgetIncludesHandoverFee: boolean | null; // 「受渡費込み」と書かれていれば true、「商品代のみ」なら false
+  budgetUnlimited: boolean | null; // 「予算上限なし」と明記されていれば true
+  originText: string | null; // 産地（「大阪産」など）
+  handoverText: string | null; // 受取場所・受渡枠（「拠点Pで受取」「大阪で受け取り」など）
+  preferredProducerText: string | null;
+  producerRequired: boolean | null; // 「A農園必須」「絶対」など強い指定なら true
+  allowFirstTime: boolean | null;
+  allowIrregular: boolean | null;
+  allowMixedVarieties: boolean | null;
+  allowMixedGrades: boolean | null;
+};
+
+export const EXTRACTED_KEYS = [
+  "itemText", "varietyText", "quantityKg", "dateText", "budgetYen", "budgetIncludesHandoverFee", "budgetUnlimited",
+  "originText", "handoverText", "preferredProducerText", "producerRequired", "allowFirstTime", "allowIrregular",
+  "allowMixedVarieties", "allowMixedGrades",
+] as const satisfies readonly (keyof ExtractedRequest)[];
+
+const TEXT_KEYS = ["itemText", "varietyText", "dateText", "originText", "handoverText", "preferredProducerText"] as const;
+const BOOL_KEYS = ["budgetIncludesHandoverFee", "budgetUnlimited", "producerRequired", "allowFirstTime", "allowIrregular", "allowMixedVarieties", "allowMixedGrades"] as const;
+
+/** 利用者の入力文（空欄・1,000文字超は AI を呼ばずに拒否） */
+export function parseRequestText(body: unknown): Result<string> {
+  if (!isObj(body) || typeof body.text !== "string") return { ok: false, error: "仕入れたい内容を入力してください" };
+  const text = body.text.trim();
+  if (!text) return { ok: false, error: "仕入れたい内容を入力してください" };
+  if (text.length > REQUEST_TEXT_MAX) return { ok: false, error: `${REQUEST_TEXT_MAX.toLocaleString("ja-JP")}文字以内で入力してください` };
+  return { ok: true, value: text };
+}
+
+/**
+ * AI の出力を検証する。スキーマ外の項目・型違い・範囲外の値が1つでもあれば抽出失敗とする
+ * （一部だけ信用して使うことはしない）。項目が欠けている場合は null（文章に無い）とみなす。
+ */
+export function parseExtraction(raw: unknown): Result<ExtractedRequest> {
+  const fail = { ok: false as const, error: "AIの出力が想定と異なります" };
+  if (!isObj(raw) || Array.isArray(raw)) return fail;
+  if (Object.keys(raw).some((k) => !(EXTRACTED_KEYS as readonly string[]).includes(k))) return fail;
+  const out = Object.fromEntries(EXTRACTED_KEYS.map((k) => [k, null])) as ExtractedRequest;
+
+  for (const k of TEXT_KEYS) {
+    const v = raw[k];
+    if (v === undefined || v === null) continue;
+    if (typeof v !== "string" || v.length > EXTRACT_TEXT_FIELD_MAX) return fail;
+    out[k] = v.trim() || null;
+  }
+  for (const k of BOOL_KEYS) {
+    const v = raw[k];
+    if (v === undefined || v === null) continue;
+    if (typeof v !== "boolean") return fail;
+    out[k] = v;
+  }
+  if (raw.quantityKg !== undefined && raw.quantityKg !== null) {
+    if (typeof raw.quantityKg !== "number" || !Number.isInteger(raw.quantityKg) || raw.quantityKg < QUANTITY_KG_MIN || raw.quantityKg > QUANTITY_KG_MAX) return fail;
+    out.quantityKg = raw.quantityKg;
+  }
+  if (raw.budgetYen !== undefined && raw.budgetYen !== null) {
+    if (typeof raw.budgetYen !== "number" || !Number.isInteger(raw.budgetYen) || raw.budgetYen < 1 || raw.budgetYen > BUDGET_YEN_MAX) return fail;
+    out.budgetYen = raw.budgetYen;
+  }
+  return { ok: true, value: out };
+}
