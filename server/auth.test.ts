@@ -1,6 +1,6 @@
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  clearSessionCookie, createSessionToken, hashPassword, readCookie, requireEditPassphrase, sessionCookie, SESSION_TTL_SEC,
+  clearSessionCookie, createSessionToken, hashPassword, readCookie, sessionCookie, SESSION_TTL_SEC,
   verifyPassword, verifySessionToken,
 } from "./auth.js";
 
@@ -68,24 +68,5 @@ describe("セッション（署名付き Cookie）", () => {
     const r = new Request("http://x/", { headers: { cookie: "a=1; aic_session=abc.def; b=2" } });
     expect(readCookie(r, "aic_session")).toBe("abc.def");
     expect(readCookie(r, "none")).toBeNull();
-  });
-});
-
-describe("Legacy 限定：旧出品の編集用合言葉", () => {
-  const original = process.env.EDIT_PASSPHRASE;
-  const req = (pass?: string) =>
-    new Request("http://localhost/api/listings", { method: "POST", headers: pass === undefined ? {} : { "x-edit-passphrase": encodeURIComponent(pass) } });
-  beforeAll(() => {});
-  afterEach(() => {
-    if (original === undefined) delete process.env.EDIT_PASSPHRASE;
-    else process.env.EDIT_PASSPHRASE = original;
-  });
-
-  it("未設定なら拒否、違えば 401、一致したときだけ許可", () => {
-    delete process.env.EDIT_PASSPHRASE;
-    expect(requireEditPassphrase(req("なんでも"))?.status).toBe(503);
-    process.env.EDIT_PASSPHRASE = "テスト用の合言葉";
-    expect(requireEditPassphrase(req("ちがう"))?.status).toBe(401);
-    expect(requireEditPassphrase(req("テスト用の合言葉"))).toBeNull();
   });
 });

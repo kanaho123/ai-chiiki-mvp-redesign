@@ -1,2 +1,17 @@
-# 退避した Next.js 版は公開対象にしない
+# Vercel CLI でのデプロイ時にアップロードしないもの（.vercelignore があると .gitignore は使われないため明示する）
+
+# 環境変数（秘密情報）。Vercel 側の環境変数を使う
+.env
+.env.*
+!.env.example
+
+# 依存・ビルド成果物・生成コード（Vercel 上で作り直す）
+node_modules/
+dist/
+server/generated/
+.vercel/
+
+# 公開対象ではないもの
 archive/
+screenshots/
+*.zip

@@ -1,16 +1,5 @@
-export const REGIONS = ["大阪近郊", "北摂", "京都近郊", "兵庫近郊"] as const;
-export const UNITS = ["kg", "個"] as const;
-export const IRREGULAR_REASONS = ["形の不揃い", "余剰", "余剰・形の不揃い"] as const;
-
+// Legacy：旧出品のデモデータ（server/demo.ts）で使う受渡場所名
 export const DEMO_PLACE = "共通受渡拠点P";
-export const STATUS_LABEL = "農家承認前・在庫未確保";
-
-export const LIMITS = {
-  textMax: 30,
-  placeMax: 50,
-  quantityMax: 10000,
-  priceMax: 1000000,
-} as const;
 
 // 産地（都道府県）。「大阪産」＝産地条件。受取場所（受渡枠）とは別の項目として扱う。
 export const PREFECTURES = [

@@ -138,29 +138,3 @@ export async function requireOwnSupply(user: SessionUser, supplyId: string): Pro
   if (!user.producer || s.producerId !== user.producer.id) return { ok: false, response: json({ error: "この供給を変更する権限がありません" }, 403) };
   return { ok: true };
 }
-
-// ---------------------------------------------------------------------------
-// Legacy 限定：旧 Listing API（/api/listings）の編集用合言葉。正式な Supply API では使わない
-// Phase 5 で旧 Listing を削除するときに一緒に削除する
-// ---------------------------------------------------------------------------
-
-/** 編集用合言葉を受け取るリクエストヘッダー（legacy） */
-export const PASSPHRASE_HEADER = "x-edit-passphrase";
-
-const digest = (s: string) => createHash("sha256").update(s, "utf8").digest();
-
-/** Legacy 限定。EDIT_PASSPHRASE と一致する合言葉があるときだけ旧出品の編集を許可する */
-export function requireEditPassphrase(request: Request): Response | null {
-  const expected = process.env.EDIT_PASSPHRASE;
-  if (!expected) return json({ error: "現在、出品の編集はできません（合言葉が設定されていません）" }, 503);
-  let given: string | null = null;
-  try {
-    const raw = request.headers.get(PASSPHRASE_HEADER);
-    given = raw ? decodeURIComponent(raw) : null;
-  } catch {
-    given = null;
-  }
-  if (!given || !timingSafeEqual(digest(given), digest(expected)))
-    return json({ error: "編集用の合言葉が違います", code: "passphrase_required" }, 401);
-  return null;
-}

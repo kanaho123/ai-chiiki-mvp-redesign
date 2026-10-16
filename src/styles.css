@@ -420,7 +420,7 @@ ul.plain { margin: 0; padding-left: 1.2rem; display: grid; gap: 4px; }
 /* ログイン中のユーザーとログアウト（ヘッダー右側） */
 .session-box { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
 .session-name { display: inline-flex; align-items: center; gap: 4px; font-size: 0.875rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw; }
-.session-box .ghost { min-height: 36px; padding: 4px 10px; }
+.session-box .ghost { min-height: 44px; padding: 4px 12px; }
 .site-header-inner { flex-wrap: wrap; }
 .brand, .session-box .ghost { white-space: nowrap; }
 @media (max-width: 480px) {

@@ -188,3 +188,22 @@ describe("ログイン・権限（Phase 3 セキュリティテスト）", () =>
     expect(db.supplies.get("s-a")!.availableKg).toBe(10);
   });
 });
+
+describe("ログイン試行の回数制限", () => {
+  it("同じログイン名＋接続元で5回失敗すると、正しいパスワードでも一定時間 429 で受け付けない", async () => {
+    login.loginLimiter.reset("demo-b|203.0.113.9");
+    const attempt = (password: string) =>
+      login.POST(new Request(`${BASE}/api/auth/login`, {
+        method: "POST", headers: { "Content-Type": "application/json", "x-forwarded-for": "203.0.113.9" }, body: JSON.stringify({ loginId: "demo-b", password }),
+      }));
+    for (let i = 0; i < 5; i++) expect((await attempt("ちがう")).status).toBe(401);
+    const locked = await attempt(PASSWORD);
+    expect(locked.status).toBe(429);
+    expect(locked.headers.get("set-cookie")).toBeNull();
+    // 同じ回線（接続元）でも、別のユーザーはログインできる（会場の共有回線で全員を締め出さない）
+    const other = await login.POST(new Request(`${BASE}/api/auth/login`, {
+      method: "POST", headers: { "Content-Type": "application/json", "x-forwarded-for": "203.0.113.9" }, body: JSON.stringify({ loginId: "demo-a", password: PASSWORD }),
+    }));
+    expect(other.status).toBe(200);
+  });
+});

@@ -1,18 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { jstDate } from "./dates.js";
-import { parseListingInput, parseListingPatch, parsePlanRequest } from "./validate.js";
+import { parsePlanRequest } from "./validate.js";
 
 const NOW = new Date("2026-10-22T12:00:00+09:00");
 const plan = (o: Record<string, unknown> = {}) => ({
   itemId: "demo-item-tomato", varietyId: null, quantityKg: 10, desiredDate: "2026-10-23", budgetYen: 8000,
   originPrefectures: ["大阪府"], slotId: "demo-slot-gp", allowFirstTime: true, allowIrregular: false,
   allowMixedVarieties: false, allowMixedGrades: false, preferredProducerId: null, ...o,
-});
-
-const listing = (o: Record<string, unknown> = {}) => ({
-  producerName: "A農家", item: "トマト", quantity: 5, unit: "kg", unitPrice: 600, availableDate: jstDate(2),
-  region: "大阪近郊", handoverPlace: "共通受渡拠点P", handoverStart: "10:00", handoverEnd: "11:00",
-  minQuantity: 1, step: 1, handoverFee: 0, ...o,
 });
 
 describe("仕入れ条件の検証", () => {
@@ -55,31 +48,5 @@ describe("仕入れ条件の検証", () => {
   ])("%s は受け付けない", (_, o) => {
     const body = _ === "空" ? {} : plan(o);
     expect(parsePlanRequest(body, NOW).ok).toBe(false);
-  });
-});
-
-describe("出品の検証", () => {
-  it("正しい出品を受け付ける", () => {
-    expect(parseListingInput(listing()).ok).toBe(true);
-  });
-
-  it.each([
-    ["数量が小数", { quantity: 2.5 }],
-    ["数量が負", { quantity: -1 }],
-    ["単価が負", { unitPrice: -100 }],
-    ["単価が小数", { unitPrice: 600.5 }],
-    ["最低販売量が0", { minQuantity: 0 }],
-    ["販売刻みが0", { step: 0 }],
-    ["受渡時間が逆順", { handoverStart: "11:00", handoverEnd: "10:00" }],
-    ["受渡時間の形式違い", { handoverStart: "10時" }],
-    ["受渡手数料が負", { handoverFee: -1 }],
-  ])("%s は受け付けない", (_, o) => {
-    expect(parseListingInput(listing(o)).ok).toBe(false);
-  });
-
-  it("数量変更は0以上の整数だけ受け付ける", () => {
-    expect(parseListingPatch({ quantity: 1 }).ok).toBe(true);
-    expect(parseListingPatch({ quantity: 1.5 }).ok).toBe(false);
-    expect(parseListingPatch({ quantity: -1 }).ok).toBe(false);
   });
 });
