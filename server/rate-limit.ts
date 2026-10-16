@@ -1,30 +1,4 @@
-// 回数制限（サーバーのインスタンスごとのメモリ上の簡易的なもの。複数インスタンス間では共有しない）。
-
-/** 一定時間内の失敗回数が上限に達したキーを、ロック期間のあいだ拒否する */
-export class FailureLimiter {
-  private entries = new Map<string, { failures: number; firstAt: number; lockedUntil: number }>();
-
-  constructor(private maxFailures: number, private windowMs: number, private lockMs: number) {}
-
-  isLocked(key: string, now = Date.now()): boolean {
-    const e = this.entries.get(key);
-    return !!e && e.lockedUntil > now;
-  }
-
-  fail(key: string, now = Date.now()): void {
-    const e = this.entries.get(key);
-    if (!e || now - e.firstAt > this.windowMs) {
-      this.entries.set(key, { failures: 1, firstAt: now, lockedUntil: 0 });
-      return;
-    }
-    e.failures++;
-    if (e.failures >= this.maxFailures) e.lockedUntil = now + this.lockMs;
-  }
-
-  reset(key: string): void {
-    this.entries.delete(key);
-  }
-}
+// AI 呼び出しの間隔制限（インスタンスごとのメモリ上の簡易的なもの。費用の暴走を抑える目的で、ログインの総当たり対策は DB 側）。
 
 /** 同じキーの呼び出しを最低間隔ごとに1回までにする */
 export class IntervalLimiter {

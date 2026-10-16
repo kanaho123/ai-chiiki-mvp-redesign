@@ -154,6 +154,18 @@ model Supply {
   @@map("supplies")
 }
 
+// ログイン失敗の記録（総当たり対策）。サーバーレスでもインスタンス間で共有するため DB に置く。
+// key は「ログイン名|接続元」または「ip:接続元」。パスワード等は保存しない
+model AuthThrottle {
+  key         String   @id
+  failures    Int
+  firstAt     DateTime
+  lockedUntil DateTime?
+  updatedAt   DateTime @updatedAt
+
+  @@map("auth_throttles")
+}
+
 // ============================================================
 // Legacy（旧仕様の出品モデル）。現行画面を壊さないため一時的に残す。
 // Phase 2 で Supply へ完全移行した後に削除する。

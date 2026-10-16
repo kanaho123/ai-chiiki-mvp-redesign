@@ -88,6 +88,9 @@ export function PlanView({ shown, freshness, busy, busyLabel, onRecalc, onEdit, 
           </dl>
 
           <p className="status-line"><Icon name="info" size={18} /><strong>{PLAN_NOTICE}</strong></p>
+          <p className="computed-at">
+            計算時点 {formatJstDateTime(plan.computedAt)}{shown.demoClock && "（デモ基準日時）"}の登録情報／供給の最終更新 {plan.supplySnapshot.length ? formatJstDateTime(plan.supplySnapshot.map((s) => s.updatedAt).sort().at(-1)!) : "—"}
+          </p>
         </div>
         <p className="status-detail">この仕入れ案は登録情報をもとにした検討用です。実際の取引は各生産者への確認が必要です。品質の保証や在庫の予約ではありません。</p>
 
@@ -178,10 +181,6 @@ export function PlanView({ shown, freshness, busy, busyLabel, onRecalc, onEdit, 
           </section>
         )}
 
-        <p className="used-conditions">
-          計算時点：{formatJstDateTime(plan.computedAt)}{shown.demoClock && "（デモ用の基準日時）"}の情報。
-          供給の最終更新：{plan.supplySnapshot.length ? formatJstDateTime(plan.supplySnapshot.map((s) => s.updatedAt).sort().at(-1)!) : "—"}
-        </p>
         <p className="used-conditions">
           使った条件：{request.quantityKg}kg／{request.desiredDate}受取／産地 {request.originPrefectures.join("・")}／予算 {request.budgetYen === null ? "上限なし" : yen(request.budgetYen)}
           ／初回{request.allowFirstTime ? "含める" : "含めない"}／規格外{request.allowIrregular ? "可" : "不可"}／品種混在{request.allowMixedVarieties ? "可" : "不可"}／規格混在{request.allowMixedGrades ? "可" : "不可"}

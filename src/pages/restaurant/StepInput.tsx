@@ -51,8 +51,11 @@ export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable
       )}
 
       <button type="submit" className="primary large block" disabled={busy || aiAvailable === false} aria-busy={busy}>
-        {busy ? <><span className="spinner" aria-hidden="true" />読み取り中…</> : "条件を整理する"}
+        {busy ? <><span className="spinner" aria-hidden="true" />AIが条件を読み取り中…</> : "条件を整理する"}
       </button>
+      {busy && (
+        <p className="hint" role="status">文章から条件の候補を読み取っています（最大10秒）。待たずに「手入力で指定する」に切り替えることもできます。</p>
+      )}
       <button type="button" className="ghost block" onClick={onManual}>手入力で指定する</button>
       {!text && <button type="button" className="ghost block" onClick={() => onText(EXAMPLE_TEXT)}>例文を入れる</button>}
     </form>

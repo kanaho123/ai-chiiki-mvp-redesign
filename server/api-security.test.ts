@@ -6,6 +6,7 @@ import type { SessionUser, SupplyView } from "./repo.js";
 const db = vi.hoisted(() => ({
   users: new Map<string, { id: string; loginId: string; passwordHash: string | null; role: "restaurant" | "producer"; displayName: string; producerId: string | null }>(),
   supplies: new Map<string, { id: string; producerId: string; availableKg: number; published: boolean; version: number }>(),
+  throttles: new Map<string, { failures: number; firstAt: number; lockedUntil: number | null }>(),
 }));
 
 vi.mock("./repo.js", () => {
@@ -33,6 +34,18 @@ vi.mock("./repo.js", () => {
         Object.assign(s, data, { version: s.version + 1 });
         return view(s);
       },
+      // ログイン失敗の記録（本物は DB。ここでは同じ規則をメモリで再現）
+      isThrottled: async (keys: string[], now: Date) => keys.some((k) => (db.throttles.get(k)?.lockedUntil ?? 0) > now.getTime()),
+      recordLoginFailure: async (key: string, now: Date, rule: { max: number; windowMs: number; lockMs: number }) => {
+        const cur = db.throttles.get(key);
+        const fresh = !cur || now.getTime() - cur.firstAt > rule.windowMs;
+        const failures = fresh ? 1 : cur.failures + 1;
+        db.throttles.set(key, {
+          failures, firstAt: fresh ? now.getTime() : cur.firstAt,
+          lockedUntil: failures >= rule.max ? now.getTime() + rule.lockMs : fresh ? null : cur.lockedUntil,
+        });
+      },
+      clearLoginFailures: async (key: string) => void db.throttles.delete(key),
       producerSlots: async () => [],
       itemsWithVarieties: async () => [],
       createSupply: async () => null,
@@ -63,6 +76,7 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
+  db.throttles.clear();
   db.supplies.clear();
   db.supplies.set("s-a", { id: "s-a", producerId: "p-a", availableKg: 10, published: true, version: 3 });
   db.supplies.set("s-b", { id: "s-b", producerId: "p-b", availableKg: 5, published: true, version: 1 });
@@ -190,8 +204,7 @@ describe("ログイン・権限（Phase 3 セキュリティテスト）", () =>
 });
 
 describe("ログイン試行の回数制限", () => {
-  it("同じログイン名＋接続元で5回失敗すると、正しいパスワードでも一定時間 429 で受け付けない", async () => {
-    login.loginLimiter.reset("demo-b|203.0.113.9");
+  it("同じログイン名＋接続元で5回失敗すると、正しいパスワードでも一定時間 429 で受け付けない（失敗は DB に記録）", async () => {
     const attempt = (password: string) =>
       login.POST(new Request(`${BASE}/api/auth/login`, {
         method: "POST", headers: { "Content-Type": "application/json", "x-forwarded-for": "203.0.113.9" }, body: JSON.stringify({ loginId: "demo-b", password }),
@@ -205,5 +218,30 @@ describe("ログイン試行の回数制限", () => {
       method: "POST", headers: { "Content-Type": "application/json", "x-forwarded-for": "203.0.113.9" }, body: JSON.stringify({ loginId: "demo-a", password: PASSWORD }),
     }));
     expect(other.status).toBe(200);
+  });
+
+  it("同じ接続元からログイン名を変えて30回失敗すると、その接続元からのログインを止める", async () => {
+    const attempt = (loginId: string, password = "ちがう") =>
+      login.POST(new Request(`${BASE}/api/auth/login`, {
+        method: "POST", headers: { "Content-Type": "application/json", "x-forwarded-for": "192.0.2.50" }, body: JSON.stringify({ loginId, password }),
+      }));
+    for (let i = 0; i < 30; i++) expect((await attempt(`guess-${i}`)).status).toBe(401);
+    expect((await attempt("demo-a", PASSWORD)).status).toBe(429);
+    // 別の接続元からは通常どおりログインできる（デモ用アカウント自体は締め出されない）
+    const fromVenue = await login.POST(new Request(`${BASE}/api/auth/login`, {
+      method: "POST", headers: { "Content-Type": "application/json", "x-forwarded-for": "198.51.100.20" }, body: JSON.stringify({ loginId: "demo-a", password: PASSWORD }),
+    }));
+    expect(fromVenue.status).toBe(200);
+  });
+
+  it("成功したら、そのログイン名＋接続元の失敗記録を消す", async () => {
+    const at = (password: string) =>
+      login.POST(new Request(`${BASE}/api/auth/login`, {
+        method: "POST", headers: { "Content-Type": "application/json", "x-forwarded-for": "203.0.113.77" }, body: JSON.stringify({ loginId: "demo-r", password }),
+      }));
+    for (let i = 0; i < 4; i++) await at("ちがう");
+    expect((await at(PASSWORD)).status).toBe(200);
+    expect(db.throttles.has("demo-r|203.0.113.77")).toBe(false);
+    expect((await at("ちがう")).status).toBe(401); // 数え直しなので、すぐにはロックされない
   });
 });

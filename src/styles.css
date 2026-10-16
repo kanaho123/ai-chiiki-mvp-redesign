@@ -457,3 +457,21 @@ textarea { width: 100%; min-height: 120px; resize: vertical; line-height: 1.6; }
 .farm-meta dt { color: var(--text-sub); }
 .farm-meta dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
 .result, .qform, .page { min-width: 0; overflow-wrap: anywhere; }
+
+/* 操作中の役割（飲食店＝青、生産者＝緑）。色だけでなく文言でも示す */
+.session-name { gap: 6px; padding: 4px 10px; border-radius: 999px; }
+.session-name.role-restaurant { background: var(--buyer-tint); color: var(--buyer); }
+.session-name.role-producer { background: var(--grower-tint); color: var(--grower); }
+.session-role { font-weight: 700; }
+.session-display { font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.computed-at { margin: 8px 0 0; font-size: 0.8125rem; color: var(--text-sub); }
+.session-role { padding-right: 6px; border-right: 1px solid currentColor; }
+.tag-short { display: none; }
+@media (max-width: 480px) {
+  /* 狭い画面：ロゴとデモ表示を1段目、操作中のユーザーとログアウトを2段目にまとめる */
+  .tag-long { display: none; }
+  .tag-short { display: inline; }
+  .site-header-inner { row-gap: 4px; min-height: 0; padding-top: 6px; padding-bottom: 6px; }
+  .session-suffix { display: none; }
+  .session-name { min-width: 0; flex: 1 1 auto; }
+}

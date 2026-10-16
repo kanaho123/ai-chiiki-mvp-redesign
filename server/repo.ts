@@ -104,6 +104,28 @@ export const repo = {
     return items.map((i) => ({ id: i.id, name: i.name, varieties: i.varieties.map((v) => ({ id: v.id, name: v.name })) }));
   },
 
+  /** ログイン失敗の記録で、いずれかのキーがロック中か */
+  async isThrottled(keys: string[], now: Date): Promise<boolean> {
+    const n = await prisma.authThrottle.count({ where: { key: { in: keys }, lockedUntil: { gt: now } } });
+    return n > 0;
+  },
+
+  /** ログイン失敗を1回記録する。集計期間内の失敗が上限に達したらロックする */
+  async recordLoginFailure(key: string, now: Date, rule: { max: number; windowMs: number; lockMs: number }): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      const cur = await tx.authThrottle.findUnique({ where: { key } });
+      const fresh = !cur || now.getTime() - cur.firstAt.getTime() > rule.windowMs;
+      const failures = fresh ? 1 : cur.failures + 1;
+      const lockedUntil = failures >= rule.max ? new Date(now.getTime() + rule.lockMs) : fresh ? null : cur.lockedUntil;
+      const data = { failures, firstAt: fresh ? now : cur.firstAt, lockedUntil };
+      await tx.authThrottle.upsert({ where: { key }, create: { key, ...data }, update: data });
+    });
+  },
+
+  async clearLoginFailures(key: string): Promise<void> {
+    await prisma.authThrottle.deleteMany({ where: { key } });
+  },
+
   /** 新しい供給を作る。同じ農家・品目・枠の供給がすでにあれば null */
   async createSupply(data: SupplyCreate): Promise<SupplyView | null> {
     const dup = await prisma.supply.findFirst({ where: { producerId: data.producerId, itemId: data.itemId, slotId: data.slotId }, select: { id: true } });
