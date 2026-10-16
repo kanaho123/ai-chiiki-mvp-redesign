@@ -1,35 +1,52 @@
 import { useCallback, useEffect, useState } from "react";
 import type { PlanRequest, PlanResult } from "../lib/allocate.js";
-import { REGIONS, STATUS_LABEL, UNITS } from "../lib/constants.js";
-import { formatDateJa, jstDate } from "../lib/dates.js";
-import { Icon } from "../components/Icon";
+import { PLAN_NOTICE } from "../lib/constants.js";
+import { formatJstDateTime, jstDate, jstDateOf, jstTimeOf } from "../lib/dates.js";
+import { EXCLUSION_TEXT, headlineText, NOTICE_TEXT, rankingText, REASON_TEXT, STATUS_TEXT } from "../lib/reasons.js";
 import type { Suggestion } from "../lib/suggest.js";
+import { Icon } from "../components/Icon";
 
-type Form = {
-  item: string;
-  variety: string;
-  quantity: string;
-  unit: string;
-  deadline: string;
-  region: string;
-  allowIrregular: "" | "yes" | "no";
-  maxUnitPrice: string;
-  handoverPlace: string;
-  handoverFrom: string;
-  handoverTo: string;
+// Phase 2 確認用の手入力画面。条件をすべて利用者が確定してから POST /api/plan へ送る。
+// Phase 4 で自然文入力＋条件確認画面に置き換える。
+
+type Options = {
+  now: string;
+  demoClock: boolean;
+  items: { id: string; name: string; varieties: { id: string; name: string }[] }[];
+  slots: { id: string; label: string; placeName: string; startAt: string; endAt: string; confirmDeadlineAt: string; feeYen: number; feeConfirmed: boolean; maxKg: number }[];
+  nearbyPrefectures: string[];
+  priorTradeProducers: { id: string; name: string }[];
 };
 
-type Shown = { plan: PlanResult; version: string; request: PlanRequest; suggestions?: Suggestion[] };
+type YesNo = "" | "yes" | "no";
+type Form = {
+  itemId: string;
+  varietyId: string; // "" は指定なし
+  quantityKg: string;
+  desiredDate: string;
+  budgetMode: "" | "limit" | "none";
+  budgetYen: string;
+  originPrefectures: string[];
+  slotId: string;
+  allowFirstTime: YesNo;
+  allowIrregular: YesNo;
+  allowMixedVarieties: YesNo;
+  allowMixedGrades: YesNo;
+  preferredProducerId: string;
+};
+
+type Shown = { plan: PlanResult; version: string; request: PlanRequest; suggestions: Suggestion[]; demoClock: boolean };
 
 const EMPTY: Form = {
-  item: "", variety: "", quantity: "", unit: "kg", deadline: "", region: "", allowIrregular: "",
-  maxUnitPrice: "", handoverPlace: "", handoverFrom: "", handoverTo: "",
+  itemId: "", varietyId: "", quantityKg: "", desiredDate: "", budgetMode: "", budgetYen: "", originPrefectures: [], slotId: "",
+  allowFirstTime: "", allowIrregular: "", allowMixedVarieties: "no", allowMixedGrades: "no", preferredProducerId: "",
 };
 
-const STORAGE_KEY = "ai-tiiki:restaurant";
+const STORAGE_KEY = "ai-chiiki:restaurant:v2";
 const POLL_MS = 3000;
 
 const yen = (n: number) => `${n.toLocaleString("ja-JP")}円`;
+const yn = (v: YesNo) => (v === "" ? null : v === "yes");
 
 function load(): { form: Form; shown: Shown | null } | null {
   try {
@@ -46,30 +63,50 @@ function save(form: Form, shown: Shown | null) {
   } catch {}
 }
 
+/** 未選択の項目は null／未入力のまま送り、サーバーで「選択してください」と返す（推測で埋めない） */
 function toBody(f: Form) {
   return {
-    item: f.item,
-    variety: f.variety,
-    quantity: f.quantity,
-    unit: f.unit,
-    deadline: f.deadline,
-    region: f.region,
-    allowIrregular: f.allowIrregular === "" ? null : f.allowIrregular === "yes",
-    maxUnitPrice: f.maxUnitPrice,
-    handoverPlace: f.handoverPlace,
-    handoverFrom: f.handoverFrom,
-    handoverTo: f.handoverTo,
+    itemId: f.itemId,
+    varietyId: f.varietyId || null,
+    quantityKg: f.quantityKg,
+    desiredDate: f.desiredDate,
+    budgetYen: f.budgetMode === "none" ? null : f.budgetMode === "limit" ? f.budgetYen : undefined,
+    originPrefectures: f.originPrefectures,
+    slotId: f.slotId,
+    allowFirstTime: yn(f.allowFirstTime),
+    allowIrregular: yn(f.allowIrregular),
+    allowMixedVarieties: yn(f.allowMixedVarieties),
+    allowMixedGrades: yn(f.allowMixedGrades),
+    preferredProducerId: f.preferredProducerId || null,
   };
 }
 
-/** 「詳しい条件」を閉じていても設定内容が分かるように要約する */
-function optionalSummary(f: Form): string {
-  const parts: string[] = [];
-  if (f.variety.trim()) parts.push(`品種 ${f.variety.trim()}`);
-  if (f.maxUnitPrice) parts.push(`上限 ${Number(f.maxUnitPrice).toLocaleString("ja-JP")}円/${f.unit}`);
-  if (f.handoverPlace) parts.push(f.handoverPlace);
-  if (f.handoverFrom || f.handoverTo) parts.push(`${f.handoverFrom || "—"}〜${f.handoverTo || "—"}`);
-  return parts.length ? parts.join("・") : "品種・価格上限・受渡場所・時間帯：指定なし";
+function fromRequest(r: PlanRequest): Form {
+  const b = (v: boolean): YesNo => (v ? "yes" : "no");
+  return {
+    itemId: r.itemId, varietyId: r.varietyId ?? "", quantityKg: String(r.quantityKg), desiredDate: r.desiredDate,
+    budgetMode: r.budgetYen === null ? "none" : "limit", budgetYen: r.budgetYen === null ? "" : String(r.budgetYen),
+    originPrefectures: r.originPrefectures, slotId: r.slotId, allowFirstTime: b(r.allowFirstTime), allowIrregular: b(r.allowIrregular),
+    allowMixedVarieties: b(r.allowMixedVarieties), allowMixedGrades: b(r.allowMixedGrades), preferredProducerId: r.preferredProducerId ?? "",
+  };
+}
+
+const slotText = (s: { label: string; placeName: string; startAt: string; endAt: string }) =>
+  `${s.label}：${formatJstDateTime(s.startAt)}〜${jstTimeOf(s.endAt)}／${s.placeName}`;
+
+function YesNoChoice({ name, value, onChange, yes, no }: {
+  name: string; value: YesNo; onChange: (v: YesNo) => void; yes: [string, string]; no: [string, string];
+}) {
+  return (
+    <div className="choice" role="radiogroup" aria-labelledby={`${name}-title`} aria-required="true">
+      {([["yes", yes], ["no", no]] as const).map(([v, [label, sub]]) => (
+        <label key={v}>
+          <input type="radio" name={name} checked={value === v} onChange={() => onChange(v)} />
+          <span>{label}<small>{sub}</small></span>
+        </label>
+      ))}
+    </div>
+  );
 }
 
 export default function RestaurantPage() {
@@ -77,8 +114,10 @@ export default function RestaurantPage() {
   const [shown, setShown] = useState<Shown | null>(null);
   const [stale, setStale] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [places, setPlaces] = useState<string[]>([]);
+  const [options, setOptions] = useState<Options | null>(null);
+  const [optionsError, setOptionsError] = useState(false);
   const [restored, setRestored] = useState(false);
 
   useEffect(() => {
@@ -88,23 +127,23 @@ export default function RestaurantPage() {
       setShown(saved.shown);
     }
     setRestored(true);
-    fetch("/api/listings")
-      .then((r) => r.json())
-      .then((d: { listings: { handoverPlace: string }[] }) =>
-        setPlaces([...new Set(d.listings.map((l) => l.handoverPlace))]),
-      )
-      .catch(() => {});
+    fetch("/api/plan-options", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(setOptions)
+      .catch(() => setOptionsError(true));
   }, []);
 
   useEffect(() => {
     if (restored) save(form, shown);
   }, [form, shown, restored]);
 
-  // 表示中の案が作られた後に出品が変わったら、その案を無効にする
+  // 表示中の案の計算後に供給・枠などが変わったら、その案を無効にする
   const checkVersion = useCallback(async () => {
     if (!shown) return;
     try {
-      const r = await fetch("/api/inventory-version", { cache: "no-store" });
+      const q = new URLSearchParams({ itemId: shown.request.itemId, slotId: shown.request.slotId });
+      const r = await fetch(`/api/inventory-version?${q}`, { cache: "no-store" });
+      if (!r.ok) return;
       const { version } = await r.json();
       setStale(version !== shown.version);
     } catch {}
@@ -127,12 +166,9 @@ export default function RestaurantPage() {
   async function requestPlan(body: unknown) {
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
-      const r = await fetch("/api/plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const r = await fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const d = await r.json();
       if (!r.ok) {
         setError(d.error ?? "条件を読み取れません");
@@ -140,7 +176,6 @@ export default function RestaurantPage() {
       }
       setShown(d);
       setStale(false);
-      // スマホではフォームの下に結果が出るので、結果の先頭まで移動する
       setTimeout(() => document.querySelector(".result")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
     } catch {
       setError("通信に失敗しました。もう一度お試しください");
@@ -150,6 +185,36 @@ export default function RestaurantPage() {
   }
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm((f) => ({ ...f, [k]: v }));
+  const item = options?.items.find((i) => i.id === form.itemId);
+  const today = options ? jstDate(0, new Date(options.now)) : jstDate();
+
+  /** 変更候補は自動適用しない：フォームに反映し、利用者が内容を確認してから再計算する */
+  function applySuggestion(s: Suggestion) {
+    if (!shown) return;
+    const base = fromRequest(shown.request);
+    const c = s.change ?? {};
+    setForm({
+      ...base,
+      ...(c.allowFirstTime !== undefined && { allowFirstTime: c.allowFirstTime ? "yes" : "no" }),
+      ...(c.allowIrregular !== undefined && { allowIrregular: c.allowIrregular ? "yes" : "no" }),
+      ...(c.allowMixedVarieties !== undefined && { allowMixedVarieties: c.allowMixedVarieties ? "yes" : "no" }),
+      ...(c.allowMixedGrades !== undefined && { allowMixedGrades: c.allowMixedGrades ? "yes" : "no" }),
+      ...(c.quantityKg !== undefined && { quantityKg: String(c.quantityKg) }),
+    });
+    setNotice(`「${s.label}」をフォームに反映しました。条件を確認して「仕入れ案を作る」を押してください。`);
+    setTimeout(() => document.querySelector(".qform")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  }
+
+  function fillDemo() {
+    if (!options) return;
+    const tomato = options.items.find((i) => i.name === "トマト") ?? options.items[0];
+    const gp = options.slots.find((s) => s.label === "G-P") ?? options.slots[0];
+    setForm({
+      ...EMPTY, itemId: tomato?.id ?? "", quantityKg: "10", desiredDate: gp ? jstDateOf(gp.startAt) : "", budgetMode: "limit", budgetYen: "8000",
+      originPrefectures: ["大阪府"], slotId: gp?.id ?? "", allowFirstTime: "yes", allowIrregular: "no",
+      preferredProducerId: options.priorTradeProducers[0]?.id ?? "",
+    });
+  }
 
   const busyLabel = (
     <>
@@ -163,127 +228,155 @@ export default function RestaurantPage() {
       <header className="page-head">
         <p className="page-role buyer"><Icon name="store" />飲食店の方</p>
         <h1>仕入れ案を作る</h1>
-        <p className="lead">3つの質問に答えると、条件の合う農家を組み合わせた仕入れ案を作ります。</p>
+        <p className="lead">条件を確定すると、登録された供給から「誰から何kg・費用込みでいくら・いつどこで受け取るか」を計算します。</p>
+        <p className="hint">Phase 2 確認用の手入力画面です（自然文入力は今後追加）。計算は登録条件の照合だけで、AIは使いません。</p>
       </header>
+
+      {optionsError && <div className="alert bad" role="alert"><Icon name="alert" />選択肢を読み込めませんでした。再読み込みしてください。</div>}
 
       <form
         className="qform"
         onSubmit={(e) => {
           e.preventDefault();
-          if (!form.item.trim() && !form.quantity && !form.deadline) {
-            setError("品目・数量・希望日を入力してください");
-            return;
-          }
           requestPlan(toBody(form));
         }}
       >
         <div className="qform-tools">
-          <button
-            type="button"
-            className="ghost"
-            onClick={() =>
-              setForm({ ...EMPTY, item: "トマト", quantity: "10", deadline: jstDate(2), region: "大阪近郊", allowIrregular: "yes" })
-            }
-          >
-            例を入力：明後日までに大阪近郊のトマト10kg、規格外OK
+          <button type="button" className="ghost" onClick={fillDemo} disabled={!options}>
+            例を入力：10月23日に大阪産トマト10kg、受渡費込み8,000円以内、A農園優先、初回もOK
           </button>
         </div>
 
         <section className="q" aria-labelledby="q1">
           <h2 className="q-title" id="q1"><span className="q-no">1</span>何を、どれくらい？<span className="req">必須</span></h2>
-          <label className="field">
-            <span className="label">品目</span>
-            <input value={form.item} onChange={(e) => set("item", e.target.value)} placeholder="例：トマト" maxLength={30} aria-required="true" />
-          </label>
           <div className="row">
             <label className="field">
-              <span className="label">数量</span>
-              <input type="number" inputMode="numeric" min={1} step={1} value={form.quantity} onChange={(e) => set("quantity", e.target.value)} placeholder="例：10" aria-required="true" />
-            </label>
-            <label className="field">
-              <span className="label">単位</span>
-              <select value={form.unit} onChange={(e) => set("unit", e.target.value)} aria-required="true">
-                {UNITS.map((u) => <option key={u}>{u}</option>)}
+              <span className="label">品目</span>
+              <select value={form.itemId} onChange={(e) => setForm((f) => ({ ...f, itemId: e.target.value, varietyId: "" }))} aria-required="true">
+                <option value="">選択してください</option>
+                {options?.items.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
               </select>
             </label>
+            <label className="field">
+              <span className="label">数量（kg）</span>
+              <span className="with-unit">
+                <input type="number" inputMode="numeric" min={1} max={100} step={1} value={form.quantityKg} onChange={(e) => set("quantityKg", e.target.value)} placeholder="例：10" aria-required="true" />
+                <em>kg</em>
+              </span>
+            </label>
           </div>
+          <label className="field">
+            <span className="label">品種</span>
+            <select value={form.varietyId} onChange={(e) => set("varietyId", e.target.value)}>
+              <option value="">指定なし（同じ品種どうしで組みます）</option>
+              {item?.varieties.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+            </select>
+          </label>
+          <span className="hint">整数kg・1〜100kgに対応しています。</span>
         </section>
 
         <section className="q" aria-labelledby="q2">
-          <h2 className="q-title" id="q2"><span className="q-no">2</span>いつ、どこで？<span className="req">必須</span></h2>
+          <h2 className="q-title" id="q2"><span className="q-no">2</span>いつ、どこで受け取る？<span className="req">必須</span></h2>
           <label className="field">
-            <span className="label">希望日（この日までに受け取り）</span>
-            <input type="date" min={jstDate()} value={form.deadline} onChange={(e) => set("deadline", e.target.value)} aria-required="true" />
+            <span className="label">受け取りたい日</span>
+            <input type="date" min={today} value={form.desiredDate} onChange={(e) => set("desiredDate", e.target.value)} aria-required="true" />
           </label>
           <label className="field">
-            <span className="label">地域</span>
-            <select value={form.region} onChange={(e) => set("region", e.target.value)} aria-required="true">
+            <span className="label">受渡枠（受取場所・時間）</span>
+            <select value={form.slotId} onChange={(e) => set("slotId", e.target.value)} aria-required="true">
               <option value="">選択してください</option>
-              {REGIONS.map((r) => <option key={r}>{r}</option>)}
+              {options?.slots.map((s) => <option key={s.id} value={s.id}>{slotText(s)}</option>)}
             </select>
+            <span className="hint">同じ受渡枠の供給だけを組み合わせます。枠の受渡費は1案につき1回だけかかります。</span>
           </label>
         </section>
 
         <section className="q" aria-labelledby="q3">
-          <h2 className="q-title" id="q3"><span className="q-no">3</span>形の不揃い・余剰も使える？<span className="req">必須</span></h2>
-          <div className="choice" role="radiogroup" aria-labelledby="q3" aria-required="true">
-            <label>
-              <input type="radio" name="irr" checked={form.allowIrregular === "yes"} onChange={() => set("allowIrregular", "yes")} />
-              <span>使える<small>形の不揃い・余剰の出品も組み合わせる</small></span>
-            </label>
-            <label>
-              <input type="radio" name="irr" checked={form.allowIrregular === "no"} onChange={() => set("allowIrregular", "no")} />
-              <span>使わない<small>通常品だけで組み合わせる</small></span>
-            </label>
+          <h2 className="q-title" id="q3"><span className="q-no">3</span>産地と予算<span className="req">必須</span></h2>
+          <fieldset className="field">
+            <legend className="label">産地（どこで採れたか。受取場所とは別）</legend>
+            <div className="choice">
+              {options?.nearbyPrefectures.map((p) => (
+                <label key={p}>
+                  <input
+                    type="checkbox"
+                    checked={form.originPrefectures.includes(p)}
+                    onChange={(e) => set("originPrefectures", e.target.checked ? [...form.originPrefectures, p] : form.originPrefectures.filter((x) => x !== p))}
+                  />
+                  <span>{p}産</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <div className="field">
+            <span className="label" id="budget-title">予算（税込・受渡費込み）</span>
+            <div className="choice" role="radiogroup" aria-labelledby="budget-title" aria-required="true">
+              <label>
+                <input type="radio" name="budget" checked={form.budgetMode === "limit"} onChange={() => set("budgetMode", "limit")} />
+                <span>上限あり<small>金額を入力する</small></span>
+              </label>
+              <label>
+                <input type="radio" name="budget" checked={form.budgetMode === "none"} onChange={() => set("budgetMode", "none")} />
+                <span>上限なし<small>予算で絞らない</small></span>
+              </label>
+            </div>
+            {form.budgetMode === "limit" && (
+              <span className="with-unit" style={{ marginTop: 8 }}>
+                <input type="number" inputMode="numeric" min={1} step={1} value={form.budgetYen} onChange={(e) => set("budgetYen", e.target.value)} placeholder="例：8000" aria-label="予算（円）" />
+                <em>円</em>
+              </span>
+            )}
           </div>
+        </section>
+
+        <section className="q" aria-labelledby="q4-title">
+          <h2 className="q-title" id="q4-title"><span className="q-no">4</span>初回の農家も含める？<span className="req">必須</span></h2>
+          <YesNoChoice name="q4" value={form.allowFirstTime} onChange={(v) => set("allowFirstTime", v)}
+            yes={["含める", "取引経験のない農家も候補にする"]} no={["含めない", "取引経験のある農家だけ"]} />
+          <p className="hint">取引経験は店の申告情報です。品質や信用の保証ではありません。</p>
+        </section>
+
+        <section className="q" aria-labelledby="q5-title">
+          <h2 className="q-title" id="q5-title"><span className="q-no">5</span>規格外（形の不揃い等）も使える？<span className="req">必須</span></h2>
+          <YesNoChoice name="q5" value={form.allowIrregular} onChange={(v) => set("allowIrregular", v)}
+            yes={["使える", "規格外品も候補にする"]} no={["使わない", "通常品だけ"]} />
         </section>
 
         <details className="more">
           <summary>
             <span className="more-title">詳しい条件<span className="opt">任意</span></span>
-            <span className={`more-value ${optionalSummary(form).startsWith("品種・価格上限") ? "" : "is-set"}`}>{optionalSummary(form)}</span>
+            <span className="more-value">
+              品種の混在：{form.allowMixedVarieties === "yes" ? "許可" : "しない"}／規格の混在：{form.allowMixedGrades === "yes" ? "許可" : "しない"}／優先：
+              {options?.priorTradeProducers.find((p) => p.id === form.preferredProducerId)?.name ?? "なし"}
+            </span>
             <Icon name="chevronDown" className="chev" />
           </summary>
           <div className="more-body">
-            <label className="field">
-              <span className="label">品種</span>
-              <input value={form.variety} onChange={(e) => set("variety", e.target.value)} placeholder="例：桃太郎（空欄なら指定なし）" maxLength={30} />
-              <span className="hint">指定すると、同じ品種が登録された出品だけを使います</span>
-            </label>
-            <label className="field">
-              <span className="label">税込単価の上限</span>
-              <span className="with-unit">
-                <input type="number" inputMode="numeric" min={1} step={1} value={form.maxUnitPrice} onChange={(e) => set("maxUnitPrice", e.target.value)} placeholder="空欄なら指定なし" />
-                <em>円/{form.unit}</em>
-              </span>
-            </label>
-            <label className="field">
-              <span className="label">受渡場所</span>
-              <select value={form.handoverPlace} onChange={(e) => set("handoverPlace", e.target.value)}>
-                <option value="">指定なし</option>
-                {[...new Set([...places, ...(form.handoverPlace ? [form.handoverPlace] : [])])].map((p) => <option key={p}>{p}</option>)}
-              </select>
-            </label>
             <div className="field">
-              <span className="label">受け取れる時間帯</span>
-              <div className="row">
-                <label className="field">
-                  <span className="sub-label">開始</span>
-                  <input type="time" aria-label="開始" value={form.handoverFrom} onChange={(e) => set("handoverFrom", e.target.value)} />
-                </label>
-                <label className="field">
-                  <span className="sub-label">終了</span>
-                  <input type="time" aria-label="終了" value={form.handoverTo} onChange={(e) => set("handoverTo", e.target.value)} />
-                </label>
-              </div>
-              <span className="hint">指定すると、受渡時間がこの時間帯に収まる出品だけを使います</span>
+              <span className="label" id="q6-title">異なる品種を混ぜてよい？</span>
+              <YesNoChoice name="q6" value={form.allowMixedVarieties} onChange={(v) => set("allowMixedVarieties", v)}
+                yes={["混ぜてよい", "品質が等しいとは限りません"]} no={["混ぜない", "同じ品種どうしで組む"]} />
             </div>
+            <div className="field">
+              <span className="label" id="q7-title">通常品と規格外品を混ぜてよい？</span>
+              <YesNoChoice name="q7" value={form.allowMixedGrades} onChange={(v) => set("allowMixedGrades", v)}
+                yes={["混ぜてよい", "規格外を使える場合のみ"]} no={["混ぜない", "同じ規格どうしで組む"]} />
+            </div>
+            <label className="field">
+              <span className="label">優先したい取引先</span>
+              <select value={form.preferredProducerId} onChange={(e) => set("preferredProducerId", e.target.value)}>
+                <option value="">指定なし</option>
+                {options?.priorTradeProducers.map((p) => <option key={p.id} value={p.id}>{p.name}（取引経験あり）</option>)}
+              </select>
+              <span className="hint">優先は必須条件ではありません。仕入れ先の数が少ない案を先に選びます。</span>
+            </label>
           </div>
         </details>
 
+        {notice && <div className="alert warn" role="status"><Icon name="info" />{notice}</div>}
         {error && <div className="alert bad" role="alert"><Icon name="alert" />{error}</div>}
 
-        <button type="submit" className="primary large block" disabled={busy} aria-busy={busy}>
+        <button type="submit" className="primary large block" disabled={busy || !options} aria-busy={busy}>
           {busy ? busyLabel : "仕入れ案を作る"}
         </button>
       </form>
@@ -295,11 +388,7 @@ export default function RestaurantPage() {
           busy={busy}
           busyLabel={busyLabel}
           onRecalc={() => requestPlan(shown.request)}
-          onAllowIrregular={() => {
-            // 利用者が押したときだけ条件を変え、最新の DB から計算し直す
-            set("allowIrregular", "yes");
-            requestPlan({ ...shown.request, allowIrregular: true });
-          }}
+          onSuggestion={applySuggestion}
         />
       )}
     </div>
@@ -316,28 +405,17 @@ function Num({ children, stale }: { children: React.ReactNode; stale: boolean })
   );
 }
 
-function PlanView({ shown, stale, busy, busyLabel, onRecalc, onAllowIrregular }: {
-  shown: Shown; stale: boolean; busy: boolean; busyLabel: React.ReactNode; onRecalc: () => void; onAllowIrregular: () => void;
+function PlanView({ shown, stale, busy, busyLabel, onRecalc, onSuggestion }: {
+  shown: Shown; stale: boolean; busy: boolean; busyLabel: React.ReactNode; onRecalc: () => void; onSuggestion: (s: Suggestion) => void;
 }) {
   const { plan, request } = shown;
-  const irregularSuggestion = shown.suggestions?.find((x) => x.type === "allow_irregular");
-  const u = plan.unit;
-  const ok = plan.status === "fulfilled";
+  const ok = plan.status === "MATCHED";
   const tone = stale ? "bad" : ok ? "ok" : "warn";
-
-  // 状態は色だけでなく、アイコンと言葉でも伝える
+  // 状態は色だけでなく、アイコンと言葉でも伝える。古い案は再計算まで適合状態を出さない
   const status = stale
-    ? { icon: "x" as const, text: "無効な案（在庫が変わる前の計算）" }
-    : ok
-      ? { icon: "check" as const, text: "希望量を満たしています" }
-      : plan.status === "handover_mismatch"
-        ? { icon: "alert" as const, text: "同じ日時・場所では揃いません" }
-        : { icon: "alert" as const, text: "希望量に足りません" };
-  const headline = ok
-    ? `希望${plan.requested}${u}を満たす仕入れ案です`
-    : plan.status === "none"
-      ? "条件に合う出品がありません"
-      : `あと${plan.shortage}${u}足りません`;
+    ? { icon: "x" as const, text: "無効な案（供給が変わる前の計算）" }
+    : { icon: ok ? ("check" as const) : ("alert" as const), text: STATUS_TEXT[plan.status] };
+  const ranking = rankingText(plan.rankingReason);
 
   return (
     <section className="result" aria-live="polite" aria-labelledby="result-title">
@@ -348,97 +426,93 @@ function PlanView({ shown, stale, busy, busyLabel, onRecalc, onAllowIrregular }:
           <Icon name="alert" />
           <div>
             <strong className="stale-title">この仕入れ案は無効です</strong>
-            <p>出品の数量や公開状態が変わりました。下の数量・金額は使えません。最新の在庫で計算し直してください。</p>
+            <p>供給の数量・公開状態などが変わりました。下の数量・金額は使えません。最新の情報で計算し直してください。</p>
             <button className="primary block" onClick={onRecalc} disabled={busy} aria-busy={busy} style={{ marginTop: 12 }}>
-              {busy ? busyLabel : <><Icon name="refresh" />同じ条件で再計算</>}
+              {busy ? busyLabel : <><Icon name="refresh" />最新情報で再計算</>}
             </button>
           </div>
         </div>
       )}
 
       <div className={`result-body ${stale ? "is-stale" : ""}`}>
-        {/* ひと目で把握する：満たすか・案の数量・商品代・受渡し */}
         <div className={`hero summary ${tone}`}>
           <p className={`status ${tone}`}><Icon name={status.icon} />{status.text}</p>
-          <p className="headline">
-            {stale && "【無効】"}
-            {ok ? (
-              <><span className="nowrap">希望{plan.requested}{u}を満たす</span><span className="nowrap">仕入れ案です</span></>
-            ) : (
-              headline
-            )}
-          </p>
-          {!ok && <p className="headline-sub">{plan.message}</p>}
+          <p className="headline">{stale && "【無効】"}{headlineText(plan)}</p>
 
           <dl className="keyfacts">
             <div className="kf kf-qty">
               <dt>案の数量</dt>
               <dd>
-                <span className="figure"><Num stale={stale}>{plan.totalQuantity}<small>{u}</small></Num></span>
-                <span className="of">／ 希望 {plan.requested}{u}</span>
+                <span className="figure"><Num stale={stale}>{plan.fulfilledKg}<small>kg</small></Num></span>
+                <span className="of">／ 希望 {plan.requestedKg}kg{plan.shortageKg > 0 && `（${plan.shortageKg}kg不足）`}</span>
               </dd>
             </div>
             <div className="kf">
-              <dt>商品代（税込）</dt>
-              <dd className={ok ? "price" : "price price-sub"}><Num stale={stale}>{yen(plan.subtotal)}</Num></dd>
+              <dt>総額（税込・受渡費込み）</dt>
+              <dd className={ok ? "price" : "price price-sub"}>
+                {plan.allocations.length === 0 ? <span className="muted">—</span> : plan.totalYen === null ? "未確定" : <Num stale={stale}>{yen(plan.totalYen)}</Num>}
+              </dd>
             </div>
             <div className="kf kf-handover">
               <dt>受渡し</dt>
               <dd>
-                {plan.handover ? (
+                {plan.slot ? (
                   <>
-                    <span className="kf-line"><Icon name="calendar" size={18} />{formatDateJa(plan.handover.date)} {plan.handover.start}〜{plan.handover.end}</span>
-                    <span className="kf-line"><Icon name="pin" size={18} />{plan.handover.place}</span>
+                    <span className="kf-line"><Icon name="calendar" size={18} />{formatJstDateTime(plan.slot.startAt)}〜{jstTimeOf(plan.slot.endAt)}</span>
+                    <span className="kf-line"><Icon name="pin" size={18} />{plan.slot.placeName}（{plan.slot.label}）</span>
                   </>
                 ) : (
-                  <span className="muted">受渡しできる組み合わせがありません</span>
+                  <span className="muted">受渡枠が見つかりません</span>
                 )}
               </dd>
             </div>
           </dl>
 
-          <p className="status-line"><Icon name="info" size={18} /><strong>{STATUS_LABEL}</strong></p>
+          <p className="status-line"><Icon name="info" size={18} /><strong>{PLAN_NOTICE}</strong></p>
         </div>
-        <p className="status-detail">
-          この案は取引相談に使う候補です。農家の承認・在庫の確保・決済・配送はまだ行われていません。
-        </p>
+        <p className="status-detail">この案は取引相談に使う候補です。実際の取引は各生産者への確認が必要です。連絡・注文・予約はこの画面ではできません。</p>
 
-        {irregularSuggestion && !stale && (
-          <div className="suggestion" role="note">
-            <p className="suggestion-head"><Icon name="arrowRight" />条件を変えると満たせます</p>
-            <p className="suggestion-text">{irregularSuggestion.message}</p>
-            <p className="suggestion-change">変わる条件：<b>形の不揃い・余剰「使わない」→「使える」</b>（ほかの条件はそのまま、最新の在庫で計算し直します）</p>
-            <button className="action block large" onClick={onAllowIrregular} disabled={busy} aria-busy={busy}>
-              {busy ? busyLabel : "形の不揃い・余剰も含めて再計算"}
-            </button>
-          </div>
+        {plan.reasonCodes.length > 0 && (
+          <section className="section" aria-labelledby="reason-title">
+            <h3 id="reason-title">理由</h3>
+            <ul className="plain">
+              {plan.reasonCodes.map((c) => <li key={c}>{REASON_TEXT[c]}</li>)}
+              {plan.overBudget && (
+                <li>予算を外すと{plan.overBudget.kg}kgの案は{plan.overBudget.totalYen === null ? "総額未確定" : `総額${yen(plan.overBudget.totalYen)}`}です（予算 {yen(plan.budgetYen ?? 0)}）</li>
+              )}
+            </ul>
+          </section>
         )}
+
+        {ranking && !stale && <div className="alert ok" role="note"><Icon name="info" />{ranking}</div>}
+        {plan.notices.map((n) => <div className="alert warn" key={n}><Icon name="alert" />{NOTICE_TEXT[n]}</div>)}
 
         {plan.allocations.length > 0 && (
           <section className="section" aria-labelledby="alloc-title">
-            <h3 id="alloc-title">農家別の配分<span className="muted">（{plan.allocations.length}軒）</span></h3>
+            <h3 id="alloc-title">農家別の配分<span className="muted">（{plan.producerCount}農家）</span></h3>
             <table className="alloc-table">
               <thead>
                 <tr><th scope="col">農家</th><th scope="col">配分</th><th scope="col">商品代</th></tr>
               </thead>
               <tbody>
                 {plan.allocations.map((a) => (
-                  <tr key={a.listingId} className="alloc">
+                  <tr key={a.supplyId} className="alloc">
                     <th scope="row">
                       <span className="name">{a.producerName}</span>
-                      <span className="unit-price">{a.unitPrice.toLocaleString("ja-JP")}円/{u}</span>
+                      <span className="unit-price">{a.priceYenPerKg.toLocaleString("ja-JP")}円/kg・{a.varietyName}</span>
+                      <span className={`tag ${a.priorTrade ? "on" : "off"}`}>{a.priorTrade ? "取引経験あり（店の申告）" : "初回"}</span>
                       {a.irregularReason && <span className="tag irregular">規格外：{a.irregularReason}</span>}
                     </th>
-                    <td className="qty"><Num stale={stale}>{a.quantity}<small>{u}</small></Num></td>
-                    <td className="yen"><Num stale={stale}>{yen(a.subtotal)}</Num></td>
+                    <td className="qty"><Num stale={stale}>{a.kg}<small>kg</small></Num></td>
+                    <td className="yen"><Num stale={stale}>{yen(a.subtotalYen)}</Num></td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr>
                   <th scope="row">合計</th>
-                  <td className="qty"><Num stale={stale}>{plan.totalQuantity}<small>{u}</small></Num></td>
-                  <td className="yen"><Num stale={stale}>{yen(plan.subtotal)}</Num></td>
+                  <td className="qty"><Num stale={stale}>{plan.fulfilledKg}<small>kg</small></Num></td>
+                  <td className="yen"><Num stale={stale}>{yen(plan.productSubtotalYen)}</Num></td>
                 </tr>
               </tfoot>
             </table>
@@ -449,50 +523,53 @@ function PlanView({ shown, stale, busy, busyLabel, onRecalc, onAllowIrregular }:
           <section className="section" aria-labelledby="money-title">
             <h3 id="money-title">金額</h3>
             <dl className="price-rows">
-              <dt>商品代（税込）</dt><dd><Num stale={stale}>{yen(plan.subtotal)}</Num></dd>
-              <dt>受渡手数料</dt><dd><Num stale={stale}>{yen(plan.handoverFee)}</Num></dd>
-              <dt>お支払いの目安</dt><dd><Num stale={stale}>{yen(plan.total)}</Num></dd>
+              <dt>商品代（税込）</dt><dd><Num stale={stale}>{yen(plan.productSubtotalYen)}</Num></dd>
+              <dt>受渡費（1案につき1回）</dt><dd>{plan.handoverFeeYen === null ? "未確認" : <Num stale={stale}>{yen(plan.handoverFeeYen)}</Num>}</dd>
+              <dt>総額</dt><dd>{plan.totalYen === null ? "未確定" : <Num stale={stale}>{yen(plan.totalYen)}</Num>}</dd>
+              {plan.budgetYen !== null && (
+                <>
+                  <dt>予算</dt>
+                  <dd>{yen(plan.budgetYen)}{plan.budgetStatus === "UNKNOWN" ? "（総額未確定のため判定保留）" : "以内"}</dd>
+                </>
+              )}
             </dl>
-            <p className="hint">受渡手数料は生産者の登録条件です。</p>
           </section>
         )}
 
-        {plan.status !== "fulfilled" && (
-          <section className="section">
-            <h3>条件を変えて再計算できます</h3>
-            <ul className="plain">
-              <li>数量を減らす</li>
-              <li>希望日を遅らせる</li>
-              {request.variety && <li>品種の指定を外す</li>}
-              {!request.allowIrregular && !irregularSuggestion && <li>形の不揃い・余剰を「使える」にする（今の在庫では、これだけでは希望量に届きません）</li>}
-              {(request.handoverPlace || request.handoverFrom || request.handoverTo) && <li>受渡場所・時間の指定を変える</li>}
-              {request.maxUnitPrice !== null && <li>税込単価の上限を上げる</li>}
-            </ul>
+        {shown.suggestions.length > 0 && !stale && (
+          <section className="section suggestion" aria-labelledby="sugg-title">
+            <h3 id="sugg-title">条件を変更する場合</h3>
+            <p className="hint">選んだ内容はフォームに反映されるだけです。勝手に条件を変えて計算することはありません。</p>
+            <div className="qform-tools">
+              {shown.suggestions.map((s) => (
+                <button key={s.type} type="button" className="ghost" onClick={() => onSuggestion(s)}>{s.label}</button>
+              ))}
+            </div>
           </section>
         )}
-
-        {plan.notices.map((n) => <div className="alert warn" key={n}><Icon name="alert" />{n}</div>)}
 
         {plan.excluded.length > 0 && (
           <section className="section">
-            <h3>使わなかった出品</h3>
+            <h3>使わなかった供給</h3>
             <ul className="plain">
               {plan.excluded.map((e) => (
-                <li key={e.listingId}>{e.producerName}（{e.quantity}{e.unit}）：{e.reasons.join("、")}</li>
+                <li key={e.supplyId}>{e.producerName}（{e.availableKg}kg・{e.priceYenPerKg}円/kg）：{e.details.map((d) => EXCLUSION_TEXT[d]).join("、")}</li>
               ))}
             </ul>
           </section>
         )}
 
         <p className="used-conditions">
-          使った条件：{request.item}{request.variety && `（${request.variety}）`} {request.quantity}{request.unit}／{formatDateJa(request.deadline)}までに受け取り／{request.region}／形の不揃い・余剰{request.allowIrregular ? "使える" : "使わない"}
-          {request.maxUnitPrice !== null && `／税込単価${request.maxUnitPrice}円/${request.unit}以下`}
-          {request.handoverPlace && `／${request.handoverPlace}`}
-          {(request.handoverFrom || request.handoverTo) && `／${request.handoverFrom ?? ""}〜${request.handoverTo ?? ""}`}
+          計算時点：{formatJstDateTime(plan.computedAt)}{shown.demoClock && "（デモ用の基準日時）"}の情報。
+          供給の最終更新：{plan.supplySnapshot.length ? formatJstDateTime(plan.supplySnapshot.map((s) => s.updatedAt).sort().at(-1)!) : "—"}
+        </p>
+        <p className="used-conditions">
+          使った条件：{request.quantityKg}kg／{request.desiredDate}受取／産地 {request.originPrefectures.join("・")}／予算 {request.budgetYen === null ? "上限なし" : yen(request.budgetYen)}
+          ／初回{request.allowFirstTime ? "含める" : "含めない"}／規格外{request.allowIrregular ? "可" : "不可"}／品種混在{request.allowMixedVarieties ? "可" : "不可"}／規格混在{request.allowMixedGrades ? "可" : "不可"}
         </p>
       </div>
 
-      <a className="text-link" href="#/producer">生産者の画面で数量・公開状態を変更する<Icon name="chevronRight" size={18} /></a>
+      <a className="text-link" href="#/producer">生産者の画面を開く<Icon name="chevronRight" size={18} /></a>
     </section>
   );
 }

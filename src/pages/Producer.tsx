@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { SupplyListing } from "../lib/allocate.js";
+import type { SupplyListing } from "../lib/legacy-listing.js";
 import { DEMO_PLACE, IRREGULAR_REASONS, REGIONS, UNITS } from "../lib/constants.js";
 import { formatDateJa, jstDate } from "../lib/dates.js";
 import { Icon } from "../components/Icon";

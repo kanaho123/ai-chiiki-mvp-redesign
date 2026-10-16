@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Icon, Logo } from "./components/Icon";
-import type { SupplyListing } from "./lib/allocate.js";
+import type { SupplyListing } from "./lib/legacy-listing.js";
 import { formatDateJa, jstDate } from "./lib/dates.js";
 import Producer from "./pages/Producer";
 import Restaurant from "./pages/Restaurant";

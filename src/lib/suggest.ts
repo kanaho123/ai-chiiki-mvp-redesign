@@ -1,38 +1,42 @@
-import { createPlan, type PlanRequest, type PlanResult, type SupplyListing } from "./allocate.js";
+import type { PlanRequest, PlanResult } from "./allocate.js";
 
-/** 不足時の条件変更候補（今は「規格外を許容する」だけ） */
+// 条件を満たせなかったとき、「利用者が自分で変更できる候補」だけを返す。
+// 条件を自動で緩和・適用しない（画面で利用者が選び、内容を確認してから再計算する）。
+
+export type SuggestionType =
+  | "allow_first_time"
+  | "allow_irregular"
+  | "allow_mixed_varieties"
+  | "allow_mixed_grades"
+  | "review_budget"
+  | "reduce_quantity"
+  | "change_slot";
+
 export type Suggestion = {
-  type: "allow_irregular";
-  message: string;
-  /** 候補の案に含まれる規格外の出品 */
-  irregular: { producerName: string; quantity: number; unit: string; reason: string }[];
+  type: SuggestionType;
+  label: string;
+  /** 利用者が選んだときにフォームへ反映する変更。null は利用者が値を入力する */
+  change: Partial<PlanRequest> | null;
 };
 
-/**
- * 規格外不可で希望量に届かなかったとき、他の条件は変えずに規格外可で計算し直し、
- * 希望量を満たせる場合だけ案内を返す。在庫は変更しない。
- */
-export function suggestAllowIrregular(
-  req: PlanRequest,
-  plan: PlanResult,
-  listings: SupplyListing[],
-  today: string,
-): Suggestion | null {
-  if (plan.status === "fulfilled" || req.allowIrregular) return null;
+export function suggestConditionChanges(req: PlanRequest, plan: PlanResult): Suggestion[] {
+  if (plan.status === "MATCHED") return [];
+  const out: Suggestion[] = [];
+  const codes = new Set(plan.reasonCodes);
+  const details = new Set(plan.excluded.filter((e) => !e.details.includes("OTHER_SLOT")).flatMap((e) => e.details));
 
-  const alt = createPlan({ ...req, allowIrregular: true }, listings, today);
-  if (alt.status !== "fulfilled") return null;
-
-  const irregular = alt.allocations
-    .filter((a) => a.irregularReason)
-    .map((a) => ({ producerName: a.producerName, quantity: a.quantity, unit: alt.unit, reason: a.irregularReason! }));
-  // 規格外を使わずに満たせるなら、規格外の許容は不足の解決にならない（通常はここに来ない）
-  if (irregular.length === 0) return null;
-
-  const parts = irregular.map((i) => `${i.producerName}の${i.quantity}${i.unit}（${i.reason}）`).join("、");
-  return {
-    type: "allow_irregular",
-    message: `形の不揃い・余剰も使うと、${parts}を含めて希望${req.quantity}${req.unit}を満たす案を作れます`,
-    irregular,
-  };
+  if (!req.allowFirstTime && details.has("FIRST_TIME"))
+    out.push({ type: "allow_first_time", label: "初回の農家を含める", change: { allowFirstTime: true } });
+  if (!req.allowIrregular && details.has("IRREGULAR_NOT_ALLOWED"))
+    out.push({ type: "allow_irregular", label: "規格外（形の不揃い等）を許可する", change: { allowIrregular: true } });
+  if (!req.allowMixedVarieties && (details.has("VARIETY_MISMATCH") || codes.has("MIXING_NOT_ALLOWED")))
+    out.push({ type: "allow_mixed_varieties", label: "異なる品種の混在を許可する", change: { allowMixedVarieties: true } });
+  if (!req.allowMixedGrades && req.allowIrregular && codes.has("MIXING_NOT_ALLOWED"))
+    out.push({ type: "allow_mixed_grades", label: "通常品と規格外品の混在を許可する", change: { allowMixedGrades: true } });
+  if (codes.has("OVER_BUDGET")) out.push({ type: "review_budget", label: "予算を見直す", change: null });
+  if (plan.fulfilledKg > 0 && plan.shortageKg > 0)
+    out.push({ type: "reduce_quantity", label: `数量を${plan.fulfilledKg}kgに変更する`, change: { quantityKg: plan.fulfilledKg } });
+  if (codes.has("HANDOVER_MISMATCH") || codes.has("DEADLINE_PASSED") || codes.has("SLOT_WEIGHT_LIMIT"))
+    out.push({ type: "change_slot", label: "受渡枠・受取日を選び直す", change: null });
+  return out;
 }

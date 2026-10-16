@@ -1,9 +1,6 @@
-import type { PlanRequest } from "./allocate.js";
-import { IRREGULAR_REASONS, LIMITS, REGIONS, UNITS } from "./constants.js";
+import { QUANTITY_KG_MAX, QUANTITY_KG_MIN, type PlanRequest } from "./allocate.js";
+import { IRREGULAR_REASONS, LIMITS, PREFECTURES, REGIONS, UNITS } from "./constants.js";
 import { isValidDate, isValidTime, jstDate } from "./dates.js";
-
-/** 仕入れ案の希望数量の上限（配分計算の量を抑えるため） */
-export const REQUEST_QUANTITY_MAX = 1000;
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -25,51 +22,72 @@ function int(v: unknown, min: number, max: number): number | null {
   return typeof n === "number" && Number.isInteger(n) && n >= min && n <= max ? n : null;
 }
 
-function optionalInt(v: unknown, min: number, max: number): number | null | undefined {
-  if (v === undefined || v === null || v === "") return null;
-  return int(v, min, max) ?? undefined;
-}
-
-function optionalTime(v: unknown): string | null | undefined {
-  if (v === undefined || v === null || v === "") return null;
-  return typeof v === "string" && isValidTime(v) ? v : undefined;
-}
-
 const oneOf = <T extends string>(v: unknown, list: readonly T[]): T | null =>
   typeof v === "string" && (list as readonly string[]).includes(v) ? (v as T) : null;
 
-export function parsePlanRequest(body: unknown): Result<PlanRequest> {
+/** 予算の上限（税込円） */
+export const BUDGET_YEN_MAX = 10_000_000;
+
+const ID = /^[A-Za-z0-9_-]{1,64}$/;
+const id = (v: unknown): string | null => (typeof v === "string" && ID.test(v) ? v : null);
+const optionalId = (v: unknown): string | null | undefined => (v === undefined || v === null || v === "" ? null : id(v) ?? undefined);
+
+/**
+ * 利用者が確定した仕入れ条件をサーバー側で検証する（クライアントの検証だけに頼らない）。
+ * 重要な選択（初回農家・規格外・混在）は true/false の明示が必要で、未選択のままでは計算しない。
+ * 予算は数値か null（＝利用者が「上限なし」を選んだ）を明示する。未入力を上限なしとは扱わない。
+ */
+export function parsePlanRequest(body: unknown, now: Date): Result<PlanRequest> {
   if (!isObj(body)) return { ok: false, error: "条件を読み取れません" };
-  if (!body.item && !body.quantity && !body.deadline) return { ok: false, error: "品目・数量・希望日を入力してください" };
 
-  const item = text(body.item, LIMITS.textMax);
-  if (!item) return { ok: false, error: `品目を${LIMITS.textMax}文字以内で入力してください` };
-  const variety = optionalText(body.variety, LIMITS.textMax);
-  if (variety === undefined) return { ok: false, error: `品種は${LIMITS.textMax}文字以内で入力してください` };
-  const quantity = int(body.quantity, 1, REQUEST_QUANTITY_MAX);
-  if (quantity === null) return { ok: false, error: `数量は1〜${REQUEST_QUANTITY_MAX}の整数で入力してください` };
-  const unit = oneOf(body.unit, UNITS);
-  if (!unit) return { ok: false, error: "単位を選択してください" };
-  const deadline = typeof body.deadline === "string" && isValidDate(body.deadline) ? body.deadline : null;
-  if (!deadline) return { ok: false, error: "希望日を入力してください" };
-  if (deadline < jstDate()) return { ok: false, error: "希望日に過去の日付は指定できません" };
-  const region = oneOf(body.region, REGIONS);
-  if (!region) return { ok: false, error: "地域を選択してください" };
-  if (typeof body.allowIrregular !== "boolean") return { ok: false, error: "規格外可否を選択してください" };
+  const itemId = id(body.itemId);
+  if (!itemId) return { ok: false, error: "品目を選択してください" };
+  const varietyId = optionalId(body.varietyId);
+  if (varietyId === undefined) return { ok: false, error: "品種を選び直してください" };
+  const quantityKg = int(body.quantityKg, QUANTITY_KG_MIN, QUANTITY_KG_MAX);
+  if (quantityKg === null) return { ok: false, error: `数量は${QUANTITY_KG_MIN}〜${QUANTITY_KG_MAX}kgの整数で入力してください` };
+  const desiredDate = typeof body.desiredDate === "string" && isValidDate(body.desiredDate) ? body.desiredDate : null;
+  if (!desiredDate) return { ok: false, error: "受け取りたい日を入力してください" };
+  if (desiredDate < jstDate(0, now)) return { ok: false, error: "受け取りたい日に過去の日付は指定できません" };
 
-  const maxUnitPrice = optionalInt(body.maxUnitPrice, 1, LIMITS.priceMax);
-  if (maxUnitPrice === undefined) return { ok: false, error: "税込単価の上限は1以上の整数（円）で入力してください" };
-  const handoverPlace = optionalText(body.handoverPlace, LIMITS.placeMax);
-  if (handoverPlace === undefined) return { ok: false, error: `受渡場所は${LIMITS.placeMax}文字以内で入力してください` };
-  const handoverFrom = optionalTime(body.handoverFrom);
-  const handoverTo = optionalTime(body.handoverTo);
-  if (handoverFrom === undefined || handoverTo === undefined) return { ok: false, error: "受渡時間の形式が正しくありません" };
-  if (handoverFrom && handoverTo && handoverFrom >= handoverTo)
-    return { ok: false, error: "受渡時間の開始は終了より前にしてください" };
+  if (!("budgetYen" in body) || body.budgetYen === undefined || body.budgetYen === "")
+    return { ok: false, error: "予算を入力するか「上限なし」を選んでください" };
+  const budgetYen = body.budgetYen === null ? null : int(body.budgetYen, 1, BUDGET_YEN_MAX);
+  if (body.budgetYen !== null && budgetYen === null)
+    return { ok: false, error: `予算は1〜${BUDGET_YEN_MAX.toLocaleString("ja-JP")}円の整数で入力してください` };
+
+  const origins = body.originPrefectures;
+  if (!Array.isArray(origins) || origins.length === 0) return { ok: false, error: "産地（都道府県）を1つ以上選択してください" };
+  if (!origins.every((o) => typeof o === "string" && (PREFECTURES as readonly string[]).includes(o)))
+    return { ok: false, error: "産地の都道府県を選び直してください" };
+
+  const slotId = id(body.slotId);
+  if (!slotId) return { ok: false, error: "受渡枠（受取場所・日時）を選択してください" };
+
+  const flags = [
+    ["allowFirstTime", "初回の農家を含めるか"],
+    ["allowIrregular", "規格外を使えるか"],
+    ["allowMixedVarieties", "品種の混在を許可するか"],
+    ["allowMixedGrades", "通常品と規格外の混在を許可するか"],
+  ] as const;
+  for (const [key, label] of flags)
+    if (typeof body[key] !== "boolean") return { ok: false, error: `${label}を選択してください` };
+
+  const preferredProducerId = optionalId(body.preferredProducerId);
+  if (preferredProducerId === undefined) return { ok: false, error: "優先する農家を選び直してください" };
 
   return {
     ok: true,
-    value: { item, variety, quantity, unit, deadline, region, allowIrregular: body.allowIrregular, maxUnitPrice, handoverPlace, handoverFrom, handoverTo },
+    value: {
+      itemId, varietyId, quantityKg, desiredDate, budgetYen,
+      originPrefectures: [...new Set(origins as string[])],
+      slotId,
+      allowFirstTime: body.allowFirstTime as boolean,
+      allowIrregular: body.allowIrregular as boolean,
+      allowMixedVarieties: body.allowMixedVarieties as boolean,
+      allowMixedGrades: body.allowMixedGrades as boolean,
+      preferredProducerId,
+    },
   };
 }
 

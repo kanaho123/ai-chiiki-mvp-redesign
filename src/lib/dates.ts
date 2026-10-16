@@ -21,3 +21,18 @@ export function formatDateJa(s: string): string {
   const w = "日月火水木金土"[d.getUTCDay()];
   return `${d.getUTCMonth() + 1}月${d.getUTCDate()}日（${w}）`;
 }
+
+/** 日時（ISO 文字列または Date）の日本時間での日付（YYYY-MM-DD） */
+export function jstDateOf(at: string | Date): string {
+  return jstDate(0, new Date(at));
+}
+
+/** 日時の日本時間での時刻（HH:MM） */
+export function jstTimeOf(at: string | Date): string {
+  return new Date(new Date(at).getTime() + JST_OFFSET_MS).toISOString().slice(11, 16);
+}
+
+/** 2026-10-23T01:00:00Z → 10月23日（金）10:00 */
+export function formatJstDateTime(at: string | Date): string {
+  return `${formatDateJa(jstDateOf(at))} ${jstTimeOf(at)}`;
+}

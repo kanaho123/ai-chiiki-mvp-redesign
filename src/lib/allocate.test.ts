@@ -1,209 +1,271 @@
 import { describe, expect, it } from "vitest";
-import { createPlan, type PlanRequest, type SupplyListing } from "./allocate.js";
+import {
+  allocatePlan, MAX_CANDIDATE_SUPPLIES, type AllocateInput, type PlanRequest, type PlanResult, type PlanSlot, type PlanSupply,
+} from "./allocate.js";
+import { headlineText, rankingText } from "./reasons.js";
 
-const TODAY = "2026-10-14";
-const DAY = "2026-10-16"; // 明後日
+// 仕様書 8.1 のデモ設定（架空）。基準日時 2026-10-22 12:00 JST
+const NOW = new Date("2026-10-22T12:00:00+09:00");
 
-function listing(id: string, overrides: Partial<SupplyListing>): SupplyListing {
-  return {
-    id,
-    producerId: `p-${id}`,
-    producerName: `${id}農家`,
-    item: "トマト",
-    variety: null,
-    quantity: 1,
-    unit: "kg",
-    unitPrice: 500,
-    availableDate: DAY,
-    region: "大阪近郊",
-    irregularReason: null,
-    handoverPlace: "共通受渡拠点P",
-    handoverStart: "10:00",
-    handoverEnd: "11:00",
-    minQuantity: 1,
-    step: 1,
-    handoverFee: 0,
-    isPublic: true,
-    ...overrides,
-  };
+const slotP: PlanSlot = {
+  id: "gp", label: "G-P", placeName: "受渡拠点P", startAt: "2026-10-23T10:00:00+09:00", endAt: "2026-10-23T11:00:00+09:00",
+  confirmDeadlineAt: "2026-10-22T17:00:00+09:00", feeYen: 800, feeConfirmed: true, maxKg: 20, conditionsConfirmed: true,
+};
+
+const NAMES: Record<string, string> = { a: "A農園", b: "B農園", c: "C農園", d: "D農園", e: "E農園", f: "F農園" };
+const PRICES: Record<string, number> = { a: 600, b: 550, c: 500, d: 300, e: 520, f: 510 };
+
+const supply = (key: string, availableKg: number, o: Partial<PlanSupply> = {}): PlanSupply => ({
+  id: `s-${key}`, producerId: `p-${key}`, producerName: NAMES[key] ?? `${key}農園`, itemId: "tomato", varietyId: "v1", varietyName: "品種T",
+  grade: "regular", irregularReason: null, originPrefecture: "大阪府", availableKg, priceYenPerKg: PRICES[key] ?? 500, minKg: 1,
+  slotId: key === "d" ? "gq" : "gp", published: true, version: 1, updatedAt: "2026-10-22T00:00:00.000Z", ...o,
+});
+
+const request = (o: Partial<PlanRequest> = {}): PlanRequest => ({
+  itemId: "tomato", varietyId: null, quantityKg: 10, desiredDate: "2026-10-23", budgetYen: 8000, originPrefectures: ["大阪府"],
+  slotId: "gp", allowIrregular: false, allowMixedVarieties: false, allowMixedGrades: false, allowFirstTime: true,
+  preferredProducerId: null, ...o,
+});
+
+function plan(supplies: PlanSupply[], o: { req?: Partial<PlanRequest>; slot?: Partial<PlanSlot>; now?: Date; participants?: AllocateInput["participants"] } = {}): PlanResult {
+  const keys = ["a", "b", "c", "e", "f"];
+  return allocatePlan({
+    request: request(o.req),
+    supplies,
+    slot: { ...slotP, ...o.slot },
+    participants: o.participants ?? keys.map((k) => ({ slotId: "gp", producerId: `p-${k}`, confirmed: true })),
+    relationships: [{ producerId: "p-a", priorTrade: true }, { producerId: "p-b", priorTrade: false }],
+    now: o.now ?? NOW,
+  });
 }
 
-const demo = (): SupplyListing[] => [
-  listing("A", { quantity: 5, unitPrice: 600 }),
-  listing("B", { quantity: 3, unitPrice: 550 }),
-  listing("C", { quantity: 2, unitPrice: 350, irregularReason: "余剰・形の不揃い" }),
-];
+const kgBy = (p: PlanResult) => Object.fromEntries(p.allocations.map((a) => [a.producerName, a.kg]));
+const money = (p: PlanResult) => [p.productSubtotalYen, p.handoverFeeYen, p.totalYen];
+const excludedOf = (p: PlanResult, name: string) => p.excluded.find((e) => e.producerName === name);
 
-const request = (overrides: Partial<PlanRequest> = {}): PlanRequest => ({
-  item: "トマト",
-  variety: null,
-  quantity: 10,
-  unit: "kg",
-  deadline: DAY,
-  region: "大阪近郊",
-  allowIrregular: true,
-  maxUnitPrice: null,
-  handoverPlace: null,
-  handoverFrom: null,
-  handoverTo: null,
-  ...overrides,
-});
-
-const byProducer = (r: ReturnType<typeof createPlan>) =>
-  Object.fromEntries(r.allocations.map((a) => [a.producerName, a.quantity]));
-
-describe("デモ：トマト10kg", () => {
-  it("規格外可なら A5kg＋B3kg＋C2kg＝10kg、商品代5,350円、受渡手数料0円", () => {
-    const r = createPlan(request(), demo(), TODAY);
-    expect(r.status).toBe("fulfilled");
-    expect(r.message).toBe("条件を満たす10kgの仕入れ案が見つかりました");
-    expect(byProducer(r)).toEqual({ A農家: 5, B農家: 3, C農家: 2 });
-    expect(r.totalQuantity).toBe(10);
-    expect(r.subtotal).toBe(5350);
-    expect(r.handoverFee).toBe(0);
-    expect(r.handover).toEqual({ date: DAY, place: "共通受渡拠点P", start: "10:00", end: "11:00" });
+describe("受入ケース（仕様書 10.1）", () => {
+  it("1: A10kg・B5kg → A10kg、6,000＋800＝6,800円。分割しない", () => {
+    const p = plan([supply("a", 10), supply("b", 5)]);
+    expect(p.status).toBe("MATCHED");
+    expect(kgBy(p)).toEqual({ A農園: 10 });
+    expect(money(p)).toEqual([6000, 800, 6800]);
+    expect(p.producerCount).toBe(1);
+    expect(p.rankingReason?.code).toBe("SINGLE_PRODUCER");
+    expect(p.reasonCodes).toEqual([]);
   });
 
-  it("規格外不可なら A5kg＋B3kg＝8kg、2kg不足で成立としない", () => {
-    const r = createPlan(request({ allowIrregular: false }), demo(), TODAY);
-    expect(r.status).toBe("shortage");
-    expect(r.message).toBe("希望10kgに対し、条件の合う登録数量は8kg。2kg不足");
-    expect(byProducer(r)).toEqual({ A農家: 5, B農家: 3 });
-    expect(r.subtotal).toBe(4650);
-    expect(r.excluded.map((e) => e.producerName)).toEqual(["C農家"]);
+  it("2: A5kg・B5kg → A5＋B5、5,750＋800＝6,550円。Bは初回", () => {
+    const p = plan([supply("a", 5), supply("b", 5)]);
+    expect(p.status).toBe("MATCHED");
+    expect(kgBy(p)).toEqual({ A農園: 5, B農園: 5 });
+    expect(money(p)).toEqual([5750, 800, 6550]);
+    expect(p.allocations.map((a) => [a.producerName, a.priorTrade])).toEqual([["A農園", true], ["B農園", false]]);
+    expect(p.fulfilledKg).toBe(10);
+    expect(p.shortageKg).toBe(0);
   });
 
-  it("C農家を1kgに減らすと9kg、1kg不足", () => {
-    const ls = demo().map((l) => (l.id === "C" ? { ...l, quantity: 1 } : l));
-    const r = createPlan(request(), ls, TODAY);
-    expect(r.status).toBe("shortage");
-    expect(r.totalQuantity).toBe(9);
-    expect(r.shortage).toBe(1);
+  it("3: A5kg・B4kg → 最大9kg、5,200＋800＝6,000円、1kg不足。成功にしない", () => {
+    const p = plan([supply("a", 5), supply("b", 4)]);
+    expect(p.status).toBe("NOT_MATCHED");
+    expect(kgBy(p)).toEqual({ A農園: 5, B農園: 4 });
+    expect(money(p)).toEqual([5200, 800, 6000]);
+    expect([p.fulfilledKg, p.shortageKg]).toEqual([9, 1]);
+    expect(p.reasonCodes).toContain("INSUFFICIENT_QUANTITY");
+    expect(headlineText(p)).toBe("この検索条件・最大3農家では9kg。1kg不足");
   });
 
-  it("B農家が公開停止なら5＋2＝7kg", () => {
-    const ls = demo().map((l) => (l.id === "B" ? { ...l, isPublic: false } : l));
-    const r = createPlan(request(), ls, TODAY);
-    expect(r.totalQuantity).toBe(7);
-    expect(r.excluded[0].reasons).toContain("公開停止中");
+  it("4: A5kg・B3kg・C2kg公開 → A5＋B3＋C2、5,650＋800＝6,450円（固定費は1案に1回）", () => {
+    const p = plan([supply("a", 5), supply("b", 3), supply("c", 2)]);
+    expect(p.status).toBe("MATCHED");
+    expect(kgBy(p)).toEqual({ A農園: 5, B農園: 3, C農園: 2 });
+    expect(money(p)).toEqual([5650, 800, 6450]);
   });
 
-  it("在庫を超えて配分しない", () => {
-    const r = createPlan(request({ quantity: 20 }), demo(), TODAY);
-    for (const a of r.allocations) {
-      const l = demo().find((x) => x.id === a.listingId)!;
-      expect(a.quantity).toBeLessThanOrEqual(l.quantity);
-    }
-    expect(r.totalQuantity).toBe(10);
-    expect(r.shortage).toBe(10);
-  });
-});
-
-describe("受渡条件", () => {
-  it("受渡日時・場所が異なる出品は組み合わせない（数量があっても成立しない）", () => {
-    const ls = demo().map((l) => (l.id === "C" ? { ...l, handoverPlace: "拠点Q" } : l));
-    const r = createPlan(request(), ls, TODAY);
-    expect(r.status).toBe("handover_mismatch");
-    expect(r.totalQuantity).toBe(8);
+  it("5: A5kg・B10kg → B10kgのみ、5,500＋800＝6,300円。1農家優先の理由を返す", () => {
+    const p = plan([supply("a", 5), supply("b", 10)]);
+    expect(p.status).toBe("MATCHED");
+    expect(kgBy(p)).toEqual({ B農園: 10 });
+    expect(money(p)).toEqual([5500, 800, 6300]);
+    expect(p.rankingReason).toEqual({ code: "FEWER_PRODUCERS", producerNames: ["B農園"], producerCount: 1 });
+    expect(rankingText(p.rankingReason)).toBe("仕入れ先の数を優先したため、今回はB農園のみ");
   });
 
-  it("受渡場所の指定と照合する", () => {
-    const r = createPlan(request({ handoverPlace: "拠点Q" }), demo(), TODAY);
-    expect(r.status).toBe("none");
-    expect(r.excluded).toHaveLength(3);
+  it("6: D10kg（別枠G-Q・最安）はPの案に入らない", () => {
+    const p = plan([supply("a", 5), supply("b", 5), supply("d", 10)]);
+    expect(kgBy(p)).toEqual({ A農園: 5, B農園: 5 });
+    expect(p.totalYen).toBe(6550);
+    expect(excludedOf(p, "D農園")?.details).toEqual(["OTHER_SLOT"]);
+    expect(excludedOf(p, "D農園")?.reasonCodes).toEqual(["HANDOVER_MISMATCH"]);
+    // 別枠しかなければ D だけでも案にしない
+    expect(plan([supply("d", 10)]).allocations).toEqual([]);
   });
 
-  it("受渡時間の指定と照合する（出品の時間帯が指定時間内に収まること）", () => {
-    expect(createPlan(request({ handoverFrom: "09:00", handoverTo: "12:00" }), demo(), TODAY).status).toBe("fulfilled");
-    expect(createPlan(request({ handoverFrom: "10:30", handoverTo: "12:00" }), demo(), TODAY).status).toBe("none");
+  it("7: 初回不可で A5kg・B5kg → 最大5kg。BはFIRST_TIME_EXCLUDED", () => {
+    const p = plan([supply("a", 5), supply("b", 5)], { req: { allowFirstTime: false } });
+    expect(p.status).toBe("NOT_MATCHED");
+    expect(kgBy(p)).toEqual({ A農園: 5 });
+    expect(money(p)).toEqual([3000, 800, 3800]);
+    expect([p.fulfilledKg, p.shortageKg]).toEqual([5, 5]);
+    expect(excludedOf(p, "B農園")?.reasonCodes).toEqual(["FIRST_TIME_EXCLUDED"]);
+    expect(p.reasonCodes).toEqual(expect.arrayContaining(["INSUFFICIENT_QUANTITY", "FIRST_TIME_EXCLUDED"]));
   });
 
-  it("希望日は期限として扱い、それより前の受渡日も対象にする", () => {
-    const r = createPlan(request({ deadline: "2026-10-20" }), demo(), TODAY);
-    expect(r.status).toBe("fulfilled");
-    expect(r.handover?.date).toBe(DAY);
-    expect(createPlan(request({ deadline: "2026-10-15" }), demo(), TODAY).status).toBe("none");
-  });
-});
-
-describe("条件の照合", () => {
-  it("税込単価の上限を超える出品は除外する", () => {
-    const r = createPlan(request({ maxUnitPrice: 560 }), demo(), TODAY);
-    expect(byProducer(r)).toEqual({ B農家: 3, C農家: 2 });
+  it("8: A5＋B5・予算6,000円 → 10kg案は予算超過。予算内の最大9kgを示し、数量不足と区別する", () => {
+    const p = plan([supply("a", 5), supply("b", 5)], { req: { budgetYen: 6000 } });
+    expect(p.status).toBe("NOT_MATCHED");
+    expect(p.reasonCodes).toContain("OVER_BUDGET");
+    expect(p.reasonCodes).not.toContain("INSUFFICIENT_QUANTITY");
+    expect(p.overBudget).toEqual({ kg: 10, totalYen: 6550 });
+    expect(kgBy(p)).toEqual({ A農園: 5, B農園: 4 }); // 9kg案のうち取引済みAの数量が多い案
+    expect(money(p)).toEqual([5200, 800, 6000]);
+    expect(p.totalYen!).toBeLessThanOrEqual(6000);
+    expect(headlineText(p)).toBe("予算内では9kgまで。1kg不足");
   });
 
-  it("地域が異なる出品は除外する", () => {
-    const ls = demo().map((l) => (l.id === "A" ? { ...l, region: "北摂" } : l));
-    expect(createPlan(request(), ls, TODAY).totalQuantity).toBe(5);
+  it("9: 共通枠の費用が未確認 → 確認が必要・総額未確定。予算内と判定しない", () => {
+    const p = plan([supply("a", 10)], { slot: { feeConfirmed: false } });
+    expect(p.status).toBe("NEEDS_CONFIRMATION");
+    expect(p.reasonCodes).toEqual(["FEE_UNCONFIRMED"]);
+    expect(p.totalYen).toBeNull();
+    expect(p.handoverFeeYen).toBeNull();
+    expect(p.budgetStatus).toBe("UNKNOWN");
+    expect(p.productSubtotalYen).toBe(6000);
+    // 条件確認が未了の場合も「確認が必要」
+    expect(plan([supply("a", 10)], { slot: { conditionsConfirmed: false } }).status).toBe("NEEDS_CONFIRMATION");
   });
 
-  it("単位が異なる在庫は換算せず除外し、案内を出す", () => {
-    const ls = [...demo(), listing("D", { quantity: 50, unit: "個" })];
-    const r = createPlan(request(), ls, TODAY);
-    expect(r.totalQuantity).toBe(10);
-    expect(r.allocations.some((a) => a.listingId === "D")).toBe(false);
-    expect(r.notices).toHaveLength(1);
-  });
-});
+  it("10: 締切を過ぎる／B公開停止 → その供給を使わない", () => {
+    const late = plan([supply("a", 5), supply("b", 5)], { now: new Date("2026-10-22T17:00:01+09:00") });
+    expect(late.status).toBe("NOT_MATCHED");
+    expect(late.allocations).toEqual([]);
+    expect(late.reasonCodes).toContain("DEADLINE_PASSED");
+    expect(excludedOf(late, "B農園")?.details).toContain("DEADLINE_PASSED");
+    // 締切ちょうどはまだ有効
+    expect(plan([supply("a", 10)], { now: new Date("2026-10-22T17:00:00+09:00") }).status).toBe("MATCHED");
 
-describe("最低販売量・販売刻み", () => {
-  it("販売刻みが違うだけでは除外しない：2kg刻みの出品から2kgを配分できる", () => {
-    const ls = [listing("A", { quantity: 8, unitPrice: 600 }), listing("C", { quantity: 6, minQuantity: 2, step: 2, unitPrice: 350 })];
-    const r = createPlan(request(), ls, TODAY);
-    expect(r.status).toBe("fulfilled");
-    expect(byProducer(r)).toEqual({ A農家: 4, C農家: 6 });
+    const paused = plan([supply("a", 5), supply("b", 5, { published: false })]);
+    expect(kgBy(paused)).toEqual({ A農園: 5 });
+    expect(excludedOf(paused, "B農園")?.details).toEqual(["NOT_PUBLISHED"]);
   });
 
-  it("販売刻みを守れない端数は配分しない（勝手に丸めない）", () => {
-    const ls = [listing("A", { quantity: 9, minQuantity: 3, step: 3 })];
-    const r = createPlan(request(), ls, TODAY);
-    expect(r.totalQuantity).toBe(9);
-    expect(r.shortage).toBe(1);
+  it("11: 品種が異なり混在未許可 → 合算しない", () => {
+    const ss = [supply("a", 5), supply("b", 5, { varietyId: "v2", varietyName: "品種U" })];
+    const p = plan(ss);
+    expect(p.status).toBe("NOT_MATCHED");
+    expect(kgBy(p)).toEqual({ A農園: 5 });
+    expect(p.reasonCodes).toContain("MIXING_NOT_ALLOWED");
+    // 品種を指定した場合は、別品種を除外理由付きで外す
+    const specified = plan(ss, { req: { varietyId: "v1" } });
+    expect(excludedOf(specified, "B農園")?.details).toEqual(["VARIETY_MISMATCH"]);
+    // 混在を明示的に許可したときだけ合算する
+    expect(kgBy(plan(ss, { req: { allowMixedVarieties: true } }))).toEqual({ A農園: 5, B農園: 5 });
   });
 
-  it("最低販売量を下回る配分をしない", () => {
-    const ls = [listing("A", { quantity: 9 }), listing("B", { quantity: 5, minQuantity: 5 })];
-    const r = createPlan(request(), ls, TODAY);
-    expect(r.status).toBe("fulfilled");
-    for (const a of r.allocations) if (a.listingId === "B") expect(a.quantity).toBeGreaterThanOrEqual(5);
+  it("12: 最低販売量を満たさない配分は採用しない", () => {
+    // B は最低3kg：A8＋B2 は不可、A7＋B3 を採用
+    const p = plan([supply("a", 8), supply("b", 5, { minKg: 3 })]);
+    expect(kgBy(p)).toEqual({ A農園: 7, B農園: 3 });
+    for (const a of p.allocations) expect(a.kg).toBeGreaterThanOrEqual(a.supplyId === "s-b" ? 3 : 1);
+    // 刻みで10kgちょうどにできない（A最低4kg・在庫9、B最低7kg） → 過剰購入せず9kg、LOT_CONSTRAINT
+    const lot = plan([supply("a", 9, { minKg: 4 }), supply("b", 7, { minKg: 7 })]);
+    expect([lot.fulfilledKg, lot.shortageKg]).toEqual([9, 1]);
+    expect(lot.reasonCodes).toContain("LOT_CONSTRAINT");
+    // 最低販売量が在庫を超える供給は除外
+    expect(excludedOf(plan([supply("a", 5), supply("b", 5, { minKg: 6 })]), "B農園")?.details).toEqual(["MIN_EXCEEDS_STOCK"]);
   });
 
-  it("成立案が複数あれば仕入れ先が少ない案を優先し、次に安い案", () => {
-    const ls = [
-      listing("A", { quantity: 10, unitPrice: 700 }),
-      listing("B", { quantity: 5, unitPrice: 300 }),
-      listing("C", { quantity: 5, unitPrice: 300 }),
-    ];
-    expect(byProducer(createPlan(request(), ls, TODAY))).toEqual({ A農家: 10 });
+  it("13: 4農家でしか揃わない → SEARCH_SCOPE_LIMIT。地域全体の不足とは言わない", () => {
+    const p = plan([supply("a", 3), supply("b", 3), supply("c", 3), supply("e", 3)]);
+    expect(p.status).toBe("NOT_MATCHED");
+    expect(p.reasonCodes).toContain("SEARCH_SCOPE_LIMIT");
+    expect(p.reasonCodes).not.toContain("INSUFFICIENT_QUANTITY");
+    expect([p.fulfilledKg, p.producerCount]).toEqual([9, 3]);
+    expect(headlineText(p)).not.toMatch(/地域/);
   });
 });
 
-describe("品種", () => {
-  const ls = () => [
-    listing("A", { quantity: 5, unitPrice: 600, variety: "桃太郎" }),
-    listing("B", { quantity: 3, unitPrice: 550, variety: "麗夏" }),
-    listing("C", { quantity: 2, unitPrice: 350 }), // 品種未登録
-  ];
-
-  it("品種の指定がなければ品種を問わず組み合わせる", () => {
-    expect(createPlan(request(), ls(), TODAY).totalQuantity).toBe(10);
+describe("探索・順位の細則", () => {
+  it("同じ農家数なら取引済み農家の数量が多い案を優先する（A5＋B5 と A4＋C6 なら前者）", () => {
+    // C は 6kg 単位でしか出せない → 2農家案は A5＋B5（A 5kg）と A4＋C6（A 4kg）
+    const p = plan([supply("a", 5), supply("b", 5), supply("c", 6, { minKg: 6 })]);
+    expect(kgBy(p)).toEqual({ A農園: 5, B農園: 5 });
   });
 
-  it("品種を指定したら一致する出品だけを使い、未登録の出品は一致扱いにしない", () => {
-    const r = createPlan(request({ variety: "桃太郎" }), ls(), TODAY);
-    expect(byProducer(r)).toEqual({ A農家: 5 });
-    expect(r.shortage).toBe(5);
-    const reasons = Object.fromEntries(r.excluded.map((e) => [e.producerName, e.reasons]));
-    expect(reasons["B農家"]).toContain("品種が異なる（麗夏）");
-    expect(reasons["C農家"]).toContain("品種が未登録");
+  it("安さより取引済み農家を優先したことを理由として返す", () => {
+    // 最安は B5＋C5（5,250円）だが、取引済みAを最大限使う A5＋C5（5,500円）を採用する
+    const p = plan([supply("a", 5), supply("b", 5), supply("c", 5)]);
+    expect(kgBy(p)).toEqual({ A農園: 5, C農園: 5 });
+    expect(p.rankingReason?.code).toBe("PRIOR_TRADE_FIRST");
   });
-});
 
-describe("在庫を変更しない", () => {
-  it("仕入れ案を作っても出品の数量は変わらない", () => {
-    const ls = demo();
-    const before = JSON.stringify(ls);
-    createPlan(request(), ls, TODAY);
-    expect(JSON.stringify(ls)).toBe(before);
+  it("指名した取引済み農家の数量を優先する", () => {
+    const relationships = [{ producerId: "p-a", priorTrade: true }, { producerId: "p-e", priorTrade: true }];
+    // 6kg は1農家では揃わない → 2農家案のうち、指名した E の数量が最も多い E5＋A1
+    const base = { supplies: [supply("a", 5), supply("e", 5), supply("b", 4)], slot: slotP, now: NOW, relationships,
+      participants: ["a", "b", "e"].map((k) => ({ slotId: "gp", producerId: `p-${k}`, confirmed: true })) };
+    const p = allocatePlan({ ...base, request: request({ quantityKg: 6, preferredProducerId: "p-e" }) });
+    expect(kgBy(p)).toEqual({ E農園: 5, A農園: 1 });
+  });
+
+  it("初回農家の指名は取引済み扱いしない（通知を返して優先なしで計算）", () => {
+    const p = plan([supply("a", 10), supply("b", 10)], { req: { preferredProducerId: "p-b" } });
+    expect(kgBy(p)).toEqual({ A農園: 10 });
+    expect(p.notices).toContain("PREFERRED_NOT_PRIOR_TRADE");
+  });
+
+  it("枠の重量上限を超えない", () => {
+    const p = plan([supply("a", 10), supply("b", 10)], { slot: { maxKg: 8 } });
+    expect(p.fulfilledKg).toBe(8);
+    expect(p.reasonCodes).toContain("SLOT_WEIGHT_LIMIT");
+  });
+
+  it("希望日と枠の日付が違えば組まない", () => {
+    const p = plan([supply("a", 10)], { req: { desiredDate: "2026-10-24" } });
+    expect(p.allocations).toEqual([]);
+    expect(p.reasonCodes).toContain("HANDOVER_MISMATCH");
+  });
+
+  it("枠への参加が確認されていない農家・産地違い・規格外不可・在庫0 は既知の不一致として除外する", () => {
+    const p = plan(
+      [supply("a", 10, { originPrefecture: "京都府" }), supply("b", 10, { grade: "irregular", irregularReason: "形の不揃い" }), supply("c", 0), supply("e", 10)],
+      { participants: ["a", "b", "c"].map((k) => ({ slotId: "gp", producerId: `p-${k}`, confirmed: true })).concat([{ slotId: "gp", producerId: "p-e", confirmed: false }]) },
+    );
+    expect(p.allocations).toEqual([]);
+    expect(p.status).toBe("NOT_MATCHED");
+    expect(excludedOf(p, "A農園")?.details).toEqual(["ORIGIN_MISMATCH"]);
+    expect(excludedOf(p, "B農園")?.details).toEqual(["IRREGULAR_NOT_ALLOWED"]);
+    expect(excludedOf(p, "C農園")?.details).toEqual(["NO_STOCK"]);
+    expect(excludedOf(p, "E農園")?.details).toEqual(["NOT_SLOT_PARTICIPANT"]);
+  });
+
+  it("対象供給が20件を超えたら先頭だけで計算せず、条件を絞るよう返す", () => {
+    const many = Array.from({ length: MAX_CANDIDATE_SUPPLIES + 1 }, (_, i) =>
+      supply(`x${String(i).padStart(2, "0")}`, 1, { producerId: `p-x${i}` }));
+    const p = allocatePlan({
+      request: request(), supplies: many, slot: slotP, now: NOW, relationships: [],
+      participants: many.map((s) => ({ slotId: "gp", producerId: s.producerId, confirmed: true })),
+    });
+    expect(p.reasonCodes).toEqual(["TOO_MANY_SUPPLIES"]);
+    expect(p.allocations).toEqual([]);
+  });
+
+  it("農家数は供給数ではなく producerId の種類数で数える", () => {
+    // 同じ農家の供給は同時に使わない（1案に同一農家の別出品を重ねない）
+    const p = plan([supply("a", 5), supply("a2", 5, { producerId: "p-a", producerName: "A農園" })]);
+    expect(p.fulfilledKg).toBe(5);
+  });
+
+  it("案を作っても供給の数量は変えない", () => {
+    const ss = [supply("a", 5), supply("b", 5)];
+    const before = JSON.stringify(ss);
+    plan(ss);
+    expect(JSON.stringify(ss)).toBe(before);
+  });
+
+  it("計算に使った供給の version と計算時刻を返す", () => {
+    const p = plan([supply("a", 10, { version: 3 })]);
+    expect(p.supplySnapshot).toEqual([{ supplyId: "s-a", version: 3, updatedAt: "2026-10-22T00:00:00.000Z" }]);
+    expect(p.allocations[0].version).toBe(3);
+    expect(p.computedAt).toBe(NOW.toISOString());
   });
 });
