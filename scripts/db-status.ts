@@ -4,7 +4,7 @@ config({ path: ".env.local", quiet: true });
 
 const { prisma } = await import("../server/db.js");
 try {
-  console.log(`生産者 ${await prisma.producer.count()}件／出品 ${await prisma.listing.count()}件`);
+  console.log(`生産者 ${await prisma.legacyProducer.count()}件／出品 ${await prisma.listing.count()}件`);
   const rows = await prisma.listing.findMany({ include: { producer: true }, orderBy: { createdAt: "asc" } });
   for (const l of rows)
     console.log(

@@ -12,18 +12,165 @@ datasource db {
   directUrl = env("DATABASE_URL_UNPOOLED") // 直接接続（マイグレーション時）
 }
 
-// 生産者。名前は重複してよく、ID で区別する。
+// ============================================================
+// 新仕様（01_spec_updated.md 9.1）のデータモデル
+// テーブル名は snake_case にして、旧モデルのテーブル（"Producer" / "Listing"）と衝突させない。
+// 数量は整数kg、単価は税込整数円/kg。Request / Plan は DB に保存しない。
+// ============================================================
+
+enum UserRole {
+  restaurant
+  producer
+}
+
+// 規格。regular=通常品、irregular=規格外品
+enum SupplyGrade {
+  regular
+  irregular
+}
+
+model User {
+  id            String         @id @default(cuid())
+  role          UserRole
+  displayName   String
+  producers     Producer[]
+  relationships Relationship[]
+
+  @@map("users")
+}
+
 model Producer {
+  id               String            @id @default(cuid())
+  ownerUserId      String
+  owner            User              @relation(fields: [ownerUserId], references: [id])
+  farmName         String
+  originPrefecture String // 産地（都道府県）
+  relationships    Relationship[]
+  slots            SlotParticipant[]
+  supplies         Supply[]
+
+  @@index([ownerUserId])
+  @@map("producers")
+}
+
+// 店ごとの取引経験の申告。アプリ内の成約実績ではない。
+model Relationship {
+  restaurantUserId String
+  restaurant       User     @relation(fields: [restaurantUserId], references: [id])
+  producerId       String
+  producer         Producer @relation(fields: [producerId], references: [id])
+  priorTrade       Boolean  @default(false)
+  updatedAt        DateTime @updatedAt
+
+  @@id([restaurantUserId, producerId])
+  @@map("relationships")
+}
+
+model Item {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  varieties Variety[]
+  supplies  Supply[]
+
+  @@map("items")
+}
+
+model Variety {
+  id       String   @id @default(cuid())
+  itemId   String
+  item     Item     @relation(fields: [itemId], references: [id])
+  name     String
+  supplies Supply[]
+
+  @@unique([itemId, name])
+  @@map("varieties")
+}
+
+model Place {
+  id      String         @id @default(cuid())
+  name    String
+  address String
+  slots   HandoverSlot[]
+
+  @@map("places")
+}
+
+// 共通受渡枠。費用は「同じ枠を使う1案に一回」の税込固定費のみ。
+model HandoverSlot {
+  id                  String            @id @default(cuid())
+  placeId             String
+  place               Place             @relation(fields: [placeId], references: [id])
+  label               String // 表示名（例: G-P）
+  startAt             DateTime
+  endAt               DateTime
+  confirmDeadlineAt   DateTime
+  feeYen              Int
+  feeConfirmed        Boolean           @default(false)
+  maxKg               Int
+  conditionsConfirmed Boolean           @default(false)
+  participants        SlotParticipant[]
+  supplies            Supply[]
+
+  @@index([placeId])
+  @@map("handover_slots")
+}
+
+model SlotParticipant {
+  slotId     String
+  slot       HandoverSlot @relation(fields: [slotId], references: [id])
+  producerId String
+  producer   Producer     @relation(fields: [producerId], references: [id])
+  confirmed  Boolean      @default(false)
+
+  @@id([slotId, producerId])
+  @@map("slot_participants")
+}
+
+// 供給。1農家・1品目・1枠につき1供給（同一ロットの複製出品を認めない）。
+model Supply {
+  id               String       @id @default(cuid())
+  producerId       String
+  producer         Producer     @relation(fields: [producerId], references: [id])
+  itemId           String
+  item             Item         @relation(fields: [itemId], references: [id])
+  varietyId        String
+  variety          Variety      @relation(fields: [varietyId], references: [id])
+  grade            SupplyGrade  @default(regular)
+  irregularReason  String? // grade=irregular のときの理由
+  originPrefecture String
+  availableKg      Int
+  priceYenPerKg    Int
+  minKg            Int          @default(1)
+  slotId           String
+  slot             HandoverSlot @relation(fields: [slotId], references: [id])
+  published        Boolean      @default(false)
+  updatedAt        DateTime     @updatedAt
+  version          Int          @default(1) // 更新ごとに +1。競合検出に使う
+
+  @@unique([producerId, itemId, slotId])
+  @@index([slotId])
+  @@map("supplies")
+}
+
+// ============================================================
+// Legacy（旧仕様の出品モデル）。現行画面を壊さないため一時的に残す。
+// Phase 2 で Supply へ完全移行した後に削除する。
+// ============================================================
+
+// 旧・生産者。テーブル名は既存の "Producer" のまま。
+model LegacyProducer {
   id       String    @id @default(cuid())
   name     String
   listings Listing[]
+
+  @@map("Producer")
 }
 
-// 生産者の出品（今回販売に回せる量）。数量・金額は整数で扱う。
+// 旧・出品（今回販売に回せる量）。数量・金額は整数で扱う。
 model Listing {
-  id              String   @id @default(cuid())
+  id              String         @id @default(cuid())
   producerId      String
-  producer        Producer @relation(fields: [producerId], references: [id])
+  producer        LegacyProducer @relation(fields: [producerId], references: [id])
   item            String
   variety         String? // 品種（任意）
   quantity        Int
@@ -37,10 +184,10 @@ model Listing {
   handoverEnd     String // HH:MM
   minQuantity     Int
   step            Int
-  handoverFee     Int      @default(0) // 1出品あたりの受渡手数料（円）
-  isPublic        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  handoverFee     Int            @default(0) // 1出品あたりの受渡手数料（円）
+  isPublic        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   @@index([item])
 }

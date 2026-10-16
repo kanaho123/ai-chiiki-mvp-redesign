@@ -15,7 +15,7 @@ export async function seedDemoData(prisma: PrismaClient) {
   await prisma.$transaction(async (tx) => {
     for (const d of DEMO) {
       const producerId = `demo-producer-${d.key}`;
-      await tx.producer.upsert({ where: { id: producerId }, create: { id: producerId, name: d.name }, update: { name: d.name } });
+      await tx.legacyProducer.upsert({ where: { id: producerId }, create: { id: producerId, name: d.name }, update: { name: d.name } });
       const listing = {
         producerId,
         item: "トマト",

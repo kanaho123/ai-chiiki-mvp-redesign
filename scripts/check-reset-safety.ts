@@ -4,6 +4,10 @@ import { config } from "dotenv";
 import { execFileSync } from "node:child_process";
 config({ path: ".env.local", quiet: true });
 
+// 一時データを書き込むので、デモ用 DB と確認できなければ接続前に止める
+const { assertDemoDatabase } = await import("../server/db-safety.js");
+assertDemoDatabase();
+
 const { prisma } = await import("../server/db.js");
 const { jstDate } = await import("../src/lib/dates.js");
 const base = {
@@ -11,8 +15,8 @@ const base = {
   handoverPlace: "安全確認用の拠点", handoverStart: "09:00", handoverEnd: "10:00", minQuantity: 1, step: 1,
 };
 
-const keep = await prisma.producer.create({ data: { name: "リセット確認・残す農家", listings: { create: base } }, include: { listings: true } });
-const remove = await prisma.producer.create({ data: { name: "確認用リセット農家", listings: { create: base } }, include: { listings: true } });
+const keep = await prisma.legacyProducer.create({ data: { name: "リセット確認・残す農家", listings: { create: base } }, include: { listings: true } });
+const remove = await prisma.legacyProducer.create({ data: { name: "確認用リセット農家", listings: { create: base } }, include: { listings: true } });
 const before = await prisma.listing.count();
 try {
   execFileSync("npx", ["tsx", "scripts/reset-demo.ts"], { stdio: "inherit", shell: true });
@@ -23,9 +27,13 @@ try {
   console.log(keptListing ? "OK  確認用以外の出品は残った" : "NG  確認用以外の出品が消えた");
   console.log(removedListing ? "NG  確認用の出品が残った" : "OK  確認用の出品は削除された");
   console.log(demo === 3 ? "OK  デモの出品は3件" : `NG  デモの出品が${demo}件`);
+  // 新モデル: 仕様書 8.1 の初期状態（A10 / B5 / C0非公開 / D10）に戻っていること
+  const supplies = await prisma.supply.findMany({ orderBy: { id: "asc" } });
+  const state = supplies.map((s) => `${s.id.replace("demo-supply-", "").toUpperCase()}${s.availableKg}${s.published ? "" : "非公開"}`).join(" ");
+  console.log(state === "A10 B5 C0非公開 D10" ? `OK  新モデルの供給は初期状態（${state}）` : `NG  新モデルの供給が ${state}`);
 } finally {
   await prisma.listing.deleteMany({ where: { id: { in: [keep.listings[0].id, remove.listings[0].id] } } });
-  await prisma.producer.deleteMany({ where: { id: { in: [keep.id, remove.id] } } });
+  await prisma.legacyProducer.deleteMany({ where: { id: { in: [keep.id, remove.id] } } });
   console.log(`一時データを削除しました（現在 ${await prisma.listing.count()}件）`);
   await prisma.$disconnect();
 }

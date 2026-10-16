@@ -4,6 +4,10 @@
 import { config } from "dotenv";
 config({ path: ".env.local", quiet: true });
 
+// デモデータを初期化するので、デモ用 DB と確認できなければ接続前に止める
+const { assertDemoDatabase } = await import("../server/db-safety.js");
+assertDemoDatabase();
+
 const { prisma } = await import("../server/db.js");
 const { seedDemoData } = await import("../server/demo.js");
 const { jstDate } = await import("../src/lib/dates.js");
@@ -49,7 +53,7 @@ const describe = (p: any) =>
 
 async function cleanup() {
   await prisma.listing.deleteMany({ where: { producer: { name: TEST_PRODUCER } } });
-  await prisma.producer.deleteMany({ where: { name: TEST_PRODUCER } });
+  await prisma.legacyProducer.deleteMany({ where: { name: TEST_PRODUCER } });
   await seedDemoData(prisma);
 }
 

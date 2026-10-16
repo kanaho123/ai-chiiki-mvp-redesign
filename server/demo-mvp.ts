@@ -1,0 +1,84 @@
+import type { PrismaClient } from "./generated/prisma/client.js";
+
+// 仕様書 8.1 のデモ設定（人物・農園・在庫・拠点はすべて架空）。
+// 新モデルのテーブルを空にしてから固定 ID で入れ直すので、何度実行しても同じ初期状態に戻る。
+// 呼び出し側で assertDemoDatabase() を必ず先に実行すること。
+
+const jst = (s: string) => new Date(`${s}+09:00`);
+
+export const DEMO_MVP = {
+  restaurant: { id: "demo-user-r", displayName: "飲食店R（架空）" },
+  item: { id: "demo-item-tomato", name: "トマト" },
+  variety: { id: "demo-variety-t", name: "デモ品種T" },
+  places: [
+    { id: "demo-place-p", name: "受渡拠点P（架空）", address: "大阪府内（デモ用の架空拠点）" },
+    { id: "demo-place-q", name: "受渡拠点Q（架空）", address: "大阪府内（デモ用の架空拠点・Pとは別）" },
+  ],
+  // G-P: A・B・C が参加。G-Q: D 用の別拠点（P とは組み合わせない）
+  slots: [
+    { id: "demo-slot-gp", placeId: "demo-place-p", label: "G-P" },
+    { id: "demo-slot-gq", placeId: "demo-place-q", label: "G-Q" },
+  ],
+  producers: [
+    { key: "a", farmName: "A農園", priorTrade: true, availableKg: 10, priceYenPerKg: 600, published: true, slotId: "demo-slot-gp" },
+    { key: "b", farmName: "B農園", priorTrade: false, availableKg: 5, priceYenPerKg: 550, published: true, slotId: "demo-slot-gp" },
+    { key: "c", farmName: "C農園", priorTrade: false, availableKg: 0, priceYenPerKg: 500, published: false, slotId: "demo-slot-gp" },
+    { key: "d", farmName: "D農園", priorTrade: false, availableKg: 10, priceYenPerKg: 300, published: true, slotId: "demo-slot-gq" },
+  ],
+} as const;
+
+// 両枠とも 2026/10/23 10:00〜11:00 JST、確認締切 10/22 17:00 JST、固定受渡費800円、最大20kg、条件確認済み
+const SLOT_COMMON = {
+  startAt: jst("2026-10-23T10:00:00"),
+  endAt: jst("2026-10-23T11:00:00"),
+  confirmDeadlineAt: jst("2026-10-22T17:00:00"),
+  feeYen: 800,
+  feeConfirmed: true,
+  maxKg: 20,
+  conditionsConfirmed: true,
+};
+
+export async function seedMvpDemo(prisma: PrismaClient) {
+  const d = DEMO_MVP;
+  await prisma.$transaction(async (tx) => {
+    // 子テーブルから順に空にする（デモ用 DB では新モデルのテーブルはすべてデモデータ）
+    await tx.supply.deleteMany();
+    await tx.slotParticipant.deleteMany();
+    await tx.relationship.deleteMany();
+    await tx.handoverSlot.deleteMany();
+    await tx.place.deleteMany();
+    await tx.producer.deleteMany();
+    await tx.user.deleteMany();
+    await tx.variety.deleteMany();
+    await tx.item.deleteMany();
+
+    await tx.item.create({ data: d.item });
+    await tx.variety.create({ data: { ...d.variety, itemId: d.item.id } });
+    await tx.user.create({ data: { ...d.restaurant, role: "restaurant" } });
+    await tx.place.createMany({ data: [...d.places] });
+    await tx.handoverSlot.createMany({ data: d.slots.map((s) => ({ ...s, ...SLOT_COMMON })) });
+
+    const ps = d.producers.map((p) => ({ ...p, userId: `demo-user-${p.key}`, producerId: `demo-producer-${p.key}` }));
+    await tx.user.createMany({ data: ps.map((p) => ({ id: p.userId, role: "producer" as const, displayName: `${p.farmName}（架空）` })) });
+    await tx.producer.createMany({ data: ps.map((p) => ({ id: p.producerId, ownerUserId: p.userId, farmName: p.farmName, originPrefecture: "大阪府" })) });
+    await tx.relationship.createMany({ data: ps.map((p) => ({ restaurantUserId: d.restaurant.id, producerId: p.producerId, priorTrade: p.priorTrade })) });
+    await tx.slotParticipant.createMany({ data: ps.map((p) => ({ slotId: p.slotId, producerId: p.producerId, confirmed: true })) });
+    await tx.supply.createMany({
+      data: ps.map((p) => ({
+        id: `demo-supply-${p.key}`,
+        producerId: p.producerId,
+        itemId: d.item.id,
+        varietyId: d.variety.id,
+        grade: "regular" as const,
+        irregularReason: null,
+        originPrefecture: "大阪府",
+        availableKg: p.availableKg,
+        priceYenPerKg: p.priceYenPerKg,
+        minKg: 1,
+        slotId: p.slotId,
+        published: p.published,
+        version: 1,
+      })),
+    });
+  }, { timeout: 30_000 }); // Neon（米国リージョン）への往復が多いため既定の5秒では足りない
+}
