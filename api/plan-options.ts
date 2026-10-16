@@ -1,15 +1,17 @@
 import { NEARBY_PREFECTURES, PREFECTURES } from "../src/lib/constants.js";
 import { isDemoClock, serverNow } from "../server/clock.js";
 import { prisma } from "../server/db.js";
+import { requireRole } from "../server/auth.js";
 import { handle, json } from "../server/http.js";
-import { PHASE2_RESTAURANT_USER_ID } from "../server/plan-data.js";
 
 // 手入力の条件確認に使う選択肢（品目・品種・受渡枠・産地・優先できる取引済み農家）。
-export const GET = handle(async () => {
+export const GET = handle(async (request) => {
+  const g = await requireRole(request, "restaurant");
+  if (!g.ok) return g.response;
   const [items, slots, relationships] = await Promise.all([
     prisma.item.findMany({ include: { varieties: { orderBy: { name: "asc" } } }, orderBy: { name: "asc" } }),
     prisma.handoverSlot.findMany({ include: { place: true }, orderBy: [{ startAt: "asc" }, { label: "asc" }] }),
-    prisma.relationship.findMany({ where: { restaurantUserId: PHASE2_RESTAURANT_USER_ID, priorTrade: true }, include: { producer: true } }),
+    prisma.relationship.findMany({ where: { restaurantUserId: g.user.id, priorTrade: true }, include: { producer: true } }),
   ]);
   return json({
     now: serverNow().toISOString(),

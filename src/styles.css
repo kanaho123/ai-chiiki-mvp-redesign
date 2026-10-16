@@ -416,3 +416,15 @@ ul.plain { margin: 0; padding-left: 1.2rem; display: grid; gap: 4px; }
 .more-title { display: inline-flex; align-items: center; gap: 8px; }
 .passphrase-box { display: grid; gap: 6px; padding: var(--s2); margin-bottom: var(--s4); border: 1px solid var(--caution-line); background: var(--caution-tint); border-radius: var(--r); }
 .passphrase-box .label { color: var(--text); }
+
+/* ログイン中のユーザーとログアウト（ヘッダー右側） */
+.session-box { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.session-name { display: inline-flex; align-items: center; gap: 4px; font-size: 0.875rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw; }
+.session-box .ghost { min-height: 36px; padding: 4px 10px; }
+.site-header-inner { flex-wrap: wrap; }
+.brand, .session-box .ghost { white-space: nowrap; }
+@media (max-width: 480px) {
+  /* 狭い画面ではログイン中の表示を2行目に回し、名前とログアウトを横並びで保つ */
+  .session-box { flex-basis: 100%; justify-content: space-between; margin-left: 0; }
+  .session-name { max-width: none; }
+}

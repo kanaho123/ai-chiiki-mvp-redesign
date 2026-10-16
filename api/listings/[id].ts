@@ -1,3 +1,5 @@
+// Legacy 限定：旧 Listing（旧仕様の出品）の API。正式な供給の更新は /api/supplies（ログイン・本人確認あり）を使う。
+// 編集用合言葉（EDIT_PASSPHRASE）はこの legacy API だけで使う。Phase 5 で旧 Listing と一緒に削除する。
 import { parseListingPatch } from "../../src/lib/validate.js";
 import { prisma } from "../../server/db.js";
 import { requireEditPassphrase } from "../../server/auth.js";

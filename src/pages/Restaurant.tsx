@@ -5,8 +5,9 @@ import { formatJstDateTime, jstDate, jstDateOf, jstTimeOf } from "../lib/dates.j
 import { EXCLUSION_TEXT, headlineText, NOTICE_TEXT, rankingText, REASON_TEXT, STATUS_TEXT } from "../lib/reasons.js";
 import type { Suggestion } from "../lib/suggest.js";
 import { Icon } from "../components/Icon";
+import type { Me } from "../App";
 
-// Phase 2 確認用の手入力画面。条件をすべて利用者が確定してから POST /api/plan へ送る。
+// 飲食店の仕入れ案（手入力）。条件をすべて利用者が確定してから POST /api/plan へ送る。
 // Phase 4 で自然文入力＋条件確認画面に置き換える。
 
 type Options = {
@@ -42,24 +43,24 @@ const EMPTY: Form = {
   allowFirstTime: "", allowIrregular: "", allowMixedVarieties: "no", allowMixedGrades: "no", preferredProducerId: "",
 };
 
-const STORAGE_KEY = "ai-chiiki:restaurant:v2";
-const POLL_MS = 3000;
+// 表示中の案は店（ログインユーザー）ごとに保存する。別の店の案を表示しない
+const storageKey = (userId: string) => `ai-chiiki:restaurant:v3:${userId}`;
 
 const yen = (n: number) => `${n.toLocaleString("ja-JP")}円`;
 const yn = (v: YesNo) => (v === "" ? null : v === "yes");
 
-function load(): { form: Form; shown: Shown | null } | null {
+function load(userId: string): { form: Form; shown: Shown | null } | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey(userId));
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
 }
 
-function save(form: Form, shown: Shown | null) {
+function save(userId: string, form: Form, shown: Shown | null) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ form, shown }));
+    localStorage.setItem(storageKey(userId), JSON.stringify({ form, shown }));
   } catch {}
 }
 
@@ -109,10 +110,13 @@ function YesNoChoice({ name, value, onChange, yes, no }: {
   );
 }
 
-export default function RestaurantPage() {
+/** 表示中の案が最新か。checking の間は以前の結果を有効扱いしない */
+export type Freshness = "checking" | "fresh" | "stale";
+
+export default function RestaurantPage({ me }: { me: Me }) {
   const [form, setForm] = useState<Form>(EMPTY);
   const [shown, setShown] = useState<Shown | null>(null);
-  const [stale, setStale] = useState(false);
+  const [freshness, setFreshness] = useState<Freshness>("checking");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -121,43 +125,45 @@ export default function RestaurantPage() {
   const [restored, setRestored] = useState(false);
 
   useEffect(() => {
-    const saved = load();
+    const saved = load(me.id);
     if (saved) {
       setForm({ ...EMPTY, ...saved.form });
       setShown(saved.shown);
+      setFreshness("checking"); // 保存していた案は、最新の版と照合できるまで有効扱いしない
     }
     setRestored(true);
     fetch("/api/plan-options", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then(setOptions)
       .catch(() => setOptionsError(true));
-  }, []);
+  }, [me.id]);
 
   useEffect(() => {
-    if (restored) save(form, shown);
-  }, [form, shown, restored]);
+    if (restored) save(me.id, form, shown);
+  }, [form, shown, restored, me.id]);
 
-  // 表示中の案の計算後に供給・枠などが変わったら、その案を無効にする
+  // 表示中の案の計算後に供給・枠などが変わったら、その案を無効にする。
+  // 画面を開いた（戻った）とき・タブに戻ったときに確認する（常時の通信はしない）
   const checkVersion = useCallback(async () => {
     if (!shown) return;
     try {
       const q = new URLSearchParams({ itemId: shown.request.itemId, slotId: shown.request.slotId });
       const r = await fetch(`/api/inventory-version?${q}`, { cache: "no-store" });
-      if (!r.ok) return;
+      if (!r.ok) return setFreshness("stale");
       const { version } = await r.json();
-      setStale(version !== shown.version);
-    } catch {}
+      setFreshness(version === shown.version ? "fresh" : "stale");
+    } catch {
+      setFreshness("stale");
+    }
   }, [shown]);
 
   useEffect(() => {
     if (!shown) return;
     checkVersion();
-    const id = setInterval(checkVersion, POLL_MS);
-    const onFocus = () => checkVersion();
+    const onFocus = () => document.visibilityState === "visible" && checkVersion();
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onFocus);
     return () => {
-      clearInterval(id);
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onFocus);
     };
@@ -175,7 +181,7 @@ export default function RestaurantPage() {
         return;
       }
       setShown(d);
-      setStale(false);
+      setFreshness("fresh");
       setTimeout(() => document.querySelector(".result")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
     } catch {
       setError("通信に失敗しました。もう一度お試しください");
@@ -229,7 +235,7 @@ export default function RestaurantPage() {
         <p className="page-role buyer"><Icon name="store" />飲食店の方</p>
         <h1>仕入れ案を作る</h1>
         <p className="lead">条件を確定すると、登録された供給から「誰から何kg・費用込みでいくら・いつどこで受け取るか」を計算します。</p>
-        <p className="hint">Phase 2 確認用の手入力画面です（自然文入力は今後追加）。計算は登録条件の照合だけで、AIは使いません。</p>
+        <p className="hint">条件を手入力で確定します（自然文入力は今後追加）。計算は登録条件の照合だけで、AIは使いません。</p>
       </header>
 
       {optionsError && <div className="alert bad" role="alert"><Icon name="alert" />選択肢を読み込めませんでした。再読み込みしてください。</div>}
@@ -384,7 +390,7 @@ export default function RestaurantPage() {
       {shown && (
         <PlanView
           shown={shown}
-          stale={stale}
+          freshness={freshness}
           busy={busy}
           busyLabel={busyLabel}
           onRecalc={() => requestPlan(shown.request)}
@@ -405,28 +411,32 @@ function Num({ children, stale }: { children: React.ReactNode; stale: boolean })
   );
 }
 
-function PlanView({ shown, stale, busy, busyLabel, onRecalc, onSuggestion }: {
-  shown: Shown; stale: boolean; busy: boolean; busyLabel: React.ReactNode; onRecalc: () => void; onSuggestion: (s: Suggestion) => void;
+function PlanView({ shown, freshness, busy, busyLabel, onRecalc, onSuggestion }: {
+  shown: Shown; freshness: Freshness; busy: boolean; busyLabel: React.ReactNode; onRecalc: () => void; onSuggestion: (s: Suggestion) => void;
 }) {
   const { plan, request } = shown;
-  const ok = plan.status === "MATCHED";
-  const tone = stale ? "bad" : ok ? "ok" : "warn";
-  // 状態は色だけでなく、アイコンと言葉でも伝える。古い案は再計算まで適合状態を出さない
-  const status = stale
-    ? { icon: "x" as const, text: "無効な案（供給が変わる前の計算）" }
-    : { icon: ok ? ("check" as const) : ("alert" as const), text: STATUS_TEXT[plan.status] };
+  // 古い案・確認中の案は、再計算するまで適合状態（MATCHED）を有効扱いしない
+  const stale = freshness !== "fresh";
+  const ok = plan.status === "MATCHED" && !stale;
+  const tone = freshness === "stale" ? "bad" : freshness === "checking" ? "warn" : ok ? "ok" : "warn";
+  // 状態は色だけでなく、アイコンと言葉でも伝える
+  const status = freshness === "stale"
+    ? { icon: "x" as const, text: "無効：この仕入れ案は現在の情報ではありません" }
+    : freshness === "checking"
+      ? { icon: "refresh" as const, text: "最新の情報か確認中…" }
+      : { icon: ok ? ("check" as const) : ("alert" as const), text: STATUS_TEXT[plan.status] };
   const ranking = rankingText(plan.rankingReason);
 
   return (
     <section className="result" aria-live="polite" aria-labelledby="result-title">
       <h2 className="result-title" id="result-title">仕入れ案</h2>
 
-      {stale && (
+      {freshness === "stale" && (
         <div className="alert bad stale-banner" role="alert">
           <Icon name="alert" />
           <div>
-            <strong className="stale-title">この仕入れ案は無効です</strong>
-            <p>供給の数量・公開状態などが変わりました。下の数量・金額は使えません。最新の情報で計算し直してください。</p>
+            <strong className="stale-title">供給情報が更新されています</strong>
+            <p>この仕入れ案は現在の情報ではありません。下の数量・金額は使えません。最新情報で再計算してください。</p>
             <button className="primary block" onClick={onRecalc} disabled={busy} aria-busy={busy} style={{ marginTop: 12 }}>
               {busy ? busyLabel : <><Icon name="refresh" />最新情報で再計算</>}
             </button>
@@ -437,7 +447,7 @@ function PlanView({ shown, stale, busy, busyLabel, onRecalc, onSuggestion }: {
       <div className={`result-body ${stale ? "is-stale" : ""}`}>
         <div className={`hero summary ${tone}`}>
           <p className={`status ${tone}`}><Icon name={status.icon} />{status.text}</p>
-          <p className="headline">{stale && "【無効】"}{headlineText(plan)}</p>
+          <p className="headline">{freshness === "stale" ? "【無効】" : freshness === "checking" ? "【確認中】" : ""}{headlineText(plan)}</p>
 
           <dl className="keyfacts">
             <div className="kf kf-qty">
@@ -576,7 +586,6 @@ function PlanView({ shown, stale, busy, busyLabel, onRecalc, onSuggestion }: {
         </p>
       </div>
 
-      <a className="text-link" href="#/producer">生産者の画面を開く<Icon name="chevronRight" size={18} /></a>
     </section>
   );
 }

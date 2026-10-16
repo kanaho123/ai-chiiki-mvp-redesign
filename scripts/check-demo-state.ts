@@ -46,6 +46,12 @@ try {
   const restaurants = await prisma.user.count({ where: { role: "restaurant" } });
   const producerUsers = await prisma.user.count({ where: { role: "producer" } });
   check("デモ用ユーザー（飲食店1・生産者4）", restaurants === 1 && producerUsers === 4);
+  const users = await prisma.user.findMany({ select: { loginId: true, passwordHash: true }, orderBy: { loginId: "asc" } });
+  check("ログイン名 demo-r / demo-a〜d・パスワードは scrypt ハッシュのみ",
+    users.map((u) => u.loginId).join(",") === "demo-a,demo-b,demo-c,demo-d,demo-r" &&
+    users.every((u) => u.passwordHash?.startsWith("scrypt$") && u.passwordHash !== process.env.DEMO_LOGIN_PASSWORD));
+  const owners = await prisma.producer.findMany({ include: { owner: true }, orderBy: { id: "asc" } });
+  check("各農園は自分のユーザーが所有", owners.every((o) => o.owner.loginId === `demo-${o.id.replace("demo-producer-", "")}`));
 } finally {
   await prisma.$disconnect();
 }

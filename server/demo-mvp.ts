@@ -1,13 +1,15 @@
+import { hashPassword } from "./auth.js";
 import type { PrismaClient } from "./generated/prisma/client.js";
 
 // 仕様書 8.1 のデモ設定（人物・農園・在庫・拠点はすべて架空）。
 // 新モデルのテーブルを空にしてから固定 ID で入れ直すので、何度実行しても同じ初期状態に戻る。
 // 呼び出し側で assertDemoDatabase() を必ず先に実行すること。
+// デモ用ユーザーのパスワードは環境変数 DEMO_LOGIN_PASSWORD から作る（ソースに書かない。DB には scrypt ハッシュだけ保存）。
 
 const jst = (s: string) => new Date(`${s}+09:00`);
 
 export const DEMO_MVP = {
-  restaurant: { id: "demo-user-r", displayName: "飲食店R（架空）" },
+  restaurant: { id: "demo-user-r", loginId: "demo-r", displayName: "飲食店R（架空）" },
   item: { id: "demo-item-tomato", name: "トマト" },
   variety: { id: "demo-variety-t", name: "デモ品種T" },
   places: [
@@ -38,8 +40,12 @@ const SLOT_COMMON = {
   conditionsConfirmed: true,
 };
 
-export async function seedMvpDemo(prisma: PrismaClient) {
+export async function seedMvpDemo(prisma: PrismaClient, password = process.env.DEMO_LOGIN_PASSWORD) {
   const d = DEMO_MVP;
+  if (!password) console.warn("DEMO_LOGIN_PASSWORD が未設定のため、デモ用ユーザーはログインできない状態で作成します");
+  // ユーザーごとに別のソルトでハッシュ化（トランザクションの外で先に計算する）
+  const keys = ["r", ...d.producers.map((p) => p.key)];
+  const hashes = Object.fromEntries(await Promise.all(keys.map(async (k) => [k, password ? await hashPassword(password) : null] as const)));
   await prisma.$transaction(async (tx) => {
     // 子テーブルから順に空にする（デモ用 DB では新モデルのテーブルはすべてデモデータ）
     await tx.supply.deleteMany();
@@ -54,12 +60,14 @@ export async function seedMvpDemo(prisma: PrismaClient) {
 
     await tx.item.create({ data: d.item });
     await tx.variety.create({ data: { ...d.variety, itemId: d.item.id } });
-    await tx.user.create({ data: { ...d.restaurant, role: "restaurant" } });
+    await tx.user.create({ data: { ...d.restaurant, role: "restaurant", passwordHash: hashes.r } });
     await tx.place.createMany({ data: [...d.places] });
     await tx.handoverSlot.createMany({ data: d.slots.map((s) => ({ ...s, ...SLOT_COMMON })) });
 
     const ps = d.producers.map((p) => ({ ...p, userId: `demo-user-${p.key}`, producerId: `demo-producer-${p.key}` }));
-    await tx.user.createMany({ data: ps.map((p) => ({ id: p.userId, role: "producer" as const, displayName: `${p.farmName}（架空）` })) });
+    await tx.user.createMany({
+      data: ps.map((p) => ({ id: p.userId, loginId: `demo-${p.key}`, passwordHash: hashes[p.key], role: "producer" as const, displayName: `${p.farmName}（架空）` })),
+    });
     await tx.producer.createMany({ data: ps.map((p) => ({ id: p.producerId, ownerUserId: p.userId, farmName: p.farmName, originPrefecture: "大阪府" })) });
     await tx.relationship.createMany({ data: ps.map((p) => ({ restaurantUserId: d.restaurant.id, producerId: p.producerId, priorTrade: p.priorTrade })) });
     await tx.slotParticipant.createMany({ data: ps.map((p) => ({ slotId: p.slotId, producerId: p.producerId, confirmed: true })) });

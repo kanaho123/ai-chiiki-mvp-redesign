@@ -1,11 +1,6 @@
 import { createHash } from "node:crypto";
 import type { AllocateInput, PlanSlot, PlanSupply } from "../src/lib/allocate.js";
 import { prisma } from "./db.js";
-import { DEMO_MVP } from "./demo-mvp.js";
-
-// Phase 2 ではログインが無いため、デモの飲食店Rとして計算する。
-// Phase 3 でログイン中の飲食店ユーザー ID に置き換える。
-export const PHASE2_RESTAURANT_USER_ID = DEMO_MVP.restaurant.id;
 
 export type PlanInputs = Omit<AllocateInput, "request" | "now">;
 
@@ -13,7 +8,7 @@ export type PlanInputs = Omit<AllocateInput, "request" | "now">;
  * 計算に使う最新データを1つのトランザクション（同じ時点のスナップショット）で読む。
  * 公開中の供給だけを使う。案を作っても数量は変更しない。
  */
-export async function loadPlanInputs(q: { itemId: string; slotId: string; restaurantUserId: string }): Promise<{ inputs: PlanInputs; version: string }> {
+export async function loadPlanInputs(q: { itemId: string; slotId: string; restaurantUserId: string /* ログイン中の飲食店。取引経験は店ごと */ }): Promise<{ inputs: PlanInputs; version: string }> {
   const [slot, supplies, participants, relationships] = await prisma.$transaction(
     [
       prisma.handoverSlot.findUnique({ where: { id: q.slotId }, include: { place: true } }),

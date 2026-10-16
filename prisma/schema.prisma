@@ -33,6 +33,8 @@ model User {
   id            String         @id @default(cuid())
   role          UserRole
   displayName   String
+  loginId       String?        @unique // デモ用ログイン名
+  passwordHash  String? // scrypt のハッシュ（平文は保存しない）。null ならログイン不可
   producers     Producer[]
   relationships Relationship[]
 

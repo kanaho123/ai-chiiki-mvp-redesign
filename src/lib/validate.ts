@@ -178,3 +178,82 @@ export function parseListingPatch(body: unknown): Result<{ quantity?: number; is
   if (Object.keys(patch).length === 0) return { ok: false, error: "変更内容がありません" };
   return { ok: true, value: patch };
 }
+
+// ---------------------------------------------------------------------------
+// ログイン・供給（Supply）。数量は整数kg・0〜100、単価は税込整数円/kg
+// ---------------------------------------------------------------------------
+
+export const SUPPLY_KG_MAX = 100;
+export const SUPPLY_PRICE_MAX = 100_000;
+export const IRREGULAR_REASON_MAX = 30;
+
+export function parseLogin(body: unknown): Result<{ loginId: string; password: string }> {
+  if (!isObj(body)) return { ok: false, error: "ログイン情報を確認してください" };
+  const loginId = typeof body.loginId === "string" ? body.loginId.trim() : "";
+  const password = typeof body.password === "string" ? body.password : "";
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(loginId) || password.length < 1 || password.length > 200)
+    return { ok: false, error: "ログイン情報を確認してください" };
+  return { ok: true, value: { loginId, password } };
+}
+
+export type SupplyPatch = { version: number; availableKg?: number; published?: boolean };
+
+/** 数量変更・公開停止／再開。画面で開いた時点の version が必要（古ければ 409） */
+export function parseSupplyPatch(body: unknown): Result<SupplyPatch> {
+  if (!isObj(body)) return { ok: false, error: "入力を読み取れません" };
+  const version = int(body.version, 1, Number.MAX_SAFE_INTEGER);
+  if (version === null) return { ok: false, error: "最新情報を読み込み直してください" };
+  const patch: SupplyPatch = { version };
+  if (body.availableKg !== undefined) {
+    const kg = int(body.availableKg, 0, SUPPLY_KG_MAX);
+    if (kg === null) return { ok: false, error: `販売可能量は0〜${SUPPLY_KG_MAX}kgの整数で入力してください` };
+    patch.availableKg = kg;
+  }
+  if (body.published !== undefined) {
+    if (typeof body.published !== "boolean") return { ok: false, error: "公開状態が正しくありません" };
+    patch.published = body.published;
+  }
+  if (patch.availableKg === undefined && patch.published === undefined) return { ok: false, error: "変更内容がありません" };
+  return { ok: true, value: patch };
+}
+
+export type SupplyInput = {
+  itemId: string;
+  varietyId: string;
+  grade: "regular" | "irregular";
+  irregularReason: string | null;
+  originPrefecture: string;
+  availableKg: number;
+  priceYenPerKg: number;
+  minKg: number;
+  slotId: string;
+  published: boolean;
+};
+
+/** 新しい供給。生産者は入力させず、ログイン中の生産者に紐付ける（API 側で設定） */
+export function parseSupplyInput(body: unknown): Result<SupplyInput> {
+  if (!isObj(body)) return { ok: false, error: "入力を読み取れません" };
+  const itemId = id(body.itemId);
+  if (!itemId) return { ok: false, error: "品目を選択してください" };
+  const varietyId = id(body.varietyId);
+  if (!varietyId) return { ok: false, error: "品種を選択してください" };
+  const grade = oneOf(body.grade, ["regular", "irregular"] as const);
+  if (!grade) return { ok: false, error: "規格（通常品／規格外）を選択してください" };
+  const irregularReason = grade === "irregular" ? text(body.irregularReason, IRREGULAR_REASON_MAX) : null;
+  if (grade === "irregular" && !irregularReason) return { ok: false, error: `規格外の理由を${IRREGULAR_REASON_MAX}文字以内で入力してください` };
+  const originPrefecture = oneOf(body.originPrefecture, PREFECTURES);
+  if (!originPrefecture) return { ok: false, error: "産地（都道府県）を選択してください" };
+  const availableKg = int(body.availableKg, 0, SUPPLY_KG_MAX);
+  if (availableKg === null) return { ok: false, error: `販売可能量は0〜${SUPPLY_KG_MAX}kgの整数で入力してください` };
+  const priceYenPerKg = int(body.priceYenPerKg, 1, SUPPLY_PRICE_MAX);
+  if (priceYenPerKg === null) return { ok: false, error: "税込単価は1円以上の整数（円/kg）で入力してください" };
+  const minKg = int(body.minKg, 1, SUPPLY_KG_MAX);
+  if (minKg === null) return { ok: false, error: `最低販売量は1〜${SUPPLY_KG_MAX}kgの整数で入力してください` };
+  const slotId = id(body.slotId);
+  if (!slotId) return { ok: false, error: "受渡枠を選択してください" };
+  if (typeof body.published !== "boolean") return { ok: false, error: "公開するかを選択してください" };
+  return {
+    ok: true,
+    value: { itemId, varietyId, grade, irregularReason, originPrefecture, availableKg, priceYenPerKg, minKg, slotId, published: body.published },
+  };
+}

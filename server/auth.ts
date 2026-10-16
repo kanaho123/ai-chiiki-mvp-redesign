@@ -1,20 +1,158 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, scrypt as scryptCb, timingSafeEqual, type ScryptOptions } from "node:crypto";
 import { json } from "./http.js";
+import { repo, type Role, type SessionUser } from "./repo.js";
 
-/** 編集用合言葉を受け取るリクエストヘッダー */
+// ログイン・セッション・権限確認。権限は必ずサーバー側で判定する（画面でボタンを隠すだけにしない）。
+
+// ---------------------------------------------------------------------------
+// パスワード（scrypt）。平文は保存しない
+// ---------------------------------------------------------------------------
+
+const SCRYPT = { N: 16384, r: 8, p: 1, keylen: 64 } as const;
+
+function scrypt(password: string, salt: Buffer, keylen: number, opts: ScryptOptions): Promise<Buffer> {
+  return new Promise((resolve, reject) => scryptCb(password, salt, keylen, opts, (err, key) => (err ? reject(err) : resolve(key))));
+}
+
+/** 形式: scrypt$N$r$p$<salt base64url>$<hash base64url> */
+export async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16);
+  const key = await scrypt(password, salt, SCRYPT.keylen, { N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p });
+  return ["scrypt", SCRYPT.N, SCRYPT.r, SCRYPT.p, salt.toString("base64url"), key.toString("base64url")].join("$");
+}
+
+export async function verifyPassword(password: string, stored: string | null): Promise<boolean> {
+  const parts = stored?.split("$") ?? [];
+  if (parts.length !== 6 || parts[0] !== "scrypt") {
+    // ユーザーが存在しない場合も同程度の時間をかけて、存在の有無を応答時間から推測されにくくする
+    await scrypt(password, randomBytes(16), SCRYPT.keylen, { N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p });
+    return false;
+  }
+  const [, N, r, p, salt, hash] = parts;
+  const expected = Buffer.from(hash, "base64url");
+  const key = await scrypt(password, Buffer.from(salt, "base64url"), expected.length, { N: Number(N), r: Number(r), p: Number(p) });
+  return key.length === expected.length && timingSafeEqual(key, expected);
+}
+
+// ---------------------------------------------------------------------------
+// セッション（HMAC 署名付き Cookie）。中身は userId・role・期限だけ
+// ---------------------------------------------------------------------------
+
+export const SESSION_COOKIE = "aic_session";
+export const SESSION_TTL_SEC = 8 * 60 * 60;
+
+type SessionPayload = { uid: string; role: Role; exp: number }; // exp はミリ秒
+
+function secret(env: Record<string, string | undefined> = process.env): string {
+  const s = env.SESSION_SECRET;
+  if (!s || s.length < 32) throw new Error("SESSION_SECRET が未設定か短すぎます");
+  return s;
+}
+
+const sign = (data: string, key: string) => createHmac("sha256", key).update(data).digest("base64url");
+
+export function createSessionToken(user: { id: string; role: Role }, now: Date, key = secret()): string {
+  const payload: SessionPayload = { uid: user.id, role: user.role, exp: now.getTime() + SESSION_TTL_SEC * 1000 };
+  const data = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return `${data}.${sign(data, key)}`;
+}
+
+/** 署名・期限・形式を検証して中身を返す。少しでもおかしければ null */
+export function verifySessionToken(token: string | null | undefined, now: Date, key = secret()): SessionPayload | null {
+  if (!token) return null;
+  const [data, sig, extra] = token.split(".");
+  if (!data || !sig || extra !== undefined) return null;
+  const a = createHash("sha256").update(sign(data, key)).digest();
+  const b = createHash("sha256").update(sig).digest();
+  if (!timingSafeEqual(a, b)) return null;
+  try {
+    const p = JSON.parse(Buffer.from(data, "base64url").toString("utf8")) as SessionPayload;
+    if (typeof p.uid !== "string" || (p.role !== "restaurant" && p.role !== "producer") || typeof p.exp !== "number") return null;
+    return p.exp > now.getTime() ? p : null;
+  } catch {
+    return null;
+  }
+}
+
+export function readCookie(request: Request, name: string): string | null {
+  for (const part of (request.headers.get("cookie") ?? "").split(";")) {
+    const [k, ...v] = part.trim().split("=");
+    if (k === name) return v.join("=");
+  }
+  return null;
+}
+
+const secureCookie = (env: Record<string, string | undefined> = process.env) => !!env.VERCEL_ENV || env.NODE_ENV === "production";
+
+export function sessionCookie(token: string, env?: Record<string, string | undefined>): string {
+  return `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL_SEC}${secureCookie(env) ? "; Secure" : ""}`;
+}
+
+export function clearSessionCookie(env?: Record<string, string | undefined>): string {
+  return `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secureCookie(env) ? "; Secure" : ""}`;
+}
+
+// ---------------------------------------------------------------------------
+// 権限確認（API から使う）。拒否するときは Response を返す
+// ---------------------------------------------------------------------------
+
+type Guard<T> = { ok: true; user: T } | { ok: false; response: Response };
+
+/** 別サイトからの状態変更リクエストを拒否する（SameSite=Lax に加えた確認） */
+function crossSite(request: Request): boolean {
+  if (request.method === "GET" || request.method === "HEAD") return false;
+  const origin = request.headers.get("origin");
+  if (!origin) return false;
+  try {
+    return new URL(origin).host !== new URL(request.url).host;
+  } catch {
+    return true;
+  }
+}
+
+export async function currentUser(request: Request, now = new Date()): Promise<SessionUser | null> {
+  const s = verifySessionToken(readCookie(request, SESSION_COOKIE), now);
+  if (!s) return null;
+  const user = await repo.findSessionUser(s.uid);
+  // DB 上のロールが変わっていたらセッションを無効とみなす
+  return user && user.role === s.role ? user : null;
+}
+
+export async function requireUser(request: Request): Promise<Guard<SessionUser>> {
+  if (crossSite(request)) return { ok: false, response: json({ error: "このリクエストは受け付けられません" }, 403) };
+  const user = await currentUser(request);
+  return user ? { ok: true, user } : { ok: false, response: json({ error: "ログインしてください" }, 401) };
+}
+
+export async function requireRole<R extends Role>(request: Request, role: R): Promise<Guard<SessionUser & { role: R }>> {
+  const g = await requireUser(request);
+  if (!g.ok) return g;
+  if (g.user.role !== role) return { ok: false, response: json({ error: "この操作を行う権限がありません" }, 403) };
+  return g as Guard<SessionUser & { role: R }>;
+}
+
+/** 生産者本人の供給であることを確認する（他の生産者の供給 ID を直接送られても拒否） */
+export async function requireOwnSupply(user: SessionUser, supplyId: string): Promise<{ ok: true } | { ok: false; response: Response }> {
+  const s = await repo.findSupplyOwner(supplyId);
+  if (!s) return { ok: false, response: json({ error: "供給が見つかりません" }, 404) };
+  if (!user.producer || s.producerId !== user.producer.id) return { ok: false, response: json({ error: "この供給を変更する権限がありません" }, 403) };
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Legacy 限定：旧 Listing API（/api/listings）の編集用合言葉。正式な Supply API では使わない
+// Phase 5 で旧 Listing を削除するときに一緒に削除する
+// ---------------------------------------------------------------------------
+
+/** 編集用合言葉を受け取るリクエストヘッダー（legacy） */
 export const PASSPHRASE_HEADER = "x-edit-passphrase";
 
 const digest = (s: string) => createHash("sha256").update(s, "utf8").digest();
 
-/**
- * 出品の登録・変更は、サーバーの環境変数 EDIT_PASSPHRASE と一致する合言葉があるときだけ許可する。
- * 未設定なら編集はすべて拒否する（閲覧・仕入れ案の作成には関係しない）。
- * 許可しない場合は返す Response、許可する場合は null。
- */
+/** Legacy 限定。EDIT_PASSPHRASE と一致する合言葉があるときだけ旧出品の編集を許可する */
 export function requireEditPassphrase(request: Request): Response | null {
   const expected = process.env.EDIT_PASSPHRASE;
   if (!expected) return json({ error: "現在、出品の編集はできません（合言葉が設定されていません）" }, 503);
-  // 日本語の合言葉も送れるよう、画面側で encodeURIComponent したものを受け取る
   let given: string | null = null;
   try {
     const raw = request.headers.get(PASSPHRASE_HEADER);
@@ -22,7 +160,6 @@ export function requireEditPassphrase(request: Request): Response | null {
   } catch {
     given = null;
   }
-  // 長さに依存しない比較のため、ハッシュ同士を一定時間で比べる
   if (!given || !timingSafeEqual(digest(given), digest(expected)))
     return json({ error: "編集用の合言葉が違います", code: "passphrase_required" }, 401);
   return null;
