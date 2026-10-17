@@ -581,3 +581,68 @@ h1, h2, h3 { letter-spacing: -0.02em; }
 .qty-track { height: 6px; }
 .qty-bar-val { min-width: 3.2em; text-align: right; font-size: 14px; font-weight: 600; color: var(--color-muted); }
 .bundle-kg .unit { font-size: 14px; }
+
+/* =========================================================================
+   入口のアートディレクション：画面全体を「飲食店の世界」と「生産者の世界」の2つにする
+   ・カードにしない（角丸・影・余白で囲まない）。画面の端から端まで色の世界が続く
+   ・面積は50:50で対等。境目はわずかに斜め、中の構図は非対称（重心を逆に）
+   ・イラストは面で描き、画面の端で切れるほど大きく置く
+   ・矢印は独立したボタンにせず、短い説明に続く細い線にする
+   ========================================================================= */
+.role-screen { max-width: none; padding: 0 0 28px; gap: 0; }
+.role-screen > .display { width: 100%; max-width: var(--page-max); margin: 0 auto; padding: 20px var(--gutter) 16px; font-size: 18px; font-weight: 600; color: var(--color-muted); letter-spacing: -0.01em; }
+.role-screen > .about-line { width: 100%; max-width: var(--page-max); margin: 0 auto; padding: 18px var(--gutter) 0; }
+.role-screen .role-cards { display: block; }
+.role-screen .role-card { position: relative; }
+.role-screen .role-card.restaurant { z-index: 1; }
+.role-screen .role-card button {
+  --world-h: clamp(270px, calc((100dvh - 64px - 140px) / 2), 380px);
+  --slant: 36px;
+  display: block; position: relative; width: 100%; min-height: var(--world-h); padding: 0; border: 0; border-radius: 0; box-shadow: none; overflow: hidden;
+  text-align: left; transition: filter 0.12s ease-out;
+}
+.role-screen .role-card button:active { transform: none; filter: brightness(0.96); }
+/* 境目はわずかに斜め：飲食店の下辺を左上がりに切り、生産者をその下へ潜らせる（見える面積は同じ） */
+.role-screen .role-card.restaurant button { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 calc(100% - var(--slant))); }
+.role-screen .role-card.producer button { margin-top: calc(-1 * var(--slant)); }
+.role-inner { position: relative; display: block; max-width: 640px; min-height: inherit; margin: 0 auto; }
+.role-screen .role-card button .role-inner { min-height: var(--world-h); }
+
+/* 色の世界：同じ系統の濃淡 */
+.role-screen .role-card.restaurant button { background: var(--g700); color: #fff; }
+.role-screen .role-card.producer button { background: var(--o400); color: var(--color-text); }
+
+/* イラスト：画面の端で切れる大きさ */
+.role-screen .role-art { position: absolute; display: block; }
+.role-screen .role-art svg { display: block; width: 100%; height: auto; }
+.role-screen .role-card.restaurant .role-art { top: 18px; right: -44px; bottom: auto; left: auto; width: min(86%, 380px); }
+.role-screen .role-card.producer .role-art { top: auto; bottom: -26px; left: -30px; right: auto; width: min(112%, 520px); }
+
+/* 文字：役割名は少し軽く、説明との差を大きく。重心は上下で逆 */
+.role-screen .role-text { position: absolute; display: grid; gap: 6px; padding: 0; z-index: 1; }
+.role-screen .role-card.restaurant .role-text { left: 24px; bottom: calc(var(--slant) + 18px); }
+.role-screen .role-card.producer .role-text { left: 24px; top: calc(var(--slant) + 22px); }
+.role-screen .role-name { font-size: 40px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.05; }
+.role-screen .role-line { display: flex; align-items: center; gap: 12px; }
+.role-screen .role-desc { font-size: 14px; font-weight: 500; margin: 0; }
+.role-screen .role-card.restaurant .role-desc, .role-screen .role-card.restaurant .role-go { color: var(--g200); }
+.role-screen .role-card.producer .role-desc, .role-screen .role-card.producer .role-go { color: var(--o800); }
+/* 矢印は説明に続く細い線（ボタンの形にしない） */
+.role-screen .role-go { position: static; width: auto; height: auto; background: none; border-radius: 0; display: inline-flex; }
+.role-screen .role-card.restaurant .role-go, .role-screen .role-card.producer .role-go { background: none; }
+.role-screen .line-arrow { width: 56px; height: 16px; transition: transform 0.12s ease-out; }
+.role-screen .role-card button:active .line-arrow { transform: translateX(4px); }
+@media (prefers-reduced-motion: reduce) {
+  .role-screen .role-card button, .role-screen .line-arrow { transition: none; }
+  .role-screen .role-card button:active .line-arrow { transform: none; }
+}
+/* 文字の場所を空けた構図に合わせて位置を調整 */
+.role-screen .role-card.restaurant .role-art { top: auto; bottom: -24px; right: -42px; width: min(82%, 360px); }
+.role-screen .role-card.producer .role-art { bottom: -36px; left: -20px; width: 112%; }
+/* 広い画面では2つの世界を中央の列にまとめる（端で途切れた絵が見えないように） */
+@media (min-width: 700px) {
+  .role-screen .role-cards { width: 100%; max-width: 640px; margin: 0 auto; border-radius: 28px; overflow: hidden; }
+}
+@media (min-width: 700px) {
+  .role-screen .role-card.producer .role-art { width: 104%; bottom: -112px; }
+}
