@@ -251,7 +251,7 @@ fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .composer textarea:focus { box-shadow: none; background: transparent; }
 .composer-foot { display: flex; justify-content: flex-end; padding: 0 14px 10px; color: var(--color-muted); font-size: 0.8125rem; }
 .example-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.example-chip { min-height: 44px; padding: 0 16px; background: var(--color-surface); border-color: var(--accent-line); color: var(--accent-dark); font-size: 0.9375rem; box-shadow: var(--shadow-soft); }
+.example-chip { min-height: var(--tap-min); padding: 0 16px; background: var(--color-surface); border-color: var(--accent-line); color: var(--accent-dark); font-size: 0.9375rem; box-shadow: var(--shadow-soft); }
 .ai-note { display: flex; gap: 10px; align-items: flex-start; font-size: 0.875rem; color: var(--color-muted); padding: 0 4px; }
 .ai-note svg { color: var(--accent-dark); flex-shrink: 0; margin-top: 2px; }
 

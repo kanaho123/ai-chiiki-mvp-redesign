@@ -9,7 +9,7 @@ export const EXAMPLE_TEXT = "10月23日金曜に大阪産トマト10kg、受渡�
 const EXAMPLES = [
   { label: "大阪産トマトを10kg", text: "大阪産トマトを10kg" },
   { label: "A農園を優先してトマト10kg", text: "A農園を優先してトマト10kg" },
-  { label: "デモの例文", text: EXAMPLE_TEXT },
+  { label: "10月23日・大阪産トマト10kg・8,000円以内", text: EXAMPLE_TEXT },
 ];
 
 export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable, error, emptyHint }: {
