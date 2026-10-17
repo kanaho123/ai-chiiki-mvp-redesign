@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Me } from "../App";
 import { formatJstDateTime, jstTimeOf } from "../lib/dates.js";
 import { Icon } from "../components/Icon";
-import { ProducerConfirmations } from "./ProducerConfirmations";
 
 // 生産者本人の供給一覧。主な操作は「数量を変更」と「公開停止／再開」。
 // 権限（本人の供給か）と競合（version）はサーバーで確認する。
@@ -91,7 +90,6 @@ export default function ProducerPage({ me }: { me: Me }) {
       {data && data.supplies.length === 0 && <p className="muted">まだ供給は登録されていません。</p>}
 
 
-      <ProducerConfirmations />
       {data && <NewSupply data={data} defaultOrigin={me.producer?.originPrefecture ?? ""} onCreated={reload} />}
     </main>
   );

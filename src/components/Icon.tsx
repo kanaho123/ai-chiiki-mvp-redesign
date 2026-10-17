@@ -123,6 +123,24 @@ const PATHS = {
     </>
   ),
   arrowDown: <path d="M12 5v14M6 13l6 6 6-6" />,
+  home: (
+    <>
+      <path d="M4 10.5L12 4l8 6.5" />
+      <path d="M6 9v10.5h4.5v-5.5h3v5.5H18V9" />
+    </>
+  ),
+  chat: (
+    <>
+      <path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v8.5A1.5 1.5 0 0 1 19 17h-8l-4.5 3.5V17H5a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 5 5.5z" />
+      <path d="M8 10h8M8 13h5" />
+    </>
+  ),
+  user: (
+    <>
+      <circle cx="12" cy="8.5" r="3.8" />
+      <path d="M4.5 20c.8-3.8 3.8-6 7.5-6s6.7 2.2 7.5 6" />
+    </>
+  ),
 } as const;
 
 export type IconName = keyof typeof PATHS;

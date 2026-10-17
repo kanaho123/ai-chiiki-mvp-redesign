@@ -1,89 +1,90 @@
-import { useCallback, useEffect, useState } from "react";
-import { Icon, Logo } from "./components/Icon";
-import { formatJstDateTime } from "./lib/dates.js";
-import Onboarding from "./pages/Onboarding";
+import { useEffect } from "react";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigationType } from "react-router";
+import { AppShell, GuestShell, OnboardingShell } from "./components/AppShell";
+import { PATHS } from "./routes/paths";
+import { SessionProvider, useMe } from "./routes/session";
 import Producer from "./pages/Producer";
 import Restaurant from "./pages/Restaurant";
-import RoleSelect from "./pages/RoleSelect";
+import { Demo, Login, Signup, Welcome } from "./pages/Guest";
+import { MyPage, OnboardingPlaceholder, ProducerHome, ProducerRequests, RestaurantConsultations, RestaurantHome } from "./pages/Shells";
+import { FallbackRedirect, GuestGate, OnboardingGate, RoleGate } from "./routes/guards";
 
-// アプリの枠：初回はオンボーディング → 役割選択（ログイン）→ 役割ごとの画面。
-// 権限の判定はサーバー側（/api/me・各 API）で行い、画面は表示を切り替えるだけ。
-export type Me = {
-  id: string;
-  role: "restaurant" | "producer";
-  displayName: string;
-  producer: { id: string; farmName: string; originPrefecture: string } | null;
-};
+// アプリの枠：URL ごとの画面とガード。
+// 権限の判定はサーバー側（/api/me・各 API）で行い、ここでは画面の出し分けだけを行う。
+export type { Me } from "./routes/session";
 
-// オンボーディングを見終わったか（端末ごとの表示の都合だけに使う。読めなければ毎回表示）
-const ONBOARDED_KEY = "ai-chiiki:onboarded:v1";
-const readOnboarded = () => { try { return localStorage.getItem(ONBOARDED_KEY) === "1"; } catch { return false; } };
-const writeOnboarded = () => { try { localStorage.setItem(ONBOARDED_KEY, "1"); } catch {} };
+/** 新しい画面に進んだときは先頭から表示する（戻る・進むのときはブラウザの位置に任せる） */
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  const type = useNavigationType();
+  useEffect(() => {
+    if (type !== "POP") window.scrollTo(0, 0);
+  }, [pathname, type]);
+  return null;
+}
+
+// 既存の仕入れ・在庫の画面は、ログイン中のユーザーを props で受け取る
+const RestaurantBuy = () => <Restaurant me={useMe()} />;
+const ProducerListings = () => <Producer me={useMe()} />;
 
 export default function App() {
-  const [me, setMe] = useState<Me | null | undefined>(undefined); // undefined は確認中
-  const [demoNow, setDemoNow] = useState<string | null>(null); // デモ専用環境の基準日時
-  const [loadError, setLoadError] = useState(false);
-  const [onboarded, setOnboarded] = useState(readOnboarded);
-
-  const refresh = useCallback(async () => {
-    try {
-      const r = await fetch("/api/me", { cache: "no-store" });
-      const d = await r.json().catch(() => ({}));
-      setDemoNow(d.demoNow ?? null);
-      if (r.status === 401) return setMe(null);
-      if (!r.ok) throw new Error();
-      setMe(d.user);
-      setLoadError(false);
-    } catch {
-      setLoadError(true);
-      setMe(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
-    setMe(null);
-  }
-
-  if (me === undefined) return <main className="screen"><p className="muted">読み込み中…</p></main>;
-
-  // 未ログインで初回ならオンボーディング（ログイン済みの人には出さない）
-  if (!me && !onboarded) return <Onboarding onDone={() => { writeOnboarded(); setOnboarded(true); }} />;
-
-  // 役割で画面の主役の色を切り替える（飲食店＝緑、生産者＝オレンジ）。文字でも役割を示す
-  const roleClass = me ? `role-${me.role}` : "role-guest";
-  const roleText = me?.role === "restaurant" ? "飲食店" : "生産者";
-  const name = me?.role === "producer" ? me.producer?.farmName ?? me.displayName : me?.displayName;
-
   return (
-    <div className={roleClass}>
-      <header className="app-header">
-        <div className="app-header-inner">
-          {me ? (
-            <>
-              <Logo size={30} />
-              <span className="who session-name" aria-label={`${name}（${roleText}）として操作中`}>
-                <span className="who-role">{roleText}</span>
-                <span className="who-name">{name}</span>
-              </span>
-              {demoNow && <span className="demo-tag" title={`デモの基準日時 ${formatJstDateTime(demoNow)}`}>デモ</span>}
-              <button type="button" className="icon-btn logout" onClick={logout} aria-label="ログアウト" title="ログアウト"><Icon name="logout" size={24} /></button>
-            </>
-          ) : (
-            <>
-              <span className="app-brand"><Logo />AI地域商社</span>
-              {demoNow && <span className="demo-tag" title={`デモの基準日時 ${formatJstDateTime(demoNow)}`}>デモ</span>}
-            </>
-          )}
-        </div>
-      </header>
-      {loadError && <div className="screen"><div className="alert bad" role="alert"><Icon name="alert" />ログイン状態を確認できませんでした。再読み込みしてください。</div></div>}
-      {!me ? <RoleSelect onLoggedIn={setMe} /> : me.role === "restaurant" ? <Restaurant me={me} /> : <Producer me={me} />}
-    </div>
+    <SessionProvider>
+      <BrowserRouter>
+        <ScrollToTop />
+        <AppRoutes />
+      </BrowserRouter>
+    </SessionProvider>
+  );
+}
+
+/** URL ごとの画面（テストでは MemoryRouter の中で使う） */
+export function AppRoutes() {
+  return (
+    <Routes>
+      <Route element={<GuestGate />}>
+        <Route element={<GuestShell />}>
+          <Route path={PATHS.welcome} element={<Welcome />} />
+          <Route path={PATHS.login} element={<Login />} />
+          <Route path={PATHS.signup} element={<Signup />} />
+          <Route path={PATHS.demo} element={<Demo />} />
+        </Route>
+      </Route>
+
+      <Route path="/restaurant" element={<RoleGate role="restaurant" />}>
+        <Route element={<AppShell />}>
+          <Route index element={<Navigate to={PATHS.restaurant.home} replace />} />
+          <Route path="home" element={<RestaurantHome />} />
+          <Route path="buy" element={<RestaurantBuy />} />
+          <Route path="consultations" element={<RestaurantConsultations />} />
+          <Route path="mypage" element={<MyPage />} />
+          <Route path="*" element={<Navigate to={PATHS.restaurant.home} replace />} />
+        </Route>
+      </Route>
+
+      <Route path="/producer" element={<RoleGate role="producer" />}>
+        <Route element={<AppShell />}>
+          <Route index element={<Navigate to={PATHS.producer.home} replace />} />
+          <Route path="home" element={<ProducerHome />} />
+          <Route path="listings" element={<ProducerListings />} />
+          <Route path="requests" element={<ProducerRequests />} />
+          <Route path="mypage" element={<MyPage />} />
+          <Route path="*" element={<Navigate to={PATHS.producer.home} replace />} />
+        </Route>
+      </Route>
+
+      <Route path={`${PATHS.onboarding.restaurant}/*`} element={<OnboardingGate role="restaurant" />}>
+        <Route element={<OnboardingShell />}>
+          <Route path="*" element={<OnboardingPlaceholder />} />
+        </Route>
+      </Route>
+      <Route path={`${PATHS.onboarding.producer}/*`} element={<OnboardingGate role="producer" />}>
+        <Route element={<OnboardingShell />}>
+          <Route path="*" element={<OnboardingPlaceholder />} />
+        </Route>
+      </Route>
+
+      <Route path="*" element={<FallbackRedirect />} />
+    </Routes>
   );
 }

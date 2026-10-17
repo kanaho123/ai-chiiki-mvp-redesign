@@ -10,6 +10,9 @@
       "maxDuration": 30
     }
   },
+  "rewrites": [
+    { "source": "/((?!api(?:/|$)|assets/).*)", "destination": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/(.*)",
