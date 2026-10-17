@@ -112,7 +112,7 @@ export default function RestaurantPage({ me }: { me: Me }) {
     };
   }, [shown, step, checkVersion]);
 
-  const top = () => setTimeout(() => document.querySelector(".page")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  const top = () => setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 0);
 
   /** STEP 1 → 2：AI で条件の候補を読み取る。失敗しても文章は残し、手入力へ切り替えられる */
   async function extract() {
@@ -204,25 +204,19 @@ export default function RestaurantPage({ me }: { me: Me }) {
 
   const busyLabel = <><span className="spinner" aria-hidden="true" />計算中…</>;
 
+  const stepIndex = ["input", "confirm", "result"].indexOf(step);
+  const stepName = ["希望を入力", "条件を確認", "仕入れ案"][stepIndex];
+  const loading = step === "input" && extracting;
+
   return (
-    <div className="page">
-      <header className="page-head">
-        <p className="page-role"><Icon name="store" />飲食店の仕入れ案</p>
-        {/* 進行状況：1 希望を入力 → 2 条件を確認 → 3 仕入れ案（済んだ段階は ✓、今の段階は色と太字） */}
-        <ol className="steps" aria-label="進行状況">
-          {(["input", "confirm", "result"] as const).map((s, i) => {
-            const cur = ["input", "confirm", "result"].indexOf(step);
-            const state = i < cur ? "done" : i === cur ? "current" : "";
-            return (
-              <li key={s} className={state} aria-current={state === "current" ? "step" : undefined}>
-                <span className="step-no">{state === "done" ? <Icon name="check" size={14} /> : i + 1}</span>
-                {["希望を入力", "条件を確認", "仕入れ案"][i]}
-                {state === "done" && <span className="sr-only">（済）</span>}
-              </li>
-            );
-          })}
-        </ol>
-      </header>
+    <main className={`screen ${loading ? "" : "has-bar"}`}>
+      {/* 進行状況：細い3段のバーと「1/3 希望を入力」 */}
+      {!loading && (
+        <div className="flow-progress" aria-label={`進行状況 ${stepIndex + 1}/3 ${stepName}`}>
+          <div className="flow-bar" aria-hidden="true">{[0, 1, 2].map((k) => <i key={k} className={k <= stepIndex ? "on" : ""} />)}</div>
+          <span className="flow-label">{stepIndex + 1}/3 {stepName}</span>
+        </div>
+      )}
 
       {catalogError && <div className="alert bad" role="alert"><Icon name="alert" />登録データを読み込めませんでした。再読み込みしてください。</div>}
 
@@ -237,10 +231,9 @@ export default function RestaurantPage({ me }: { me: Me }) {
       )}
 
       {step === "result" && shown && (
-        <PlanView shown={shown} freshness={freshness} busy={busy} busyLabel={busyLabel}
+        <PlanView shown={shown} freshness={freshness} busy={busy} busyLabel={busyLabel} error={error}
           onRecalc={() => requestPlan(shown.request)} onEdit={() => editConditions()} onSuggestion={editConditions} />
       )}
-      {step === "result" && error && <div className="alert bad" role="alert"><Icon name="alert" />{error}</div>}
-    </div>
+    </main>
   );
 }

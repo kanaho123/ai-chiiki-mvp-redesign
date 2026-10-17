@@ -62,16 +62,16 @@ export default function ProducerPage({ me }: { me: Me }) {
   }, [reload]);
 
   return (
-    <div className="page">
-      <header className="page-head">
-        <p className="page-role"><Icon name="box" />生産者の方</p>
-        <h1>自分の供給</h1>
-        <p className="lead">{me.producer?.farmName ?? me.displayName}の、今回販売に回せる量（既存の注文分を除いた量）です。数量はいつでも変更できます。</p>
-      </header>
+    <main className="screen">
+      <div className="title-block">
+        <p className="eyebrow">{me.producer?.farmName ?? me.displayName}</p>
+        <h1 className="display">今日出せる量</h1>
+        <p className="lede">販売に回せる量（既存の注文分を除いた量）です。仕入れ案に出ても、数量が自動で減ることはありません。</p>
+      </div>
 
       {loadError && <div className="alert bad" role="alert"><Icon name="alert" />{loadError}</div>}
       {data === null && !loadError && <p className="muted">読み込み中…</p>}
-      <ul className="listing-list" aria-label="供給一覧">
+      <ul className="supply-list" aria-label="供給一覧">
         {data?.supplies.map((s) => (
           <SupplyCard
             key={`${s.id}:${s.version}`}
@@ -88,17 +88,15 @@ export default function ProducerPage({ me }: { me: Me }) {
       </ul>
       {data && data.supplies.length === 0 && <p className="muted">まだ供給は登録されていません。</p>}
 
-      <div className="alert info" role="note">
-        <Icon name="info" />
-        <div>
-          数量の変更・公開停止をすると、飲食店に表示中の仕入れ案は「現在の情報ではない」と表示され、再計算が必要になります。
-        </div>
-      </div>
+      <p className="ai-note"><Icon name="info" size={18} />数量の変更・公開停止をすると、飲食店に表示中の仕入れ案は「現在の情報ではない」と表示され、再計算が必要になります。</p>
 
       {data && <NewSupply data={data} defaultOrigin={me.producer?.originPrefecture ?? ""} onCreated={reload} />}
-    </div>
+    </main>
   );
 }
+
+/** 品目の目印（表示用の絵文字。一覧にない品目は葉物） */
+const ITEM_EMOJI: Record<string, string> = { トマト: "🍅", きゅうり: "🥒", なす: "🍆", にんじん: "🥕", じゃがいも: "🥔", たまねぎ: "🧅" };
 
 function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: string | null; onChanged: (text?: string, updated?: Supply) => void }) {
   const [kg, setKg] = useState(String(s.availableKg));
@@ -123,7 +121,7 @@ function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: stri
     onChanged(text, after);
   }
 
-  // − / ＋ は入力欄の値を 1kg ずつ動かすだけ。送るのは「数量を変更」を押したときの確定値（0〜100kg）
+  // − / ＋ は数量を 1kg ずつ動かすだけ。送るのは主ボタンを押したときの確定値（0〜100kg）
   const step = (d: number) => {
     const cur = Number.isInteger(Number(kg)) && kg !== "" ? Number(kg) : s.availableKg;
     setKg(String(Math.min(100, Math.max(0, cur + d))));
@@ -131,71 +129,53 @@ function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: stri
   const kgId = `kg-${s.id}`;
   const changed = kg !== String(s.availableKg);
   return (
-    <li className={`card listing ${s.published ? "" : "paused"}`}>
-      <div className="listing-top">
-        <div>
-          <div className="listing-item">{s.item.name}<span className="muted" style={{ fontWeight: 500, fontSize: "1rem" }}>（{s.variety.name}）</span></div>
-          <div className="listing-sub">{s.originPrefecture}産・{s.grade === "irregular" ? `規格外：${s.irregularReason}` : "通常品"}</div>
-        </div>
-        <span className={`chip ${s.published ? "chip-on" : "chip-off"}`}>
-          <Icon name={s.published ? "check" : "pause"} size={16} />{s.published ? "公開中" : "公開停止中"}
-        </span>
-      </div>
-
-      <div className="stock-line">
-        <span className="muted">現在の販売可能量</span>
-        <span className="figure stock">{s.availableKg}<small>kg</small></span>
-      </div>
-      <dl className="listing-meta">
-        <dt>単価</dt><dd>{yen(s.priceYenPerKg)}/kg（税込）・最低{s.minKg}kg・1kg刻み</dd>
-        <dt>受渡枠</dt><dd>{slotText(s.slot)}</dd>
-        <dt>最終更新</dt><dd>{formatJstDateTime(s.updatedAt)}</dd>
-      </dl>
-
+    <li className={`supply listing ${s.published ? "" : "paused"}`}>
       {done && (
-        <div className="alert ok" role="status">
-          <Icon name="check" />
-          <div>
-            <strong>{done}</strong>
-            <p className="update-note">仕入れ案に表示されても、数量が自動で減ることはありません。</p>
-          </div>
+        <div className="supply-updated alert ok" role="status">
+          <Icon name="check" size={22} />
+          <div><strong>{done}</strong><p>仕入れ案に表示されても、数量が自動で減ることはありません。</p></div>
         </div>
       )}
-
-      <form className="field" onSubmit={(e) => { e.preventDefault(); patch({ availableKg: kg }); }}>
-        <label className="label" htmlFor={kgId}>販売可能量を変更</label>
-        <div className="stepper">
-          <button type="button" onClick={() => step(-1)} aria-label="1kg減らす" disabled={busy}>−</button>
-          <span className="with-unit">
-            <input id={kgId} type="number" inputMode="numeric" min={0} max={100} step={1} value={kg} onChange={(e) => setKg(e.target.value)} aria-label={`${s.item.name}の販売可能量`} />
-            <em>kg</em>
-          </span>
-          <button type="button" onClick={() => step(1)} aria-label="1kg増やす" disabled={busy}>＋</button>
+      <div className="supply-body">
+        <div className="supply-head">
+          <span className="supply-emoji" aria-hidden="true">{ITEM_EMOJI[s.item.name] ?? "🥬"}</span>
+          <span className="supply-title"><b>{s.item.name}</b><small>{s.variety.name}・{s.originPrefecture}産・{s.grade === "irregular" ? `規格外：${s.irregularReason}` : "通常品"}</small></span>
+          <span className={`chip ${s.published ? "chip-on" : "chip-off"}`}><Icon name={s.published ? "check" : "pause"} size={14} />{s.published ? "公開中" : "公開停止中"}</span>
         </div>
-        <button type="submit" className="primary block" disabled={busy || !changed} aria-busy={busy}>
-          {busy ? <><span className="spinner" aria-hidden="true" />更新中…</> : changed ? `${s.availableKg}kg → ${kg || "?"}kg に変更する` : "数量を変更"}
-        </button>
-      </form>
-      {msg && (
-        <div className={`alert ${msg.tone}`} role="alert">
-          <Icon name="alert" />
-          <div>
-            {msg.text}
-            {msg.conflict && (
-              <button type="button" className="secondary" style={{ marginTop: 8 }} onClick={() => onChanged()}>
-                <Icon name="refresh" size={16} />最新情報を読み込む
-              </button>
-            )}
+
+        <div className="supply-now"><span>現在</span><span className="figure stock">{s.availableKg}<small>kg</small></span></div>
+
+        <form onSubmit={(e) => { e.preventDefault(); patch({ availableKg: kg }); }} style={{ display: "grid", gap: 14 }}>
+          <label className="sr-only" htmlFor={kgId}>販売可能量を変更</label>
+          <div className="stepper">
+            <button type="button" onClick={() => step(-1)} aria-label="1kg減らす" disabled={busy}>−</button>
+            <span className="with-unit">
+              <input id={kgId} type="number" inputMode="numeric" min={0} max={100} step={1} value={kg} onChange={(e) => setKg(e.target.value)} aria-label={`${s.item.name}の販売可能量`} />
+              <em>kg</em>
+            </span>
+            <button type="button" onClick={() => step(1)} aria-label="1kg増やす" disabled={busy}>＋</button>
           </div>
-        </div>
-      )}
+          <button type="submit" className="btn-primary btn-block" disabled={busy || !changed} aria-busy={busy}>
+            {busy ? <><span className="spinner" aria-hidden="true" />更新中…</> : changed ? `${kg || "?"}kgに変更する` : "数量を変えると更新できます"}
+          </button>
+        </form>
+        {msg && (
+          <div className={`alert ${msg.tone}`} role="alert">
+            <Icon name="alert" />
+            <div>
+              {msg.text}
+              {msg.conflict && <button type="button" className="btn-link" style={{ paddingLeft: 0 }} onClick={() => onChanged()}><Icon name="refresh" size={16} />最新情報を読み込む</button>}
+            </div>
+          </div>
+        )}
 
-      <div className="listing-foot">
-        <span className="hint">{s.published ? "仕入れ案に使われます" : "仕入れ案に使われません（数量はそのまま残ります）"}</span>
-        <button className={s.published ? "danger-ghost" : "secondary"} onClick={() => patch({ published: !s.published })} disabled={busy}>
-          <Icon name={s.published ? "pause" : "play"} size={16} />
-          {s.published ? "公開を停止する" : "公開を再開する"}
-        </button>
+        <p className="supply-meta"><span>{yen(s.priceYenPerKg)}/kg（税込）</span><span>最低{s.minKg}kg・1kg刻み</span><span>{slotText(s.slot)}</span><span>更新 {formatJstDateTime(s.updatedAt)}</span></p>
+        <div className="supply-foot listing-foot">
+          <span className="muted small">{s.published ? "仕入れ案に使われます" : "仕入れ案に使われません（数量はそのまま）"}</span>
+          <button type="button" className={s.published ? "btn-danger-link" : "btn-secondary"} onClick={() => patch({ published: !s.published })} disabled={busy}>
+            <Icon name={s.published ? "pause" : "play"} size={16} />{s.published ? "公開を停止する" : "公開を再開する"}
+          </button>
+        </div>
       </div>
     </li>
   );
@@ -230,14 +210,13 @@ function NewSupply({ data, defaultOrigin, onCreated }: { data: Data; defaultOrig
   }
 
   return (
-    <details className="more" style={{ marginTop: 32 }}>
+    <details className="more">
       <summary>
-        <span className="more-title">新しく供給を登録する</span>
-        <span className="more-value">品目・品種・規格・産地・数量・単価・受渡枠を選びます</span>
-        <Icon name="chevronDown" className="chev" />
+        <span>新しく供給を登録する</span>
+        <Icon name="chevronDown" />
       </summary>
       <form className="more-body" onSubmit={submit}>
-        <div className="row">
+        <div className="row2">
           <label className="field">
             <span className="label">品目</span>
             <select value={f.itemId} onChange={(e) => setF((x) => ({ ...x, itemId: e.target.value, varietyId: "" }))} aria-required="true">
@@ -253,7 +232,7 @@ function NewSupply({ data, defaultOrigin, onCreated }: { data: Data; defaultOrig
             </select>
           </label>
         </div>
-        <div className="row">
+        <div className="row2">
           <label className="field">
             <span className="label">規格</span>
             <select value={f.grade} onChange={(e) => set("grade", e.target.value as NewForm["grade"])}>
@@ -275,7 +254,7 @@ function NewSupply({ data, defaultOrigin, onCreated }: { data: Data; defaultOrig
             <input value={f.irregularReason} onChange={(e) => set("irregularReason", e.target.value)} maxLength={30} placeholder="例：形の不揃い" />
           </label>
         )}
-        <div className="row">
+        <div className="row2">
           <label className="field">
             <span className="label">販売可能量</span>
             <span className="with-unit"><input type="number" inputMode="numeric" min={0} max={100} step={1} value={f.availableKg} onChange={(e) => set("availableKg", e.target.value)} /><em>kg</em></span>
@@ -299,13 +278,13 @@ function NewSupply({ data, defaultOrigin, onCreated }: { data: Data; defaultOrig
         </label>
         <div className="field">
           <span className="label" id="pub-title">すぐに公開する？</span>
-          <div className="choice" role="radiogroup" aria-labelledby="pub-title">
-            <label><input type="radio" name="pub" checked={f.published === "yes"} onChange={() => set("published", "yes")} /><span>公開する<small>仕入れ案に使われます</small></span></label>
-            <label><input type="radio" name="pub" checked={f.published === "no"} onChange={() => set("published", "no")} /><span>まだ公開しない<small>下書きとして保持</small></span></label>
+          <div className="seg" role="radiogroup" aria-labelledby="pub-title">
+            <label><input type="radio" name="pub" checked={f.published === "no"} onChange={() => set("published", "no")} />まだ公開しない</label>
+            <label><input type="radio" name="pub" checked={f.published === "yes"} onChange={() => set("published", "yes")} />公開する</label>
           </div>
         </div>
         {msg && <div className={`alert ${msg.tone}`} role="status"><Icon name={msg.tone === "ok" ? "check" : "alert"} />{msg.text}</div>}
-        <button type="submit" className="primary block" disabled={busy} aria-busy={busy}>登録する</button>
+        <button type="submit" className="btn-primary btn-block" disabled={busy} aria-busy={busy}>登録する</button>
       </form>
     </details>
   );

@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { Icon, Logo } from "./components/Icon";
 import { formatJstDateTime } from "./lib/dates.js";
-import Login from "./pages/Login";
+import Onboarding from "./pages/Onboarding";
 import Producer from "./pages/Producer";
 import Restaurant from "./pages/Restaurant";
+import RoleSelect from "./pages/RoleSelect";
 
-// ログイン状態で入口を分ける。権限の判定はサーバー側（/api/me・各 API）で行い、画面は表示を切り替えるだけ。
+// アプリの枠：初回はオンボーディング → 役割選択（ログイン）→ 役割ごとの画面。
+// 権限の判定はサーバー側（/api/me・各 API）で行い、画面は表示を切り替えるだけ。
 export type Me = {
   id: string;
   role: "restaurant" | "producer";
@@ -13,10 +15,16 @@ export type Me = {
   producer: { id: string; farmName: string; originPrefecture: string } | null;
 };
 
+// オンボーディングを見終わったか（端末ごとの表示の都合だけに使う。読めなければ毎回表示）
+const ONBOARDED_KEY = "ai-chiiki:onboarded:v1";
+const readOnboarded = () => { try { return localStorage.getItem(ONBOARDED_KEY) === "1"; } catch { return false; } };
+const writeOnboarded = () => { try { localStorage.setItem(ONBOARDED_KEY, "1"); } catch {} };
+
 export default function App() {
   const [me, setMe] = useState<Me | null | undefined>(undefined); // undefined は確認中
   const [demoNow, setDemoNow] = useState<string | null>(null); // デモ専用環境の基準日時
   const [loadError, setLoadError] = useState(false);
+  const [onboarded, setOnboarded] = useState(readOnboarded);
 
   const refresh = useCallback(async () => {
     try {
@@ -42,48 +50,39 @@ export default function App() {
     setMe(null);
   }
 
+  if (me === undefined) return <main className="screen"><p className="muted">読み込み中…</p></main>;
+
+  // 未ログインで初回ならオンボーディング（ログイン済みの人には出さない）
+  if (!me && !onboarded) return <Onboarding onDone={() => { writeOnboarded(); setOnboarded(true); }} />;
+
   // 役割で画面の主役の色を切り替える（飲食店＝緑、生産者＝オレンジ）。文字でも役割を示す
   const roleClass = me ? `role-${me.role}` : "role-guest";
+  const roleText = me?.role === "restaurant" ? "飲食店" : "生産者";
+  const name = me?.role === "producer" ? me.producer?.farmName ?? me.displayName : me?.displayName;
 
   return (
     <div className={roleClass}>
-      <header className="site-header">
-        <div className="site-header-inner">
-          <span className="brand"><Logo />AI地域商社</span>
-          <span className="demo-tag">
-            {demoNow ? (
-              <>
-                <span className="tag-long">デモ基準日時 {formatJstDateTime(demoNow)}・架空データ</span>
-                <span className="tag-short">デモ {formatJstDateTime(demoNow).replace(/月/, "/").replace(/日/, "")}・架空</span>
-              </>
-            ) : "デモ・架空データ"}
-          </span>
-          {me && (
-            <span className="session-box">
-              {/* いま誰として操作しているかを常に表示する（飲食店⇔生産者の切り替えを見失わない） */}
-              <span className={`session-name role-${me.role}`} aria-label={`${me.displayName}（${me.role === "restaurant" ? "飲食店" : "生産者"}）として操作中`}>
-                <Icon name={me.role === "restaurant" ? "store" : "box"} size={16} />
-                <span className="session-role">{me.role === "restaurant" ? "飲食店" : "生産者"}</span>
-                <span className="session-display">{me.displayName}</span>
-                <span className="session-suffix">として操作中</span>
+      <header className="app-header">
+        <div className="app-header-inner">
+          {me ? (
+            <>
+              <span className="who session-name" aria-label={`${name}（${roleText}）として操作中`}>
+                <span className="who-icon" aria-hidden="true"><Icon name={me.role === "restaurant" ? "store" : "sprout"} /></span>
+                <span className="who-text">
+                  <span className="who-role">{roleText}</span>
+                  <span className="who-name">{name}</span>
+                </span>
               </span>
-              <button type="button" className="ghost" onClick={logout}>ログアウト</button>
-            </span>
+              <button type="button" className="btn-quiet logout" onClick={logout}><Icon name="logout" size={18} />ログアウト</button>
+            </>
+          ) : (
+            <span className="app-brand"><Logo />AI地域商社</span>
           )}
         </div>
+        {demoNow && <p className="demo-strip"><span>デモ・架空データ・基準 {formatJstDateTime(demoNow).replace(/月/, "/").replace(/日/, "")}</span></p>}
       </header>
-      <main className="container">
-        {loadError && <div className="alert bad" role="alert"><Icon name="alert" />ログイン状態を確認できませんでした。再読み込みしてください。</div>}
-        {me === undefined ? (
-          <p className="muted">読み込み中…</p>
-        ) : me === null ? (
-          <Login onLoggedIn={setMe} />
-        ) : me.role === "restaurant" ? (
-          <Restaurant me={me} />
-        ) : (
-          <Producer me={me} />
-        )}
-      </main>
+      {loadError && <div className="screen"><div className="alert bad" role="alert"><Icon name="alert" />ログイン状態を確認できませんでした。再読み込みしてください。</div></div>}
+      {!me ? <RoleSelect onLoggedIn={setMe} /> : me.role === "restaurant" ? <Restaurant me={me} /> : <Producer me={me} />}
     </div>
   );
 }

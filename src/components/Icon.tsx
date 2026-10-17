@@ -64,6 +64,56 @@ const PATHS = {
     </>
   ),
   pause: <path d="M9 6v12M15 6v12" />,
+  // 仕入れ（かご）
+  basket: (
+    <>
+      <path d="M4 10h16l-1.6 8.2a2 2 0 0 1-2 1.8H7.6a2 2 0 0 1-2-1.8L4 10z" />
+      <path d="M8.5 10l3.5-5.5L15.5 10M9.5 14v2.5M14.5 14v2.5" />
+    </>
+  ),
+  // 芽・農園
+  sprout: (
+    <>
+      <path d="M12 20v-8" />
+      <path d="M12 12C12 8 9.5 5.5 5 5.5c0 4 2.5 6.5 7 6.5z" />
+      <path d="M12 14.5c0-3.5 2.3-6 6.5-6 0 3.6-2.3 6-6.5 6z" />
+      <path d="M7 20h10" />
+    </>
+  ),
+  // AI が言葉を整理する（きらめき）
+  sparkle: (
+    <>
+      <path d="M12 3.5l1.7 4.8 4.8 1.7-4.8 1.7L12 16.5l-1.7-4.8L5.5 10l4.8-1.7L12 3.5z" />
+      <path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z" />
+    </>
+  ),
+  // 注文ではない検討用の案（クリップボード）
+  clipboard: (
+    <>
+      <rect x="5" y="4.5" width="14" height="16" rx="2.5" />
+      <path d="M9 4.5h6v2.5H9zM8.5 12l2.3 2.3 4.7-4.6" />
+    </>
+  ),
+  truck: (
+    <>
+      <path d="M3 6.5h11v9.5H3zM14 10h3.8l3.2 3.2V16h-7" />
+      <circle cx="7" cy="17.5" r="1.8" />
+      <circle cx="17" cy="17.5" r="1.8" />
+    </>
+  ),
+  yen: <path d="M7 4.5l5 7.5 5-7.5M12 12v8M8 13h8M8 16.5h8" />,
+  leaf: (
+    <>
+      <path d="M5 19c0-8 5-13.5 14-14 .2 9-5.5 14-14 14z" />
+      <path d="M5 19c3-4 6-6.5 10-8.5" />
+    </>
+  ),
+  logout: (
+    <>
+      <path d="M14 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2H14" />
+      <path d="M10.5 12h10M17 8.5l3.5 3.5-3.5 3.5" />
+    </>
+  ),
   play: <path d="M8 5.5v13l10-6.5-10-6.5z" />,
 } as const;
 
@@ -93,7 +143,7 @@ export function Icon({ name, size = 20, ...rest }: { name: IconName; size?: numb
 export function Logo({ size = 28 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-      <rect width="32" height="32" rx="8" fill="#176B45" />
+      <rect width="32" height="32" rx="9" fill="#256B42" />
       <rect x="7" y="9" width="8" height="3" rx="1.5" fill="#fff" />
       <rect x="7" y="14.5" width="6" height="3" rx="1.5" fill="#fff" />
       <rect x="7" y="20" width="4" height="3" rx="1.5" fill="#fff" />
