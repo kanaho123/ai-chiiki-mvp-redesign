@@ -66,15 +66,13 @@ export default function App() {
         <div className="app-header-inner">
           {me ? (
             <>
+              <Logo size={30} />
               <span className="who session-name" aria-label={`${name}（${roleText}）として操作中`}>
-                <span className="who-icon" aria-hidden="true"><Icon name={me.role === "restaurant" ? "store" : "sprout"} /></span>
-                <span className="who-text">
-                  <span className="who-role">{roleText}</span>
-                  <span className="who-name">{name}</span>
-                </span>
+                <span className="who-role">{roleText}</span>
+                <span className="who-name">{name}</span>
               </span>
               {demoNow && <span className="demo-tag" title={`デモの基準日時 ${formatJstDateTime(demoNow)}`}>デモ</span>}
-              <button type="button" className="header-btn logout" onClick={logout}>ログアウト</button>
+              <button type="button" className="icon-btn logout" onClick={logout} aria-label="ログアウト" title="ログアウト"><Icon name="logout" size={24} /></button>
             </>
           ) : (
             <>

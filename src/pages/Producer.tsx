@@ -108,7 +108,7 @@ function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: stri
     const before = r.data.before!;
     const after = r.data.supply!;
     const text = body.availableKg !== undefined
-      ? `${after.availableKg}kgに変更しました（前は${before.availableKg}kg）`
+      ? `${before.availableKg}kg → ${after.availableKg}kg に更新しました`
       : after.published ? "公開を再開しました（仕入れ案に使われます）" : "公開を止めました（仕入れ案に使われません）";
     onChanged(text, after);
   }
@@ -125,29 +125,25 @@ function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: stri
       <div className="supply-head">
         <span className="supply-icon" aria-hidden="true"><Icon name="leaf" size={24} /></span>
         <h2 className="supply-title">{s.item.name}<small>{s.originPrefecture}産・{s.grade === "irregular" ? `規格外（${s.irregularReason}）` : "通常品"}</small></h2>
-        <span className={`state-tag ${s.published ? "on" : "off"}`}>{s.published ? "公開中" : "停止中"}</span>
+        
       </div>
       {done && <p className="supply-updated" role="status"><Icon name="check" size={22} strokeWidth={2.4} /><strong>{done}</strong></p>}
 
       {/* 現在 → 変更後（いちばん大きい数字）→ 更新 */}
       <form className="qty-tool" onSubmit={(e) => { e.preventDefault(); patch({ availableKg: kg }); }}>
-        <div className="qty-pair">
-          <div className="supply-now">
-            <span className="qty-label">現在</span>
-            <span className="figure stock">{s.availableKg}<small>kg</small></span>
-          </div>
-          <Icon name="arrowRight" size={26} strokeWidth={2.2} className="qty-arrow" />
-          <label className={`qty-next ${changed ? "changed" : ""}`} htmlFor={kgId}>
+        <p className="supply-now"><span className="qty-label">現在</span><span className="figure stock">{s.availableKg}<small>kg</small></span></p>
+        <div className={`qty-panel ${changed ? "changed" : ""}`}>
+          <label className="qty-next" htmlFor={kgId}>
             <span className="qty-label">変更後</span>
             <span className="with-unit">
               <input id={kgId} type="number" inputMode="numeric" min={0} max={100} step={1} value={kg} onChange={(e) => setKg(e.target.value)} aria-label={`${s.item.name}の変更後の量`} />
               <em>kg</em>
             </span>
           </label>
-        </div>
-        <div className="stepper">
-          <button type="button" onClick={() => step(-1)} aria-label="1kg減らす" disabled={busy}><Icon name="minus" size={26} strokeWidth={2.4} />1kg</button>
-          <button type="button" onClick={() => step(1)} aria-label="1kg増やす" disabled={busy}><Icon name="plus" size={26} strokeWidth={2.4} />1kg</button>
+          <div className="stepper">
+            <button type="button" onClick={() => step(-1)} aria-label="1kg減らす" disabled={busy}><Icon name="minus" size={28} strokeWidth={2.4} /></button>
+            <button type="button" onClick={() => step(1)} aria-label="1kg増やす" disabled={busy}><Icon name="plus" size={28} strokeWidth={2.4} /></button>
+          </div>
         </div>
         <button type="submit" className="btn-primary btn-block" disabled={busy || !changed} aria-busy={busy}>
           {busy ? <><span className="spinner" aria-hidden="true" />変更しています…</> : changed ? `${kg || "?"}kgに変更する` : "量を変えると更新できます"}
@@ -170,7 +166,7 @@ function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: stri
       </p>
       <div className="publish-row">
         <p className={`publish-state ${s.published ? "on" : "off"}`}><b>{s.published ? "公開中" : "公開を停止中"}</b>{s.published ? "飲食店に表示されています" : "飲食店には表示されません"}</p>
-        <button type="button" className="btn-secondary btn-block" onClick={() => patch({ published: !s.published })} disabled={busy}>
+        <button type="button" className="btn-secondary publish-btn" onClick={() => patch({ published: !s.published })} disabled={busy}>
           {s.published ? "公開を止める" : "公開を再開する"}
         </button>
       </div>
