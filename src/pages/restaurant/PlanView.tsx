@@ -1,13 +1,14 @@
-import { Fragment } from "react";
 import { formatJstDateTime, jstTimeOf } from "../../lib/dates.js";
-import { EXCLUSION_TEXT, headlineText, NOTICE_TEXT, rankingText, REASON_TEXT, STATUS_TEXT } from "../../lib/reasons.js";
+import { rankingText } from "../../lib/reasons.js";
 import type { Suggestion } from "../../lib/suggest.js";
 import { BottomBar } from "../../components/BottomBar";
 import { Icon } from "../../components/Icon";
+import { exclusionSentence, PLAIN_NOTICE, PLAIN_REASON } from "./plain-text";
 import type { Freshness, Shown } from "./types";
 
-// STEP 3：仕入れ案（仕入れ票）。状態・結論 → 明細 → 合計 → この案になった理由 → 使わなかった供給。
+// STEP 3：仕入れ案。結論（状態と、何kg・何円か）→ 内訳（農家ごと）→ 金額 → 理由 → 候補に入らなかった農家。
 // 数量・金額・状態・理由はすべてサーバーの通常ロジックの結果をそのまま表示する（AI は関与せず、画面でも判断を足さない）。
+// 文言だけは画面用に平易な言葉へ置き換える（plain-text.ts。意味は変えない）。
 
 const yen = (n: number) => `${n.toLocaleString("ja-JP")}円`;
 
@@ -31,37 +32,41 @@ export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, o
   const ok = plan.status === "MATCHED" && !stale;
   const hasPlan = plan.allocations.length > 0;
   const short = plan.status === "NOT_MATCHED" && hasPlan && plan.shortageKg > 0;
+  const overBudget = plan.reasonCodes.includes("OVER_BUDGET");
   const ranking = rankingText(plan.rankingReason);
   const lastUpdate = plan.supplySnapshot.length ? formatJstDateTime(plan.supplySnapshot.map((s) => s.updatedAt).sort().at(-1)!) : "—";
 
-  // 状態は色だけでなく、アイコンと言葉でも伝える。不足・確認待ちに成功アイコン・成功色は使わない
-  const status = freshness === "stale" ? "無効：この仕入れ案は現在の情報ではありません"
-    : freshness === "checking" ? "最新の情報か確認中…" : STATUS_TEXT[plan.status];
-  // 状態ラベル：意味がそのまま分かる短い言葉（色だけに頼らない）
-  const statusLabel = freshness === "stale" ? "無効" : freshness === "checking" ? "確認中"
-    : !hasPlan ? "該当なし" : plan.status === "MATCHED" ? "登録条件に適合"
-      : plan.status === "NEEDS_CONFIRMATION" ? "確認が必要" : short ? `${plan.shortageKg}kg不足` : STATUS_TEXT[plan.status];
-  const statusTone = stale ? "stale" : ok ? "ok" : plan.status === "NEEDS_CONFIRMATION" ? "confirm" : "warn";
-  const title = !hasPlan ? "この条件で組める案はありません"
-    : plan.status === "MATCHED" ? `${plan.fulfilledKg}kg 揃いました`
-      : plan.status === "NEEDS_CONFIRMATION" ? "確認が必要です"
-        : short ? `あと${plan.shortageKg}kg足りません` : headlineText(plan);
-  const sub = !hasPlan ? null : plan.status === "MATCHED" ? null
-    : plan.status === "NEEDS_CONFIRMATION" ? `${plan.fulfilledKg}kgの参考案があります` : `${plan.fulfilledKg}kgまで提案できます`;
+  // 状態バー：色と短い言葉で結果を示す（成功＝緑、足りない・案なし＝オレンジ、確認待ち＝黄、古い案＝灰）
+  const tone = stale ? "stale" : ok ? "ok" : plan.status === "NEEDS_CONFIRMATION" ? "confirm" : "warn";
+  const statusLabel = freshness === "stale" ? "この案は古くなりました" : freshness === "checking" ? "最新の情報か確認しています"
+    : !hasPlan ? "案がありません" : plan.status === "MATCHED" ? "揃いました"
+      : plan.status === "NEEDS_CONFIRMATION" ? "確認が必要です" : short ? "量が足りません" : "条件に合っていません";
+  const statusIcon = stale ? "refresh" : ok ? "check" : "alert";
 
-  // この案になった理由（既存の結果データを文章にするだけ）
+  // 結論の文：結果だけ読んでも意味が分かるように
+  const title = !hasPlan ? (plan.reasonCodes.includes("TOO_MANY_SUPPLIES") ? "条件を絞ってください" : "この条件で組める案はありません")
+    : plan.status === "MATCHED" ? `希望の${plan.requestedKg}kgを揃えられます`
+      : plan.status === "NEEDS_CONFIRMATION" ? "確認が必要です"
+        : short ? `あと${plan.shortageKg}kg足りません` : "条件に合う案になっていません";
+  const sub = !hasPlan || plan.status === "MATCHED" ? null
+    : plan.status === "NEEDS_CONFIRMATION" ? `${plan.fulfilledKg}kgの案がありますが、確認が必要です`
+      : overBudget ? `予算内では${plan.fulfilledKg}kgまでなら用意できます` : `${plan.fulfilledKg}kgまでなら用意できます`;
+  const scope = !ok && hasPlan && plan.status === "NOT_MATCHED" && !overBudget ? "この条件で、最大3つの農家まで組み合わせて探した結果です" : null;
+
+  // この農家になった理由（既存の結果データを平易な文にするだけ）
   const why: { text: string; caution?: boolean }[] = [];
-  for (const a of plan.allocations) if (a.priorTrade) why.push({ text: `${a.producerName}は取引経験あり（店の申告）` });
+  for (const a of plan.allocations) if (a.priorTrade) why.push({ text: `${a.producerName}は取引経験あり（お店の申告）` });
   if (ranking) why.push({ text: ranking });
-  if (hasPlan && plan.slot) why.push({ text: `同じ受渡枠（${plan.slot.label}・${plan.slot.placeName}）で受け取れる` });
+  if (hasPlan && plan.slot) why.push({ text: `同じ時間・場所（${plan.slot.label}・${plan.slot.placeName}）で受け取れる` });
   for (const c of plan.reasonCodes) {
     const names = c === "PARTICIPATION_UNCONFIRMED" && plan.unconfirmedParticipants.length > 0 ? `（${plan.unconfirmedParticipants.map((u) => u.producerName).join("・")}）` : "";
-    why.push({ text: REASON_TEXT[c] + names, caution: true });
+    why.push({ text: PLAIN_REASON[c] + names, caution: true });
   }
-  if (plan.overBudget) why.push({ text: `予算を外すと${plan.overBudget.kg}kgの案は${plan.overBudget.totalYen === null ? "総額未確定" : `総額${yen(plan.overBudget.totalYen)}`}です（予算 ${yen(plan.budgetYen ?? 0)}）`, caution: true });
-  for (const n of plan.notices) why.push({ text: NOTICE_TEXT[n], caution: true });
+  if (plan.overBudget) why.push({ text: `予算を超えてもよい場合、${plan.overBudget.kg}kgの案は${plan.overBudget.totalYen === null ? "合計が未確定" : `合計${yen(plan.overBudget.totalYen)}`}です（予算 ${yen(plan.budgetYen ?? 0)}）`, caution: true });
+  for (const n of plan.notices) why.push({ text: PLAIN_NOTICE[n], caution: true });
 
   const editIsPrimary = !stale && plan.status !== "MATCHED";
+  const recalcLabel = busy ? busyLabel : <><Icon name="refresh" />最新の情報で計算し直す</>;
 
   return (
     <section className="result" aria-live="polite" aria-labelledby="result-title" style={{ display: "grid", gap: "var(--gap)" }}>
@@ -69,153 +74,131 @@ export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, o
 
       {freshness === "stale" && (
         <div className="alert bad stale-banner" role="alert">
-          <Icon name="alert" />
+          <Icon name="alert" size={22} />
           <div style={{ display: "grid", gap: 10 }}>
-            <strong className="stale-title">供給情報が更新されています</strong>
-            <p>この仕入れ案は現在の情報ではありません。下の数量・金額は使えません。</p>
-            <button className="btn-primary btn-block" onClick={onRecalc} disabled={busy} aria-busy={busy}>
-              {busy ? busyLabel : <><Icon name="refresh" />最新情報で再計算</>}
-            </button>
+            <strong className="stale-title">在庫の情報が変わりました</strong>
+            <p>この案は今の情報ではありません。下の量と金額は使えません。</p>
+            <button className="btn-primary btn-block" onClick={onRecalc} disabled={busy} aria-busy={busy}>{recalcLabel}</button>
           </div>
         </div>
       )}
 
       <div className={`result-body ${stale ? "is-stale" : ""}`}>
-        {/* 1. 結論（上部の色面）：成功は深緑、不足・該当なしは淡いオレンジ、確認待ちは淡い黄、無効は灰。
-            成功時の強さは 金額 ＞「10kg 揃いました」＞ 農家の内訳、不足時は「あと1kg足りません」が最も強い */}
-        <header className={`hero band ${statusTone}`} aria-labelledby="hero-title">
-          <div className="hero-top">
-            <p className={`status-box ${statusTone}`} title={status}><span className="sr-only">状態：</span>{statusLabel}</p>
-            {hasPlan && plan.slot && <p className="hero-slot">{formatJstDateTime(plan.slot.startAt)}〜{jstTimeOf(plan.slot.endAt)}・{plan.slot.placeName}（{plan.slot.label}）</p>}
-          </div>
-          <p className="hero-title" id="hero-title">{freshness === "stale" ? "【無効】" : freshness === "checking" ? "【確認中】" : ""}{title}</p>
-          {sub && <p className="hero-sub">{sub}</p>}
+        {/* 1. 結論：状態バー → 結論の文 → 提案できる量・合計（いちばん大きい数字） */}
+        <section className={`outcome ${tone}`} aria-labelledby="outcome-title">
+          <p className="status-bar"><Icon name={statusIcon} size={22} strokeWidth={2.4} /><span className="sr-only">状態：</span>{statusLabel}</p>
+          <p className="outcome-title" id="outcome-title">{freshness === "stale" ? "【無効】" : freshness === "checking" ? "【確認中】" : ""}{title}</p>
+          {sub && <p className="outcome-sub">{sub}</p>}
           {hasPlan && (
-            <p className="hero-amount">
-              {plan.totalYen === null ? <span className="pending">総額未確定（確認が必要）</span> : <Num stale={stale}>{yen(plan.totalYen)}</Num>}
-              <small>合計（税込・受渡費込み）</small>
-            </p>
+            <dl className="key-figures">
+              <div><dt>提案できる量</dt><dd className="kg"><Num stale={stale}>{plan.fulfilledKg}kg</Num></dd></div>
+              <div><dt>合計（税込）</dt><dd className="yen">{plan.totalYen === null ? <span className="pending">未確定</span> : <Num stale={stale}>{yen(plan.totalYen)}</Num>}</dd></div>
+            </dl>
           )}
-          {hasPlan && <p className="hero-lineup"><span className="num">{plan.allocations.map((x) => `${x.producerName} ${x.kg}kg`).join(" ＋ ")}</span></p>}
-          {!ok && <p className="hero-scope headline">{headlineText(plan)}</p>}
-        </header>
-
-        {/* 2〜4. 明細：カードにせず、余白・罫線・右揃えの数字で示す（合計は上部の根拠として控えめに） */}
-        <article className={`slip band ${statusTone}`} aria-labelledby="slip-title">
-          <h3 className="slip-title" id="slip-title">明細{hasPlan && <span>{plan.producerCount}農家・登録情報による計算</span>}</h3>
-
-          {hasPlan && (
-            <>
-              <table className="slip-table">
-                <caption className="sr-only">農家別の内訳（{plan.producerCount}農家）</caption>
-                <thead>
-                  <tr><th scope="col">生産者</th><th scope="col">数量</th><th scope="col">単価/kg</th><th scope="col">金額</th></tr>
-                </thead>
-                <tbody>
-                  {plan.allocations.map((a) => (
-                    <Fragment key={a.supplyId}>
-                      <tr className="farm">
-                        <th scope="row"><span className="farm-name">{a.producerName}</span></th>
-                        <td className="qty"><span className="num">{a.kg}kg</span></td>
-                        <td><span className="num">{a.priceYenPerKg.toLocaleString("ja-JP")}円</span></td>
-                        <td className="amount"><span className="num">{yen(a.subtotalYen)}</span></td>
-                      </tr>
-                      <tr className="farm-sub-row">
-                        <td colSpan={4}>
-                          <span className="farm-sub">
-                            <span className={`chip ${a.priorTrade ? "chip-prior" : "chip-first"}`}>{a.priorTrade ? "取引経験あり（店の申告）" : "初回"}</span>
-                            {a.irregularReason && <span className="chip chip-warn">規格外：{a.irregularReason}</span>}
-                            {!a.participationConfirmed && <span className="chip chip-need">受渡枠への参加確認が必要</span>}
-                            <span className="farm-updated">供給更新 {formatJstDateTime(a.updatedAt)}</span>
-                          </span>
-                        </td>
-                      </tr>
-                    </Fragment>
-                  ))}
-                </tbody>
-              </table>
-
-              <dl className="slip-totals" aria-label="数量と金額">
-                <dt>希望数量</dt><dd>{plan.requestedKg}kg</dd>
-                <dt>提案数量</dt><dd><Num stale={stale}>{plan.fulfilledKg}kg</Num></dd>
-                {plan.shortageKg > 0 && (<><dt className="short-row">不足</dt><dd className="short-row short">{plan.shortageKg}kg</dd></>)}
-                <span className="totals-rule" aria-hidden="true" />
-                <dt>商品代（税込）</dt><dd><Num stale={stale}>{yen(plan.productSubtotalYen)}</Num></dd>
-                <dt>受渡費（1案に1回）</dt><dd>{plan.handoverFeeYen === null ? "未確認" : <Num stale={stale}>{yen(plan.handoverFeeYen)}</Num>}</dd>
-              </dl>
-              <div className="slip-total">
-                <span>合計<small>税込・受渡費込み</small></span>
-                {plan.totalYen === null ? <b className="pending">未確定（確認が必要）</b> : <b><Num stale={stale}>{yen(plan.totalYen)}</Num></b>}
-              </div>
-              {plan.budgetYen !== null && <p className="slip-budget muted small">予算 {yen(plan.budgetYen)}{plan.budgetStatus === "UNKNOWN" ? "（判定保留）" : "以内"}</p>}
-            </>
+          {scope && <p className="outcome-note">{scope}</p>}
+          {hasPlan && plan.slot && (
+            <p className="outcome-slot"><b>受け取り</b>{formatJstDateTime(plan.slot.startAt)}〜{jstTimeOf(plan.slot.endAt)}<br />{plan.slot.placeName}（{plan.slot.label}）</p>
           )}
+        </section>
 
-          <div className="slip-note">
-            <strong>検討用の案です</strong>
-            <span>生産者への確認前・在庫未確保。登録情報をもとにした案で、注文・予約・在庫確保ではありません。</span>
-          </div>
-        </article>
-
-        {/* 5. この案になった理由 */}
-        {why.length > 0 && (
+        {hasPlan && (
           <>
-            <h3 className="section-title">{hasPlan ? "この案になった理由" : "理由"}</h3>
-            <ul className="reasons">
-              {why.map((w) => (
-                <li key={w.text} className={w.caution ? "caution" : ""}>{w.text}</li>
-              ))}
-            </ul>
+            {/* 2. 内訳：農家ごとに「名前・量・金額」の1行と、補足の1行 */}
+            <section className="plain-section" aria-labelledby="breakdown-title">
+              <h3 className="section-title" id="breakdown-title">内訳（{plan.producerCount}つの農家）</h3>
+              <ul className="farm-rows">
+                {plan.allocations.map((a) => (
+                  <li key={a.supplyId} className="farm">
+                    <div className="farm-line">
+                      <b className="farm-name">{a.producerName}</b>
+                      <span className="farm-kg num">{a.kg}kg</span>
+                      <span className="farm-amount num">{yen(a.subtotalYen)}</span>
+                    </div>
+                    <p className="farm-detail">
+                      {a.priceYenPerKg.toLocaleString("ja-JP")}円/kg・{a.priorTrade ? "取引経験あり（お店の申告）" : "初めての取引"}
+                      {a.irregularReason && `・規格外（${a.irregularReason}）`}
+                      {!a.participationConfirmed && <span className="caution-text">・受け取りへの参加確認が必要</span>}
+                    </p>
+                    <p className="farm-updated">在庫の更新 {formatJstDateTime(a.updatedAt)}</p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+
+            {/* 3. 金額 */}
+            <section className="plain-section" aria-labelledby="money-title">
+              <h3 className="section-title" id="money-title">金額</h3>
+              <dl className="totals">
+                <dt>商品代（税込）</dt><dd><Num stale={stale}>{yen(plan.productSubtotalYen)}</Num></dd>
+                <dt>受け渡し費用（1回分）</dt><dd>{plan.handoverFeeYen === null ? "未確認" : <Num stale={stale}>{yen(plan.handoverFeeYen)}</Num>}</dd>
+                <dt className="total">合計</dt><dd className="total">{plan.totalYen === null ? "未確定（確認が必要）" : <Num stale={stale}>{yen(plan.totalYen)}</Num>}</dd>
+              </dl>
+              {plan.budgetYen !== null && <p className="budget-line">予算 {yen(plan.budgetYen)}{plan.budgetStatus === "UNKNOWN" ? "（判定保留）" : "以内"}</p>}
+              <div className="not-order">
+                <Icon name="info" size={22} />
+                <p><b>これは仕入れの案です。</b>注文や在庫の確保はまだしていません。取引の前に、各生産者に確認してください。</p>
+              </div>
+            </section>
           </>
         )}
 
-        {/* 6. 使わなかった供給（安い供給を使わない理由が分かるように） */}
+        {/* 4. 理由 */}
+        {why.length > 0 && (
+          <section className="plain-section" aria-labelledby="why-title">
+            <h3 className="section-title" id="why-title">{hasPlan ? "この農家になった理由" : "案にならなかった理由"}</h3>
+            <ol className="reasons">
+              {why.map((w) => <li key={w.text} className={w.caution ? "caution" : ""}>{w.text}</li>)}
+            </ol>
+          </section>
+        )}
+
+        {/* 5. 候補に入らなかった農家（安い在庫を使わない理由が分かるように） */}
         {plan.excluded.length > 0 && (
-          <>
-            <h3 className="section-title">今回は使わなかった供給</h3>
-            <ul className="excluded" aria-label="今回は使わなかった供給">
+          <section className="plain-section" aria-labelledby="excluded-title">
+            <h3 className="section-title" id="excluded-title">候補に入らなかった農家</h3>
+            <ul className="excluded" aria-label="候補に入らなかった農家">
               {plan.excluded.map((e) => (
                 <li key={e.supplyId} className="excluded-item">
-                  <b>{e.producerName}</b><span className="muted small">（{e.availableKg}kg・{e.priceYenPerKg.toLocaleString("ja-JP")}円/kg）</span>
-                  <p className="why">{e.details.map((d) => EXCLUSION_TEXT[d]).join("、")}</p>
+                  <b>{e.producerName}</b><span>（{e.availableKg}kg・{e.priceYenPerKg.toLocaleString("ja-JP")}円/kg）</span>
+                  <p className="why">{exclusionSentence(e.details)}</p>
                 </li>
               ))}
             </ul>
-          </>
+          </section>
         )}
 
         {shown.suggestions.length > 0 && !stale && (
-          <>
-            <h3 className="section-title">条件を変更するなら</h3>
-            <p className="muted small">選ぶと確認画面に反映されます。勝手に条件を変えて計算することはありません。</p>
+          <section className="plain-section" aria-labelledby="suggest-title">
+            <h3 className="section-title" id="suggest-title">条件を変えるなら</h3>
+            <p className="section-lead">選ぶと確認画面に入ります。自動で計算し直すことはありません。</p>
             <div className="cond-suggest">
-              {shown.suggestions.map((s) => <button key={s.type} type="button" className="suggest" onClick={() => onSuggestion(s)}>{s.label}</button>)}
+              {shown.suggestions.map((s) => <button key={s.type} type="button" className="btn-secondary btn-block suggest" onClick={() => onSuggestion(s)}>{s.label}</button>)}
             </div>
-          </>
+          </section>
         )}
 
         <div className="foot-meta">
-          <p className="computed-at">計算時点 {formatJstDateTime(plan.computedAt)}{shown.demoClock && "（デモ基準日時）"}の登録情報／供給の最終更新 {lastUpdate}</p>
-          <p className="used-conditions">使った条件：{request.quantityKg}kg／{request.desiredDate}受取／産地 {request.originPrefectures.join("・")}／予算 {request.budgetYen === null ? "上限なし" : yen(request.budgetYen)}／初回{request.allowFirstTime ? "含める" : "含めない"}／規格外{request.allowIrregular ? "可" : "不可"}／品種混在{request.allowMixedVarieties ? "可" : "不可"}／規格混在{request.allowMixedGrades ? "可" : "不可"}</p>
+          <p className="computed-at">計算した時点：{formatJstDateTime(plan.computedAt)}{shown.demoClock && "（デモの基準日時）"}／在庫の最後の更新：{lastUpdate}</p>
+          <p className="used-conditions">使った条件：{request.quantityKg}kg／{request.desiredDate}に受け取り／産地 {request.originPrefectures.join("・")}／予算 {request.budgetYen === null ? "上限なし" : yen(request.budgetYen)}／初めての農家 {request.allowFirstTime ? "含める" : "含めない"}／規格外 {request.allowIrregular ? "含める" : "含めない"}／品種 {request.allowMixedVarieties ? "まぜてよい" : "まぜない"}／規格 {request.allowMixedGrades ? "まぜてよい" : "まぜない"}</p>
         </div>
         {error && <div className="alert bad" role="alert"><Icon name="alert" />{error}</div>}
       </div>
 
-      {/* 次の行動は「再計算」と「条件を変更」だけ（注文・予約・送信はできない） */}
+      {/* 次の行動は「計算し直す」と「条件を変える」だけ（注文・予約・送信はできない） */}
       <BottomBar className="next-actions">
-          {editIsPrimary ? (
-            <>
-              <button type="button" className="btn-primary btn-block" onClick={onEdit}>条件を変更する<Icon name="arrowRight" /></button>
-              <button type="button" className="btn-link btn-block" onClick={onRecalc} disabled={busy} aria-busy={busy}>{busy ? busyLabel : "最新情報で再計算"}</button>
-            </>
-          ) : freshness === "stale" ? (
-            <button type="button" className="btn-link btn-block" onClick={onEdit}>条件を変更する</button>
-          ) : (
-            <>
-              <button type="button" className="btn-secondary btn-block" onClick={onRecalc} disabled={busy} aria-busy={busy}>{busy ? busyLabel : <><Icon name="refresh" />最新情報で再計算</>}</button>
-              <button type="button" className="btn-link btn-block" onClick={onEdit}>条件を変更する</button>
-            </>
-          )}
+        {editIsPrimary ? (
+          <>
+            <button type="button" className="btn-primary btn-block" onClick={onEdit}>条件を変更する</button>
+            <button type="button" className="btn-secondary btn-block" onClick={onRecalc} disabled={busy} aria-busy={busy}>{recalcLabel}</button>
+          </>
+        ) : freshness === "stale" ? (
+          <button type="button" className="btn-secondary btn-block" onClick={onEdit}>条件を変更する</button>
+        ) : (
+          <div className="bar-pair">
+            <button type="button" className="btn-secondary" onClick={onRecalc} disabled={busy} aria-busy={busy}>{busy ? busyLabel : "計算し直す"}</button>
+            <button type="button" className="btn-secondary" onClick={onEdit}>条件を変更する</button>
+          </div>
+        )}
       </BottomBar>
     </section>
   );

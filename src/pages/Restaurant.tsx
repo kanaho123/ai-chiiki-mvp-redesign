@@ -205,22 +205,18 @@ export default function RestaurantPage({ me }: { me: Me }) {
   const busyLabel = <><span className="spinner" aria-hidden="true" />計算中…</>;
 
   const stepIndex = ["input", "confirm", "result"].indexOf(step);
-  const stepName = ["希望を入力", "条件を確認", "仕入れ案"][stepIndex];
+  const stepName = ["希望を入力", "内容を確認", "仕入れ案"][stepIndex];
   const loading = step === "input" && extracting;
 
   return (
     <main className={`screen ${loading ? "" : "has-bar"}`}>
-      {/* 進行状況：①希望 ― ②確認 ― ③仕入れ案（今の工程を太字で示す） */}
+      {/* 進行状況：「1/3 希望を入力」と3本の短い線 */}
       {!loading && (
-        <nav className="flow-progress" aria-label={`進行状況 ${stepIndex + 1}/3 ${stepName}`}>
-          <ol className="flow-steps">
-            {["希望", "確認", "仕入れ案"].map((label, k) => (
-              <li key={label} className={k === stepIndex ? "on" : k < stepIndex ? "done" : ""} aria-current={k === stepIndex ? "step" : undefined}>
-                <b>{k + 1}</b>{label}
-              </li>
-            ))}
-          </ol>
-        </nav>
+        <div className="flow-progress" aria-label={`進行状況 ${stepIndex + 1}/3 ${stepName}`}>
+          <span className="flow-count">{stepIndex + 1}/3</span>
+          <span className="flow-name">{stepName}</span>
+          <span className="flow-segs" aria-hidden="true">{[0, 1, 2].map((k) => <i key={k} className={k <= stepIndex ? "on" : ""} />)}</span>
+        </div>
       )}
 
       {catalogError && <div className="alert bad" role="alert"><Icon name="alert" />登録データを読み込めませんでした。再読み込みしてください。</div>}

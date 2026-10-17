@@ -20,12 +20,10 @@ export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable
   if (busy) {
     return (
       <section className="loading" role="status" aria-live="polite" aria-labelledby="loading-title">
-        <p className="eyebrow">1/3 希望</p>
-        <h2 className="loading-title" id="loading-title">希望条件を整理しています</h2>
+        <h2 className="loading-title" id="loading-title">文章を読み取っています</h2>
         <div className="loading-line" aria-hidden="true"><span /></div>
-        <p className="lede">入力した文章から、品目・数量・受渡日などを読み取っています。最大10秒ほどかかります。</p>
-        <p className="muted small">数量・価格はこのあと登録情報をもとに計算します。</p>
-        <div><button type="button" className="btn-secondary" onClick={onManual}>待たずに手入力する</button></div>
+        <p>品目・数量・日付などを読み取っています。10秒ほどかかることがあります。</p>
+        <button type="button" className="btn-secondary btn-block" onClick={onManual}>待たずに手入力する</button>
       </section>
     );
   }
@@ -33,38 +31,31 @@ export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable
   const aiOff = aiAvailable === false;
   return (
     <form onSubmit={(e) => { e.preventDefault(); onExtract(); }} aria-labelledby="step1-title" style={{ display: "grid", gap: "var(--gap)" }}>
-      <div className="input-band">
-      <div className="title-block">
-        <p className="eyebrow">仕入れ案をつくる</p>
-        <h1 className="display" id="step1-title"><span className="nowrap">今日は何を</span><span className="nowrap">仕入れたいですか？</span></h1>
-        <p className="lede">普段どおりの言葉で入力してください。</p>
-      </div>
+      <h1 className="display" id="step1-title">何を仕入れたいですか？</h1>
 
       <div className="composer">
         <label>
           <span className="sr-only">仕入れたい内容</span>
           <textarea rows={4} maxLength={REQUEST_TEXT_MAX} value={text} onChange={(e) => onText(e.target.value)}
-            placeholder={`例：${EXAMPLE_TEXT}`} aria-describedby="step1-count" />
+            placeholder="例：10月23日に大阪産トマトを10kg" aria-describedby="step1-count step1-note" />
         </label>
-        <div className="composer-foot"><span id="step1-count">{text.length.toLocaleString("ja-JP")} / {REQUEST_TEXT_MAX.toLocaleString("ja-JP")}</span></div>
+        <div className="composer-foot"><span id="step1-count">{text.length.toLocaleString("ja-JP")} / {REQUEST_TEXT_MAX.toLocaleString("ja-JP")}文字</span></div>
       </div>
-      </div>
+      <p className="ai-note" id="step1-note">AIは、文章から品目・数量・日付などを読み取るだけです。量と金額の計算はしません。</p>
 
-      {/* 入力例：淡い緑の1セクションに罫線で3行。押すと入力欄に入る */}
+      {/* 入力例：押すと入力欄に入る（全幅の行） */}
       <section className="example-list" aria-labelledby="ex-title">
-        <h2 className="example-title" id="ex-title">入力例<span>押すと入力欄に入ります</span></h2>
+        <h2 className="example-title" id="ex-title">例を使う</h2>
         <ul>
           {EXAMPLES.map((ex) => (
             <li key={ex.label}>
               <button type="button" className="example-chip example" onClick={() => onText(ex.text)}>
-                <span>{ex.label}</span><Icon name="chevronRight" size={18} />
+                <span>{ex.label}</span><Icon name="chevronRight" size={22} strokeWidth={2.2} />
               </button>
             </li>
           ))}
         </ul>
       </section>
-
-      <p className="ai-note">文章は条件の読み取りだけに使います。数量・価格・受渡条件は、確認したあと登録情報をもとにプログラムが計算します。</p>
 
       {emptyHint && <div className="alert warn" role="status"><Icon name="info" />文章が空です。例文を押すか、「項目を選んで入力」を使ってください。</div>}
       {aiOff && <div className="alert info" role="status"><Icon name="info" />AIによる読み取りは現在使えません。項目を選んで入力してください（計算結果は同じです）。</div>}
@@ -75,7 +66,7 @@ export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable
             {error}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
               <button type="button" className="btn-secondary" onClick={onManual}>項目を選んで入力</button>
-              <button type="button" className="btn-link" onClick={onExtract}>もう一度読み取る</button>
+              <button type="button" className="btn-secondary" onClick={onExtract}>もう一度読み取る</button>
             </div>
           </div>
         </div>
@@ -87,7 +78,7 @@ export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable
         ) : (
           <>
             <button type="submit" className="btn-primary btn-block">条件を整理する<Icon name="arrowRight" /></button>
-            <button type="button" className="btn-link btn-block" onClick={onManual}>項目を選んで入力</button>
+            <button type="button" className="btn-secondary btn-block" onClick={onManual}>項目を選んで入力</button>
           </>
         )}
       </BottomBar>

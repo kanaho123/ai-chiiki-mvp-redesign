@@ -22,36 +22,33 @@ export default function RoleSelect({ onLoggedIn }: { onLoggedIn: (me: Me) => voi
 
   return (
     <main className="screen">
-      <div className="brand-intro">
-        <h1 className="brand-tagline"><span className="nowrap">地域の供給を、</span><span className="nowrap">まとめて仕入れる</span></h1>
-        <p className="brand-sub">どちらの立場で使うかを選んでください。</p>
-      </div>
+      <h1 className="display">どちらで使いますか？</h1>
 
-      {/* 2つの役割を1枚のパネルにまとめる：上は役割色の面、下は白の面（影なし・フラット） */}
+      {/* 目的で分けた入口：役割の色で塗った大きな四角。入口全体が1つのボタン */}
       <div className="role-cards">
         <section className="role-card restaurant" aria-labelledby="role-r">
-          <div className="role-top">
-            <span><span className="role-label">飲食店の方</span><h2 className="role-name" id="role-r">飲食店</h2></span>
-            <Icon name="store" size={30} strokeWidth={1.5} className="role-icon" />
-          </div>
-          <div className="role-bottom">
-            <p className="role-desc">欲しい食材と量を伝えて、地域の供給から仕入れ案をつくります。</p>
-            <button type="button" onClick={() => setSheet("restaurant")}>飲食店としてログイン<Icon name="arrowRight" /></button>
-          </div>
+          <button type="button" onClick={() => setSheet("restaurant")} aria-describedby="role-r-desc">
+            <Icon name="store" size={30} strokeWidth={1.8} className="role-icon" />
+            <span className="role-text">
+              <span className="role-name" id="role-r">飲食店の方</span>
+              <span className="role-desc" id="role-r-desc">食材を仕入れる</span>
+            </span>
+            <Icon name="arrowRight" size={26} strokeWidth={2.2} className="role-go" />
+          </button>
         </section>
         <section className="role-card producer" aria-labelledby="role-p">
-          <div className="role-top">
-            <span><span className="role-label">生産者の方</span><h2 className="role-name" id="role-p">生産者</h2></span>
-            <Icon name="sprout" size={30} strokeWidth={1.5} className="role-icon" />
-          </div>
-          <div className="role-bottom">
-            <p className="role-desc">今日販売できる量を、数タップで更新します。</p>
-            <button type="button" onClick={() => setSheet("producer")}>生産者としてログイン<Icon name="arrowRight" /></button>
-          </div>
+          <button type="button" onClick={() => setSheet("producer")} aria-describedby="role-p-desc">
+            <Icon name="sprout" size={30} strokeWidth={1.8} className="role-icon" />
+            <span className="role-text">
+              <span className="role-name" id="role-p">生産者の方</span>
+              <span className="role-desc" id="role-p-desc">今日出せる量を登録する</span>
+            </span>
+            <Icon name="arrowRight" size={26} strokeWidth={2.2} className="role-go" />
+          </button>
         </section>
       </div>
 
-      <p className="about-line">デモ環境です。農家・在庫・価格はすべて架空のデータで、注文・在庫の確保・決済・配送は行いません。</p>
+      <p className="about-line">これはデモです。農家・在庫・価格はすべて架空で、注文・在庫の確保・支払い・配送はしません。</p>
 
       {sheet && (
         <LoginSheet role={sheet} accounts={accounts.filter((a) => a.role === sheet)} onClose={() => setSheet(null)} onLoggedIn={onLoggedIn} />
@@ -100,11 +97,9 @@ function LoginSheet({ role, accounts, onClose, onLoggedIn }: {
   return (
     <div className="sheet-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <form className={`sheet role-${role}`} role="dialog" aria-modal="true" aria-labelledby="sheet-title" aria-label="ログイン" onSubmit={submit}>
-        <span className="sheet-handle" aria-hidden="true" />
         <div className="sheet-head">
-          <span className="who-icon" aria-hidden="true"><Icon name={role === "restaurant" ? "store" : "sprout"} /></span>
-          <h2 id="sheet-title">{ROLE_TEXT[role]}としてログイン</h2>
-          <button type="button" ref={firstRef} className="btn-quiet" onClick={onClose} aria-label="閉じる"><Icon name="x" /></button>
+          <h2 id="sheet-title">{ROLE_TEXT[role]}の方のログイン</h2>
+          <button type="button" ref={firstRef} className="sheet-close" onClick={onClose} aria-label="閉じる"><Icon name="x" size={24} /></button>
         </div>
 
         {accounts.length > 0 ? (
@@ -114,7 +109,7 @@ function LoginSheet({ role, accounts, onClose, onLoggedIn }: {
                 <input type="radio" name="account" value={a.loginId} checked={loginId === a.loginId}
                   onChange={() => { setLoginId(a.loginId); setTimeout(() => passwordRef.current?.focus(), 0); }} />
                 <span className="tick" aria-hidden="true"><Icon name="check" size={16} /></span>
-                <span><b>{a.displayName}</b><small>デモ用アカウント・{a.loginId}</small></span>
+                <span><b>{a.displayName}</b><small>デモ用のアカウント（{a.loginId}）</small></span>
               </label>
             ))}
           </fieldset>
@@ -124,13 +119,13 @@ function LoginSheet({ role, accounts, onClose, onLoggedIn }: {
           <input value={loginId} onChange={(e) => setLoginId(e.target.value)} autoComplete="username" autoCapitalize="none" aria-required="true" />
         </label>
         <label className="field">
-          <span className="label">パスワード</span>
+          <span className="label">パスワード<span className="req">必須</span></span>
           <input ref={passwordRef} type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" aria-required="true" />
-          {accounts.length > 0 && <span className="hint">パスワードはデモ担当者に確認してください。</span>}
+          {accounts.length > 0 && <span className="hint">パスワードは、デモの担当者に確認してください。</span>}
         </label>
         {error && <div className="alert bad" role="alert"><Icon name="alert" />{error}</div>}
         <button type="submit" className="btn-primary btn-block" disabled={busy || !loginId || !password} aria-busy={busy}>
-          {busy ? <><span className="spinner" aria-hidden="true" />確認中…</> : <>ログイン<Icon name="arrowRight" /></>}
+          {busy ? <><span className="spinner" aria-hidden="true" />確認しています…</> : "ログイン"}
         </button>
       </form>
     </div>
