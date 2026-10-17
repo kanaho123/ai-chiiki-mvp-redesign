@@ -2,13 +2,16 @@
 // 元アプリ ai-tiiki の DB（Neon main）には絶対に書き込まない。接続情報は表示しない。
 
 // 元アプリの Neon エンドポイント。ここに接続している間は seed / reset を拒否する。
-export const PROTECTED_DB_ENDPOINTS: readonly string[] = ["ep-hidden-union-b7n46jco"];
+export const PROTECTED_DB_ENDPOINTS: readonly string[] = ["ep-hidden-union-b7n46jco", "ep-small-base-b7kc2j0a"];
+export const APPROVAL_DB_ENDPOINT = "ep-sparkling-voice-b77ras92";
 
 /** 接続文字列から Neon のエンドポイント ID（-pooler を除く）を取り出す。読めなければ null。 */
 export function endpointOf(url: string | undefined): string | null {
   if (!url) return null;
   try {
     const host = new URL(url).hostname;
+    const parsed = new URL(url);
+    if (!/^postgres(ql)?:$/.test(parsed.protocol) || !/^ep-[a-z0-9-]+(?:-pooler)?\.c-\d+\.[a-z0-9-]+\.aws\.neon\.tech$/.test(host)) return null;
     return host.split(".")[0].replace(/-pooler$/, "") || null;
   } catch {
     return null;
@@ -51,4 +54,17 @@ export function demoDbProblems(env: Env = process.env): string[] {
 export function assertDemoDatabase(env: Env = process.env): void {
   const problems = demoDbProblems(env);
   if (problems.length > 0) throw new Error(`デモ用 DB と確認できないため中止しました:\n- ${problems.join("\n- ")}`);
+}
+
+/** This feature branch permits destructive DB operations only on approval-dev. */
+export function assertApprovalDatabase(env: Env = process.env): void {
+  assertDemoDatabase(env);
+  if ([endpointOf(env.DATABASE_URL), endpointOf(env.DATABASE_URL_UNPOOLED), env.DEMO_DB_ENDPOINT?.trim()].some((ep) => ep !== APPROVAL_DB_ENDPOINT)) {
+    throw new Error("approval-dev 以外への DB 変更を拒否しました");
+  }
+  const pooled = new URL(env.DATABASE_URL!);
+  const direct = new URL(env.DATABASE_URL_UNPOOLED!);
+  if (pooled.pathname !== "/neondb" || direct.pathname !== "/neondb" || pooled.username !== direct.username || pooled.password !== direct.password || !pooled.hostname.includes("-pooler.") || direct.hostname.includes("-pooler.")) {
+    throw new Error("開発用 DB のデータベース名・ユーザー・pooled/direct 設定が一致しません");
+  }
 }

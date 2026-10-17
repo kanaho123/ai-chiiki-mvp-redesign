@@ -25,7 +25,7 @@ export type ExtractResult = {
 };
 
 /** POST /api/plan の応答 */
-export type Shown = { plan: PlanResult; version: string; request: PlanRequest; suggestions: Suggestion[]; demoClock: boolean };
+export type Shown = { plan: PlanResult; version: string; fingerprint?: string; request: PlanRequest; suggestions: Suggestion[]; demoClock: boolean };
 
 /** 表示中の案が最新か。checking の間は以前の結果を有効扱いしない */
 export type Freshness = "checking" | "fresh" | "stale";

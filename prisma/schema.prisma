@@ -37,6 +37,7 @@ model User {
   passwordHash  String? // scrypt のハッシュ（平文は保存しない）。null ならログイン不可
   producers     Producer[]
   relationships Relationship[]
+  approvalRequests ApprovalRequest[]
 
   @@map("users")
 }
@@ -50,6 +51,9 @@ model Producer {
   relationships    Relationship[]
   slots            SlotParticipant[]
   supplies         Supply[]
+  contactPhone     String?
+  contactEmail     String?
+  approvalRequests ApprovalRequest[]
 
   @@index([ownerUserId])
   @@map("producers")
@@ -164,6 +168,40 @@ model AuthThrottle {
   updatedAt   DateTime @updatedAt
 
   @@map("auth_throttles")
+}
+
+enum ApprovalStatus {
+  pending
+  approved
+  rejected
+}
+
+// A confirmation to discuss directly, never an order or inventory reservation.
+model ApprovalRequest {
+  id              String @id @default(cuid())
+  restaurantId    String
+  restaurant      User @relation(fields: [restaurantId], references: [id])
+  producerId      String
+  producer        Producer @relation(fields: [producerId], references: [id])
+  supplyId        String
+  planFingerprint String
+  planVersion     String
+  planRequest     Json
+  itemName        String
+  quantityKg      Int
+  priceYenPerKg   Int
+  subtotalYen     Int
+  pickupStartAt   DateTime
+  pickupEndAt     DateTime
+  pickupPlace     String
+  status          ApprovalStatus @default(pending)
+  createdAt       DateTime @default(now())
+  respondedAt     DateTime?
+
+  @@unique([restaurantId, supplyId, planFingerprint])
+  @@index([producerId, createdAt])
+  @@index([restaurantId, planFingerprint])
+  @@map("approval_requests")
 }
 
 // ============================================================

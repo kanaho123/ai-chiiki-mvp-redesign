@@ -22,10 +22,11 @@ export const DEMO_MVP = {
     { id: "demo-slot-gq", placeId: "demo-place-q", label: "G-Q" },
   ],
   producers: [
-    { key: "a", farmName: "A農園", priorTrade: true, availableKg: 10, priceYenPerKg: 600, published: true, slotId: "demo-slot-gp" },
-    { key: "b", farmName: "B農園", priorTrade: false, availableKg: 5, priceYenPerKg: 550, published: true, slotId: "demo-slot-gp" },
-    { key: "c", farmName: "C農園", priorTrade: false, availableKg: 0, priceYenPerKg: 500, published: false, slotId: "demo-slot-gp" },
-    { key: "d", farmName: "D農園", priorTrade: false, availableKg: 10, priceYenPerKg: 300, published: true, slotId: "demo-slot-gq" },
+    // 連絡先は明らかに架空の値（000 で始まる番号・example.invalid）。デモで承認後に開示する初期値で、reset-demo で毎回この値へ戻る
+    { key: "a", farmName: "A農園", priorTrade: true, availableKg: 10, priceYenPerKg: 600, published: true, slotId: "demo-slot-gp", contactPhone: "000-0000-0001", contactEmail: "a-farm@example.invalid" },
+    { key: "b", farmName: "B農園", priorTrade: false, availableKg: 5, priceYenPerKg: 550, published: true, slotId: "demo-slot-gp", contactPhone: "000-0000-0002", contactEmail: "b-farm@example.invalid" },
+    { key: "c", farmName: "C農園", priorTrade: false, availableKg: 0, priceYenPerKg: 500, published: false, slotId: "demo-slot-gp", contactPhone: "000-0000-0003", contactEmail: "c-farm@example.invalid" },
+    { key: "d", farmName: "D農園", priorTrade: false, availableKg: 10, priceYenPerKg: 300, published: true, slotId: "demo-slot-gq", contactPhone: "000-0000-0004", contactEmail: "d-farm@example.invalid" },
   ],
 } as const;
 
@@ -48,6 +49,7 @@ export async function seedMvpDemo(prisma: PrismaClient, password = process.env.D
   const hashes = Object.fromEntries(await Promise.all(keys.map(async (k) => [k, password ? await hashPassword(password) : null] as const)));
   await prisma.$transaction(async (tx) => {
     // 子テーブルから順に空にする（デモ用 DB では新モデルのテーブルはすべてデモデータ）
+    await tx.approvalRequest.deleteMany();
     await tx.supply.deleteMany();
     await tx.slotParticipant.deleteMany();
     await tx.relationship.deleteMany();
@@ -68,7 +70,7 @@ export async function seedMvpDemo(prisma: PrismaClient, password = process.env.D
     await tx.user.createMany({
       data: ps.map((p) => ({ id: p.userId, loginId: `demo-${p.key}`, passwordHash: hashes[p.key], role: "producer" as const, displayName: `${p.farmName}（架空）` })),
     });
-    await tx.producer.createMany({ data: ps.map((p) => ({ id: p.producerId, ownerUserId: p.userId, farmName: p.farmName, originPrefecture: "大阪府" })) });
+    await tx.producer.createMany({ data: ps.map((p) => ({ id: p.producerId, ownerUserId: p.userId, farmName: p.farmName, originPrefecture: "大阪府", contactPhone: p.contactPhone, contactEmail: p.contactEmail })) });
     await tx.relationship.createMany({ data: ps.map((p) => ({ restaurantUserId: d.restaurant.id, producerId: p.producerId, priorTrade: p.priorTrade })) });
     await tx.slotParticipant.createMany({ data: ps.map((p) => ({ slotId: p.slotId, producerId: p.producerId, confirmed: true })) });
     await tx.supply.createMany({

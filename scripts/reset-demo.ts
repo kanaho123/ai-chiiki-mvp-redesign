@@ -3,8 +3,8 @@
 // - ログイン失敗の記録（ロック）を消す
 // - Legacy: 確認用の出品（生産者名が「確認用」で始まるもの）を削除し、旧デモ出品を入れ直す
 // 使い方: npx tsx scripts/reset-demo.ts
-import { config } from "dotenv";
-config({ path: ".env.local", quiet: true });
+import { loadApprovalEnvironment } from "../server/local-env.js";
+loadApprovalEnvironment();
 
 const { assertDemoDatabase, describeDb } = await import("../server/db-safety.js");
 assertDemoDatabase();

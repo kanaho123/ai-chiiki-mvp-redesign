@@ -1,8 +1,8 @@
 // 指定した ID の出品1件だけを公開停止にする（削除はしない）。
 // 使い方: npx tsx scripts/pause-listing.ts <出品ID> <生産者名> <品目>
 // 生産者名・品目が一致しない場合は何もしない。
-import { config } from "dotenv";
-config({ path: ".env.local", quiet: true });
+import { loadApprovalEnvironment } from "../server/local-env.js";
+loadApprovalEnvironment();
 
 const [id, producerName, item] = process.argv.slice(2);
 if (!id || !producerName || !item) throw new Error("使い方: npx tsx scripts/pause-listing.ts <出品ID> <生産者名> <品目>");

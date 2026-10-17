@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { AllocateInput, PlanSlot, PlanSupply } from "../src/lib/allocate.js";
 import { prisma } from "./db.js";
+import type { Prisma } from "./generated/prisma/client.js";
 
 export type PlanInputs = Omit<AllocateInput, "request" | "now">;
 
@@ -8,15 +9,15 @@ export type PlanInputs = Omit<AllocateInput, "request" | "now">;
  * 計算に使う最新データを1つのトランザクション（同じ時点のスナップショット）で読む。
  * 公開中の供給だけを使う。案を作っても数量は変更しない。
  */
-export async function loadPlanInputs(q: { itemId: string; slotId: string; restaurantUserId: string /* ログイン中の飲食店。取引経験は店ごと */ }): Promise<{ inputs: PlanInputs; version: string }> {
-  const [slot, supplies, participants, relationships] = await prisma.$transaction(
+export async function loadPlanInputs(q: { itemId: string; slotId: string; restaurantUserId: string /* ログイン中の飲食店。取引経験は店ごと */ }, transaction?: Prisma.TransactionClient): Promise<{ inputs: PlanInputs; version: string }> {
+  if (!transaction) return prisma.$transaction((tx) => loadPlanInputs(q, tx), { isolationLevel: "RepeatableRead" });
+  const [slot, supplies, participants, relationships] = await Promise.all(
     [
-      prisma.handoverSlot.findUnique({ where: { id: q.slotId }, include: { place: true } }),
-      prisma.supply.findMany({ where: { itemId: q.itemId, published: true }, include: { producer: true, variety: true }, orderBy: { id: "asc" } }),
-      prisma.slotParticipant.findMany({ where: { slotId: q.slotId }, orderBy: { producerId: "asc" } }),
-      prisma.relationship.findMany({ where: { restaurantUserId: q.restaurantUserId }, orderBy: { producerId: "asc" } }),
+      transaction.handoverSlot.findUnique({ where: { id: q.slotId }, include: { place: true } }),
+      transaction.supply.findMany({ where: { itemId: q.itemId, published: true }, include: { producer: true, variety: true }, orderBy: { id: "asc" } }),
+      transaction.slotParticipant.findMany({ where: { slotId: q.slotId }, orderBy: { producerId: "asc" } }),
+      transaction.relationship.findMany({ where: { restaurantUserId: q.restaurantUserId }, orderBy: { producerId: "asc" } }),
     ],
-    { isolationLevel: "RepeatableRead" },
   );
 
   const planSlot: PlanSlot | null = slot && {

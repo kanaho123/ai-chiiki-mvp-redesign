@@ -1,7 +1,7 @@
 // 新モデルのデモデータが仕様書 8.1 の初期状態かを確かめる（読み取りのみ）。
 // 使い方: npx tsx scripts/check-demo-state.ts
-import { config } from "dotenv";
-config({ path: ".env.local", quiet: true });
+import { loadApprovalEnvironment } from "../server/local-env.js";
+loadApprovalEnvironment();
 
 const { prisma } = await import("../server/db.js");
 let failed = 0;
@@ -52,6 +52,11 @@ try {
     users.every((u) => u.passwordHash?.startsWith("scrypt$") && u.passwordHash !== process.env.DEMO_LOGIN_PASSWORD));
   const owners = await prisma.producer.findMany({ include: { owner: true }, orderBy: { id: "asc" } });
   check("各農園は自分のユーザーが所有", owners.every((o) => o.owner.loginId === `demo-${o.id.replace("demo-producer-", "")}`));
+  // 承認＋連絡先：デモ生産者は架空の連絡先が登録済み、確認依頼は0件
+  const contacts = owners.map((o) => `${o.farmName[0]}:${o.contactPhone}/${o.contactEmail}`).sort().join(" ");
+  check("デモ生産者の連絡先（架空・登録済み）", contacts === "A:000-0000-0001/a-farm@example.invalid B:000-0000-0002/b-farm@example.invalid C:000-0000-0003/c-farm@example.invalid D:000-0000-0004/d-farm@example.invalid", contacts);
+  const approvals = await prisma.approvalRequest.count();
+  check("確認依頼は0件", approvals === 0, `${approvals}件`);
 } finally {
   await prisma.$disconnect();
 }

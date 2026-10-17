@@ -1,14 +1,15 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { defineConfig, loadEnv, type Plugin, type ViteDevServer } from "vite";
+import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import react from "@vitejs/plugin-react";
+import { loadApprovalEnvironment } from "./server/local-env.js";
 
 /**
  * 開発時だけ、/api/* へのリクエストを api/ フォルダの関数（Vercel Functions と同じファイル）で処理する。
  * 本番（Vercel）では Vercel Functions がそのまま使われる。
  */
 function localApi(): Plugin {
-  const apiDir = path.resolve(__dirname, "api");
+  const apiDir = path.resolve(import.meta.dirname, "api");
 
   // /api/plan → api/plan.ts、/api/listings → api/listings/index.ts、/api/listings/xxx → api/listings/[id].ts
   function resolve(pathname: string): string | null {
@@ -66,14 +67,16 @@ function localApi(): Plugin {
   };
 }
 
-export default defineConfig(({ command, mode }) => {
+export default defineConfig(({ command }) => {
   if (command === "serve") {
     // .env.local（Vercel から取り込んだ接続情報）を API 関数用に読み込む。
     // VITE_ で始まらない変数はブラウザ側には渡らない。
-    Object.assign(process.env, loadEnv(mode, __dirname, ""));
+    loadApprovalEnvironment();
   }
   return {
     plugins: [react(), localApi()],
+    // Disable Vite's automatic .env.local loading, including VITE_ values from Production.
+    envDir: false,
     // Dev Container 内から VS Code のポート転送で開けるようにする
     server: { host: true, port: 5173 },
   };

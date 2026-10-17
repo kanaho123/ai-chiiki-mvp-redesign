@@ -1,6 +1,6 @@
 // デモ（demo-listing-*）以外の出品を一覧表示する（確認用。削除はしない）
-import { config } from "dotenv";
-config({ path: ".env.local", quiet: true });
+import { loadApprovalEnvironment } from "../server/local-env.js";
+loadApprovalEnvironment();
 const { prisma } = await import("../server/db.js");
 try {
   const rows = await prisma.listing.findMany({ where: { NOT: { id: { startsWith: "demo-listing-" } } }, include: { producer: true }, orderBy: { createdAt: "asc" } });

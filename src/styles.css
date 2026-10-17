@@ -682,3 +682,20 @@ h1, h2, h3 { letter-spacing: -0.02em; }
 @media (min-width: 700px) {
   .role-screen .role-card.producer .role-art { width: 104%; left: -18px; bottom: -112px; }
 }
+/* Confirmation is a separate step from calculating a purchase plan. */
+.confirmation-panel { padding: 24px; background: var(--paper, #fffdf8); border: 1px solid #d9d8ca; border-radius: 18px; display: grid; gap: 14px; }
+.confirmation-panel p { margin: 0; line-height: 1.65; }
+.confirmation-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; justify-content: space-between; }
+.confirmation-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+.confirmation-list > li { border-top: 1px solid #deded4; padding-top: 16px; display: grid; gap: 12px; min-width: 0; }
+.confirmation-status { font-size: .85rem; font-weight: 700; padding: 6px 10px; border-radius: 8px; background: #f4eddb; color: #69501f; }
+.confirmation-status.approved { background: #e3efe5; color: #234e36; }
+.confirmation-status.rejected { background: #fae8e1; color: #873c25; }
+.confirmation-status.stale { background: #efefec; color: #52534c; }
+.confirmation-overall { font-weight: 700; }
+.confirmation-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.contact-details, .contact-form { display: grid; gap: 12px; }
+.contact-details a { overflow-wrap: anywhere; min-height: 44px; display: flex; align-items: center; }
+.contact-settings { padding-block: 12px; }
+.contact-form { padding-top: 16px; }
+@media (max-width: 480px) { .confirmation-panel { padding: 18px; } .confirmation-actions > button { width: 100%; } }

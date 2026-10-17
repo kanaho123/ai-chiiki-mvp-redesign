@@ -1,5 +1,5 @@
-import { config } from "dotenv";
-config({ path: ".env.local", quiet: true });
+import { loadApprovalEnvironment } from "../server/local-env.js";
+loadApprovalEnvironment();
 
 // デモ用 DB と確認できなければ、DB に接続する前に止める
 const { assertDemoDatabase } = await import("../server/db-safety.js");

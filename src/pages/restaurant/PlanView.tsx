@@ -6,6 +6,7 @@ import { BottomBar } from "../../components/BottomBar";
 import { Icon } from "../../components/Icon";
 import { exclusionSentence, PLAIN_NOTICE, PLAIN_REASON, rankingSummary } from "./plain-text";
 import type { Freshness, Shown } from "./types";
+import { ApprovalPanel } from "./ApprovalPanel";
 
 // STEP 3：仕入れ案（このアプリの主役）。最初に答え（何kg・いくら）と束ね図（どの農家から何kgを束ねたか）と受け取りだけを見せ、
 // 金額の内訳・理由・候補外・計算の条件はその下のまとまりに分ける。
@@ -162,6 +163,8 @@ export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, o
           {hasPlan && <p className="answer-tag"><Icon name="info" size={16} />注文前の案・在庫は未確保</p>}
         </section>
 
+        {plan.status === "MATCHED" && hasPlan && <ApprovalPanel key={`${shown.fingerprint ?? "legacy"}:${shown.version}`} shown={shown} freshness={freshness} />}
+
         {!ok && suggestions}
 
         {/* 2. 詳しい情報：オフホワイトの区画にまとめる（カードを並べない） */}
@@ -231,7 +234,7 @@ export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, o
         {error && <div className="alert bad" role="alert"><Icon name="alert" />{error}</div>}
       </div>
 
-      {/* 次の行動は「計算し直す」と「条件を変える」だけ（注文・予約・送信はできない） */}
+      {/* 計算と確認依頼は独立した状態。ここには再計算・条件変更を残す。 */}
       <BottomBar className="next-actions">
         {editIsPrimary ? (
           <>

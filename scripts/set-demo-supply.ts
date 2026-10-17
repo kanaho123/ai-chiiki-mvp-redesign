@@ -1,8 +1,8 @@
 // デモ用 DB のデモ供給1件の販売可能量・公開状態を変える（version を +1）。デモ台本・手動確認用。
 // 使い方: npx tsx scripts/set-demo-supply.ts <a|b|c|d> <kg> [public|private]
 // 元に戻すときは npx tsx scripts/reset-demo.ts
-import { config } from "dotenv";
-config({ path: ".env.local", quiet: true });
+import { loadApprovalEnvironment } from "../server/local-env.js";
+loadApprovalEnvironment();
 
 const { assertDemoDatabase } = await import("../server/db-safety.js");
 assertDemoDatabase();

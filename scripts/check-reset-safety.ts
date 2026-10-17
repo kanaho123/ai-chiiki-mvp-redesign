@@ -1,8 +1,8 @@
 // リセット処理（scripts/reset-demo.ts と同じ条件）が、確認用以外のデータを消さないことを確かめる。
 // 一時的に「確認用」で始まらない出品と「確認用」の出品を作り、リセット後の残り方を見てから、一時データを ID 指定で削除する。
-import { config } from "dotenv";
+import { loadApprovalEnvironment } from "../server/local-env.js";
 import { execFileSync } from "node:child_process";
-config({ path: ".env.local", quiet: true });
+loadApprovalEnvironment();
 
 // 一時データを書き込むので、デモ用 DB と確認できなければ接続前に止める
 const { assertDemoDatabase } = await import("../server/db-safety.js");

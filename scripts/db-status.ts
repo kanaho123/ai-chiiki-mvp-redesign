@@ -1,6 +1,6 @@
 // DB の出品状況を表示する確認用スクリプト（接続情報は表示しない）
-import { config } from "dotenv";
-config({ path: ".env.local", quiet: true });
+import { loadApprovalEnvironment } from "../server/local-env.js";
+loadApprovalEnvironment();
 
 const { prisma } = await import("../server/db.js");
 try {
