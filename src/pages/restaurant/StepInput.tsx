@@ -33,6 +33,7 @@ export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable
   const aiOff = aiAvailable === false;
   return (
     <form onSubmit={(e) => { e.preventDefault(); onExtract(); }} aria-labelledby="step1-title" style={{ display: "grid", gap: "var(--gap)" }}>
+      <div className="input-band">
       <div className="title-block">
         <p className="eyebrow">仕入れ案をつくる</p>
         <h1 className="display" id="step1-title"><span className="nowrap">今日は何を</span><span className="nowrap">仕入れたいですか？</span></h1>
@@ -47,10 +48,21 @@ export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable
         </label>
         <div className="composer-foot"><span id="step1-count">{text.length.toLocaleString("ja-JP")} / {REQUEST_TEXT_MAX.toLocaleString("ja-JP")}</span></div>
       </div>
-
-      <div className="example-chips" role="group" aria-label="例文（押すと入力欄に入ります）">
-        {EXAMPLES.map((ex) => <button key={ex.label} type="button" className="example-chip example" onClick={() => onText(ex.text)}>{ex.label}</button>)}
       </div>
+
+      {/* 入力例：淡い緑の1セクションに罫線で3行。押すと入力欄に入る */}
+      <section className="example-list" aria-labelledby="ex-title">
+        <h2 className="example-title" id="ex-title">入力例<span>押すと入力欄に入ります</span></h2>
+        <ul>
+          {EXAMPLES.map((ex) => (
+            <li key={ex.label}>
+              <button type="button" className="example-chip example" onClick={() => onText(ex.text)}>
+                <span>{ex.label}</span><Icon name="chevronRight" size={18} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <p className="ai-note">文章は条件の読み取りだけに使います。数量・価格・受渡条件は、確認したあと登録情報をもとにプログラムが計算します。</p>
 

@@ -17,8 +17,8 @@ const SLIDES: Slide[] = [
 ];
 
 const TONE = {
-  green: { "--ob-color": "var(--color-restaurant)", "--ob-btn": "var(--color-restaurant-dark)" },
-  orange: { "--ob-color": "var(--color-producer)", "--ob-btn": "var(--color-producer-dark)" },
+  green: { "--ob-color": "var(--color-restaurant)", "--ob-tint": "var(--color-restaurant-tint)", "--ob-btn": "var(--color-restaurant-dark)" },
+  orange: { "--ob-color": "var(--color-producer-dark)", "--ob-tint": "var(--color-producer-tint)", "--ob-btn": "var(--color-producer-dark)" },
 } as const;
 
 export default function Onboarding({ onDone }: { onDone: () => void }) {

@@ -27,22 +27,27 @@ export default function RoleSelect({ onLoggedIn }: { onLoggedIn: (me: Me) => voi
         <p className="brand-sub">どちらの立場で使うかを選んでください。</p>
       </div>
 
+      {/* 2つの役割を1枚のパネルにまとめる：上は役割色の面、下は白の面（影なし・フラット） */}
       <div className="role-cards">
         <section className="role-card restaurant" aria-labelledby="role-r">
-          <span className="role-icon" aria-hidden="true"><Icon name="store" size={24} strokeWidth={1.6} /></span>
-          <span className="role-accent" aria-hidden="true" />
-          <span className="role-label">飲食店の方</span>
-          <h2 className="role-name" id="role-r">飲食店</h2>
-          <p className="role-desc">欲しい食材と量を伝えて、地域の供給から仕入れ案をつくります。</p>
-          <button type="button" onClick={() => setSheet("restaurant")}>飲食店としてログイン<Icon name="arrowRight" /></button>
+          <div className="role-top">
+            <span><span className="role-label">飲食店の方</span><h2 className="role-name" id="role-r">飲食店</h2></span>
+            <Icon name="store" size={30} strokeWidth={1.5} className="role-icon" />
+          </div>
+          <div className="role-bottom">
+            <p className="role-desc">欲しい食材と量を伝えて、地域の供給から仕入れ案をつくります。</p>
+            <button type="button" onClick={() => setSheet("restaurant")}>飲食店としてログイン<Icon name="arrowRight" /></button>
+          </div>
         </section>
         <section className="role-card producer" aria-labelledby="role-p">
-          <span className="role-icon" aria-hidden="true"><Icon name="sprout" size={24} strokeWidth={1.6} /></span>
-          <span className="role-accent" aria-hidden="true" />
-          <span className="role-label">生産者の方</span>
-          <h2 className="role-name" id="role-p">生産者</h2>
-          <p className="role-desc">今日販売できる量を、数タップで更新します。</p>
-          <button type="button" onClick={() => setSheet("producer")}>生産者としてログイン<Icon name="arrowRight" /></button>
+          <div className="role-top">
+            <span><span className="role-label">生産者の方</span><h2 className="role-name" id="role-p">生産者</h2></span>
+            <Icon name="sprout" size={30} strokeWidth={1.5} className="role-icon" />
+          </div>
+          <div className="role-bottom">
+            <p className="role-desc">今日販売できる量を、数タップで更新します。</p>
+            <button type="button" onClick={() => setSheet("producer")}>生産者としてログイン<Icon name="arrowRight" /></button>
+          </div>
         </section>
       </div>
 

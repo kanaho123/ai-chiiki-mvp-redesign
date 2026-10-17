@@ -139,13 +139,13 @@ function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: stri
           <span className={`chip ${s.published ? "chip-on" : "chip-off"}`}>{s.published ? "公開中" : "公開停止中"}</span>
         </div>
 
-        {/* 計量器のように：いまの量（大）→ 変更後の量（段ボタン）→ 確定 */}
-        <div className="supply-now">
-          <span style={{ display: "grid" }}><span className="label">現在の販売可能量</span><span className="when">更新 {formatJstDateTime(s.updatedAt)}</span></span>
-          <span className="figure stock">{s.availableKg}<small>kg</small></span>
-        </div>
-
-        <form onSubmit={(e) => { e.preventDefault(); patch({ availableKg: kg }); }} style={{ display: "grid", gap: 14 }}>
+        {/* 数量更新専用のコントロール（淡いオレンジの面）：現在 → 変更後（最も大きく）→ 確定 */}
+        <form className="qty-tool" onSubmit={(e) => { e.preventDefault(); patch({ availableKg: kg }); }}>
+          <div className="supply-now">
+            <span className="label">現在</span>
+            <span className="figure stock">{s.availableKg}<small>kg</small></span>
+            <span className="when">更新 {formatJstDateTime(s.updatedAt)}</span>
+          </div>
           <label className="stepper-label" htmlFor={kgId}>変更後{changed && <span className="diff num">（{Number(kg) - s.availableKg > 0 ? "＋" : "−"}{Math.abs(Number(kg) - s.availableKg) || 0}kg）</span>}</label>
           <div className={`stepper ${changed ? "changed" : ""}`}>
             <button type="button" onClick={() => step(-1)} aria-label="1kg減らす" disabled={busy}>−</button>

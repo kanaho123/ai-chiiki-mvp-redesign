@@ -80,28 +80,29 @@ export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, o
         </div>
       )}
 
-      <div className={`result-body ${stale ? "is-stale" : ""}`} style={{ display: "grid", gap: "var(--gap)" }}>
-        {/* 1〜4. 仕入れ票：状態ラベル → 結論 → 明細（生産者・数量・単価・金額）→ 商品代・受渡費・合計 */}
-        <article className={`slip ${statusTone}`} aria-labelledby="slip-title">
-          <div className="slip-head">
-            <h3 className="slip-title" id="slip-title">仕入れ案</h3>
+      <div className={`result-body ${stale ? "is-stale" : ""}`}>
+        {/* 1. 結論（上部の色面）：成功は深緑、不足・該当なしは淡いオレンジ、確認待ちは淡い黄、無効は灰。
+            成功時の強さは 金額 ＞「10kg 揃いました」＞ 農家の内訳、不足時は「あと1kg足りません」が最も強い */}
+        <header className={`hero band ${statusTone}`} aria-labelledby="hero-title">
+          <div className="hero-top">
             <p className={`status-box ${statusTone}`} title={status}><span className="sr-only">状態：</span>{statusLabel}</p>
+            {hasPlan && plan.slot && <p className="hero-slot">{formatJstDateTime(plan.slot.startAt)}〜{jstTimeOf(plan.slot.endAt)}・{plan.slot.placeName}（{plan.slot.label}）</p>}
           </div>
-          <dl className="slip-meta">
-            {hasPlan && plan.slot && (
-              <>
-                <dt>受渡</dt><dd>{formatJstDateTime(plan.slot.startAt)}〜{jstTimeOf(plan.slot.endAt)}</dd>
-                <dt>場所</dt><dd>{plan.slot.placeName}（{plan.slot.label}）</dd>
-              </>
-            )}
-            <dt>計算</dt><dd>{formatJstDateTime(plan.computedAt)}</dd>
-          </dl>
+          <p className="hero-title" id="hero-title">{freshness === "stale" ? "【無効】" : freshness === "checking" ? "【確認中】" : ""}{title}</p>
+          {sub && <p className="hero-sub">{sub}</p>}
+          {hasPlan && (
+            <p className="hero-amount">
+              {plan.totalYen === null ? <span className="pending">総額未確定（確認が必要）</span> : <Num stale={stale}>{yen(plan.totalYen)}</Num>}
+              <small>合計（税込・受渡費込み）</small>
+            </p>
+          )}
+          {hasPlan && <p className="hero-lineup"><span className="num">{plan.allocations.map((x) => `${x.producerName} ${x.kg}kg`).join(" ＋ ")}</span></p>}
+          {!ok && <p className="hero-scope headline">{headlineText(plan)}</p>}
+        </header>
 
-          <p className="slip-conclusion">
-            {freshness === "stale" ? "【無効】" : freshness === "checking" ? "【確認中】" : ""}{title}
-            {sub && <small>{sub}</small>}
-            {!ok && <small className="headline">{headlineText(plan)}</small>}
-          </p>
+        {/* 2〜4. 明細：カードにせず、余白・罫線・右揃えの数字で示す（合計は上部の根拠として控えめに） */}
+        <article className={`slip band ${statusTone}`} aria-labelledby="slip-title">
+          <h3 className="slip-title" id="slip-title">明細{hasPlan && <span>{plan.producerCount}農家・登録情報による計算</span>}</h3>
 
           {hasPlan && (
             <>
