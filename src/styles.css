@@ -205,23 +205,27 @@ details.fold { border-top: 1px solid var(--color-line); }
 .ob-actions { display: grid; gap: 14px; }
 .ob-actions .btn-primary { background: var(--ob-btn); border-color: var(--ob-btn); }
 
-/* ── 役割選択：淡い役割色の面を2つ並べる ───────────── */
-.role-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+/* ── 役割選択：開いた瞬間の第一印象。役割ごとに大きな線画・色・左寄せの役割名 ── */
+.role-cards { display: grid; gap: 14px; }
 .role-card button {
-  position: relative; width: 100%; min-height: 176px; display: grid; align-content: start; justify-items: start; gap: 2px;
-  padding: 18px 16px; border: 0; border-radius: var(--r-zone); text-align: left; color: var(--color-text);
+  position: relative; width: 100%; min-height: clamp(220px, 34dvh, 300px); display: grid; grid-template-rows: 1fr auto; align-items: end; justify-content: stretch;
+  padding: 22px 22px 22px 24px; border: 0; border-radius: 24px; text-align: left; overflow: hidden;
+  transition: transform 0.12s ease-out;
 }
-.role-card.restaurant button { background: var(--color-restaurant-tint); }
-.role-card.producer button { background: var(--color-producer-tint); }
-.role-card button:hover { filter: brightness(0.98); }
-.role-icon { display: grid; margin-bottom: 18px; }
-.role-card.restaurant .role-icon, .role-card.restaurant .role-go { color: var(--color-restaurant); }
-.role-card.producer .role-icon, .role-card.producer .role-go { color: var(--color-producer-ink); }
-.role-name { font-size: 24px; font-weight: 800; line-height: 1.3; }
-.role-desc { font-size: 14px; font-weight: 700; color: var(--color-muted); }
-.role-go { position: absolute; right: 16px; bottom: 16px; }
+.role-card button:active { transform: scale(0.985); }
+.role-card.restaurant button { background: var(--color-restaurant); color: #fff; --art-line: #d5ecdd; --art-fill: rgba(255, 255, 255, 0.1); }
+.role-card.producer button { background: var(--color-producer); color: var(--color-text); --art-line: #4a1f05; --art-fill: rgba(255, 255, 255, 0.34); }
+.role-art { position: absolute; top: 18px; right: 14px; width: min(58%, 230px); }
+.role-art svg { display: block; width: 100%; height: auto; }
+.role-text { display: grid; gap: 2px; padding-right: 64px; z-index: 1; }
+.role-name { font-size: 34px; font-weight: 800; line-height: 1.2; letter-spacing: 0.01em; }
+.role-desc { font-size: 16px; font-weight: 700; line-height: 1.4; opacity: 0.92; }
+.role-go { position: absolute; right: 20px; bottom: 20px; width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; }
+.role-card.restaurant .role-go { background: #fff; color: var(--color-restaurant); }
+.role-card.producer .role-go { background: var(--color-text); color: #fff; }
 .about-line { display: flex; gap: 6px; align-items: flex-start; font-size: 14px; color: var(--color-muted); }
 .about-line svg { margin-top: 3px; }
+@media (prefers-reduced-motion: reduce) { .role-card button { transition: none; } .role-card button:active { transform: none; } }
 
 /* ログインシート */
 .sheet-backdrop { position: fixed; inset: 0; z-index: 40; background: rgba(20, 20, 20, 0.45); display: grid; align-items: end; animation: fade 0.18s ease; }
@@ -240,18 +244,20 @@ details.fold { border-top: 1px solid var(--color-line); }
 .flow-segs { margin-left: auto; display: flex; gap: 4px; }
 .flow-segs i { width: 22px; height: 4px; border-radius: 2px; background: var(--color-sunken); }
 .flow-segs i.on { background: var(--accent); }
-/* 書く場所：枠なしの温かい面 */
-.composer { position: relative; background: var(--color-zone); border-radius: var(--r-zone); }
+/* 書く場所（主役）：淡い緑の大きな面。中に「何を書けばいいか」の手がかりタイル */
+.composer { position: relative; background: var(--color-restaurant-tint); border-radius: 24px; padding-bottom: 14px; }
 .composer:focus-within { box-shadow: 0 0 0 2px var(--accent); }
-.composer textarea { border: 0; background: transparent; resize: none; height: clamp(170px, 28dvh, 240px); min-height: 0; font-size: 18px; line-height: 1.7; padding: 18px; border-radius: var(--r-zone); }
+.composer textarea { border: 0; background: transparent; resize: none; height: clamp(140px, 22dvh, 210px); min-height: 0; font-size: 19px; line-height: 1.7; padding: 20px 20px 8px; border-radius: 24px; }
+.composer textarea::placeholder { color: #5f7a6b; }
 .composer textarea:focus { box-shadow: none; }
-.composer .count { position: absolute; right: 14px; bottom: 10px; font-size: 14px; color: var(--color-muted); }
-.ai-note { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--color-muted); margin-top: -14px; }
+.composer .count { position: absolute; right: 18px; top: 12px; font-size: 14px; color: var(--color-muted); }
+.hint-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 14px; }
+.hint-tile { justify-content: flex-start; gap: 8px; min-height: 52px; padding: 0 12px; border: 0; border-radius: 14px; background: var(--color-page); color: var(--color-text); font-size: 16px; font-weight: 800; }
+.hint-tile svg { color: var(--color-restaurant); }
+.hint-tile.used { background: var(--color-restaurant); color: #fff; }
+.hint-tile.used svg { color: #fff; }
+.ai-note { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--color-muted); margin-top: -12px; }
 .ai-note svg { color: var(--color-restaurant); }
-.example-list { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.example-title { font-size: 14px; font-weight: 700; color: var(--color-muted); margin-right: 2px; }
-.example-chip { min-height: var(--tap-min); padding: 0 14px; border: 1px solid var(--color-line); border-radius: var(--r-input); background: var(--color-page); font-size: 15px; font-weight: 700; }
-.example-chip:hover { border-color: var(--accent); background: var(--accent-tint); }
 .manual-btn { margin-right: -12px; }
 
 /* 読み取り中 */
@@ -313,28 +319,46 @@ button.tile:hover { background: var(--color-zone); }
 .answer-meta svg { color: var(--color-muted); }
 .answer-tag { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--color-muted); }
 
-/* 束ね図：棒の長さ＝必要量に対する比率。数字を必ず添える */
-.bundle { margin: 14px 0 10px; }
-.bundle-grid { display: grid; grid-template-columns: auto 1fr 14px auto; grid-auto-rows: 44px; }
-.bundle-row { grid-column: 1 / 3; display: grid; grid-template-columns: subgrid; align-items: center; }
-.bundle-label { display: flex; align-items: baseline; gap: 6px; padding-right: 10px; white-space: nowrap; }
-.bundle-name { font-size: 15px; }
-.bundle-kg { font-size: 16px; font-weight: 800; }
-.bundle-track { position: relative; height: 100%; }
-.bundle-track::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px; margin-top: -1px; background: var(--color-restaurant); }
-.bundle-bar { position: absolute; left: 0; top: 50%; height: 18px; margin-top: -9px; border-radius: 4px; background: var(--color-restaurant); z-index: 1; }
-.bundle-row.gap .bundle-name, .bundle-row.gap .bundle-kg { color: var(--color-amber); }
-.bundle-row.gap .bundle-track::after { background: none; border-top: 2px dashed var(--color-amber-line); height: 0; }
-.bundle-row.gap .bundle-bar { background: var(--color-amber-tint); border: 2px dashed var(--color-amber); }
-.bundle-bracket { grid-column: 3; align-self: stretch; margin: 21px 0; border: 2px solid var(--color-restaurant); border-left: 0; border-radius: 0 10px 10px 0; }
-.has-gap .bundle-bracket { border-bottom-style: dashed; border-bottom-color: var(--color-amber-line); }
-.bundle-total { grid-column: 4; align-self: center; position: relative; margin-left: 10px; display: grid; justify-items: center; padding: 8px 12px; border-radius: 12px; background: var(--color-restaurant); color: #fff; line-height: 1.2; }
-.bundle-total::before { content: ""; position: absolute; left: -10px; top: 50%; width: 10px; height: 2px; margin-top: -1px; background: var(--color-restaurant); }
-.bundle-total b { font-size: 22px; font-weight: 800; }
-.bundle-total small { font-size: 14px; font-weight: 700; }
-.has-gap .bundle-total { background: var(--color-page); color: var(--color-text); border: 2px solid var(--color-amber); }
-.bundle.is-stale .bundle-bar, .bundle.is-stale .bundle-track::after, .bundle.is-stale .bundle-total, .bundle.is-stale .bundle-total::before { background: var(--color-stale); }
-.bundle.is-stale .bundle-bracket { border-color: var(--color-stale); }
+/* 束ね図（主役）：農家のタイル → 合流 → 1つの量。バーは必要量＝100%の比率、数字を必ず添える */
+.bundle { margin: 18px 0 8px; }
+.bundle-sources { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 10px; }
+.bundle-row { position: relative; display: grid; gap: 2px; padding: 12px 12px 14px; border-radius: 16px; background: var(--color-restaurant-tint); }
+.bundle-row::after { content: ""; position: absolute; left: 50%; bottom: -16px; width: 2px; height: 16px; margin-left: -1px; background: var(--color-restaurant); }
+.bundle-name { font-size: 15px; font-weight: 700; }
+.bundle-kg { font-size: 26px; font-weight: 800; line-height: 1.15; }
+.bundle-track { position: relative; height: 8px; margin-top: 6px; border-radius: 4px; background: #ffffff; overflow: hidden; }
+.bundle-bar { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: var(--color-restaurant); }
+/* 合流の線：左右の端のタイルの中心を結び、中央から下へ */
+.bundle-join { position: relative; height: 18px; margin: 16px calc((100% + 10px) / (2 * var(--n)) - 5px) 0; border-top: 2px solid var(--color-restaurant); }
+.bundle-join::after { content: ""; position: absolute; left: 50%; top: 0; width: 2px; height: 16px; margin-left: -1px; background: var(--color-restaurant); }
+.bundle-total { display: grid; gap: 10px; padding: 14px 16px 16px; border-radius: 18px; background: var(--color-restaurant); color: #fff; }
+.bundle-total-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
+.bundle-total-head svg { align-self: center; }
+.bundle-total-head b { font-size: 30px; font-weight: 800; line-height: 1.1; }
+.bundle-total-head span { font-size: 14px; font-weight: 700; }
+.bundle-stack { display: flex; height: 14px; border-radius: 5px; overflow: hidden; background: rgba(255, 255, 255, 0.2); gap: 2px; }
+.bundle-stack i { display: block; height: 100%; }
+.bundle-stack .shade-0 { background: #ffffff; }
+.bundle-stack .shade-1 { background: #bfe0cb; }
+.bundle-stack .shade-2 { background: #8fc6a5; }
+.bundle-row.shade-1 .bundle-bar { background: #4f8f70; }
+.bundle-row.shade-2 .bundle-bar { background: #2e7a57; }
+/* 足りないとき：集まった量の先に点線の「不足」 */
+.has-gap .bundle-total { background: var(--color-page); color: var(--color-text); box-shadow: inset 0 0 0 2px var(--color-restaurant); }
+.has-gap .bundle-total-head svg { color: var(--color-restaurant); }
+.has-gap .bundle-stack { background: transparent; }
+.has-gap .bundle-stack .shade-0 { background: var(--color-restaurant); }
+.has-gap .bundle-stack .shade-1 { background: #4f8f70; }
+.has-gap .bundle-stack .shade-2 { background: #8fc6a5; }
+.bundle-stack .gap { background: var(--color-amber-tint); border: 2px dashed var(--color-amber); border-radius: 0 5px 5px 0; }
+.bundle-gap-label { justify-self: end; margin-top: -6px; font-size: 15px; font-weight: 800; color: var(--color-amber); }
+.bundle.is-stale .bundle-bar, .bundle.is-stale .bundle-row::after, .bundle.is-stale .bundle-join::after { background: var(--color-stale); }
+.bundle.is-stale .bundle-join { border-color: var(--color-stale); }
+.bundle.is-stale .bundle-total { background: var(--color-stale); }
+/* 量のバーが伸びる（250ms）。動きを減らす設定では伸ばさない */
+.bundle-bar, .bundle-stack i { transform-origin: left center; animation: bar-grow 250ms ease-out both; }
+@keyframes bar-grow { from { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) { .bundle-bar, .bundle-stack i { animation: none; } }
 
 /* 詳しい情報：オフホワイトの区画にまとめる */
 .detail-zone { background: var(--color-zone); border-radius: var(--r-zone); padding: 18px 16px 6px; display: grid; gap: 22px; }
@@ -366,13 +390,13 @@ button.tile:hover { background: var(--color-zone); }
 .is-stale .num { text-decoration: line-through; text-decoration-thickness: 2px; }
 .void-mark { display: inline-block; margin-left: 6px; padding: 0 6px; font-size: 13px; font-weight: 700; color: #fff; background: var(--color-error); border-radius: 4px; text-decoration: none; vertical-align: middle; letter-spacing: 0; line-height: 1.6; }
 
-/* ── 生産者：数量が主役（現在 → 変更後 → 更新） ───── */
-.supply-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 36px; }
+/* ── 生産者：数量が主役（現在 → 変更後 → 量のバー → 更新） ───── */
+.supply-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 40px; }
 .supply { display: grid; gap: 14px; }
 .supply.paused .qty-panel { filter: grayscale(0.4); }
 .supply-head { display: flex; align-items: center; gap: 10px; }
-.supply-icon { display: grid; color: var(--color-producer-ink); }
-.supply-title { flex: 1; min-width: 0; font-size: 24px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; line-height: 1.3; }
+.supply-icon { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: var(--color-producer-tint); color: var(--color-producer-ink); }
+.supply-title { flex: 1; min-width: 0; font-size: 26px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; line-height: 1.25; }
 .supply-title small { font-size: 14px; font-weight: 500; color: var(--color-muted); }
 .supply-updated { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: var(--r-input); background: var(--color-restaurant-tint); color: var(--color-restaurant-dark); font-size: 16px; }
 .qty-tool { display: grid; gap: 12px; }
@@ -380,18 +404,27 @@ button.tile:hover { background: var(--color-zone); }
 .supply-now { display: flex; align-items: baseline; gap: 8px; }
 .supply-now .figure { font-size: 20px; font-weight: 800; color: var(--color-muted); }
 .supply-now .figure small { font-size: 15px; margin-left: 1px; }
-.qty-panel { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-radius: var(--r-zone); background: var(--color-producer-tint); }
+.qty-panel { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 16px 16px 20px; border-radius: 24px; background: var(--color-producer-tint); }
 .qty-panel.changed { box-shadow: inset 0 0 0 2px var(--color-producer); }
 .qty-next { display: grid; cursor: text; min-width: 0; }
 .qty-next .qty-label { color: var(--color-producer-ink); }
 .qty-next .with-unit { gap: 4px; justify-content: flex-start; }
-.qty-next .with-unit input { flex: none; width: 2.1em; font-size: 48px; font-weight: 800; border: 0; padding: 0; min-height: 60px; background: transparent; -moz-appearance: textfield; appearance: textfield; }
+.qty-next .with-unit input { flex: none; width: 1.9em; text-align: right; font-size: 64px; font-weight: 800; letter-spacing: -0.02em; border: 0; padding: 0; min-height: 72px; background: transparent; -moz-appearance: textfield; appearance: textfield; }
 .qty-next input:focus { box-shadow: none; outline: 2px solid var(--color-producer-dark); outline-offset: 2px; border-radius: 6px; }
 .qty-next input::-webkit-inner-spin-button, .qty-next input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-.qty-next em { font-size: 20px; }
+.qty-next em { font-size: 22px; }
 .stepper { display: flex; gap: 8px; }
-.stepper button { width: 56px; min-height: 56px; padding: 0; border: 1.5px solid var(--color-producer-dark); background: var(--color-page); color: var(--color-producer-ink); }
+.stepper button { width: 60px; min-height: 60px; padding: 0; border: 0; border-radius: 16px; background: var(--color-page); color: var(--color-producer-ink); }
 .stepper button:hover:not(:disabled) { background: #fff7f1; }
+.stepper button:active:not(:disabled) { transform: scale(0.96); }
+/* 量のバー：現在（薄い）と変更後（濃いオレンジ） */
+.qty-bars { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 6px 10px; }
+.qty-bar-label { font-size: 14px; font-weight: 700; color: var(--color-muted); }
+.qty-track { position: relative; height: 10px; border-radius: 5px; background: var(--color-sunken); overflow: hidden; }
+.qty-bar { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; transition: width 250ms ease-out; }
+.qty-bar.now { background: #c9c5bd; }
+.qty-bar.next { background: var(--color-producer); }
+@media (prefers-reduced-motion: reduce) { .qty-bar { transition: none; } }
 .supply-facts { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 14px; color: var(--color-muted); }
 .supply-facts span { display: inline-flex; align-items: center; gap: 5px; }
 .publish-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding-top: 12px; border-top: 1px solid var(--color-line); }
@@ -409,7 +442,16 @@ details.more[open] > summary svg { transform: rotate(180deg); }
 /* 足りないときは「あと1kg 足りません」を最も強く（金額は一段下げる） */
 .answer.warn .answer-head { font-size: 32px; }
 .answer.warn .answer-yen { font-size: 30px; }
-/* 変更後の数字は単位の直前に寄せる（1桁でも数字と kg が離れないように） */
-.qty-next .with-unit input { text-align: right; width: 1.9em; }
-/* 役割の面の中身は左上から（ボタン既定の中央寄せを打ち消す） */
-.role-card button { justify-content: stretch; }
+/* 結果の金額は画面でいちばん大きい数字 */
+.answer-yen { font-size: 56px; }
+/* 確認：アイコン＋値のまとまりを大きく */
+.tile-icon { width: 40px; height: 40px; border-radius: 12px; }
+.tile-value { font-size: 20px; }
+/* 結果の文字の強さ：金額 56 ＞ 見出し 28 ＞ 束ねた量 26 ＞ 農家ごとの量 22 */
+.answer.ok .answer-head, .answer.stale .answer-head { font-size: 28px; }
+.bundle-kg { font-size: 22px; }
+.bundle-total-head b { font-size: 26px; }
+/* 変更後の数字は「変更後」の文字と左をそろえる（入力欄の幅を中身に合わせる） */
+@supports (field-sizing: content) {
+  .qty-next .with-unit input { field-sizing: content; width: auto; min-width: 1ch; text-align: left; }
+}

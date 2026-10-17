@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Me } from "../App";
 import { formatJstDateTime, jstTimeOf } from "../lib/dates.js";
 import { Icon } from "../components/Icon";
@@ -45,14 +45,19 @@ export default function ProducerPage({ me }: { me: Me }) {
   // 更新結果（何が変わったか）。一覧を読み直してもカードの下に残す
   const [done, setDone] = useState<{ id: string; text: string } | null>(null);
 
+  // 一覧の読み込みは最後に始めたものだけを反映する（更新の前に始まった読み込みが、後から古い数量で上書きしないように）
+  const loadSeq = useRef(0);
   const reload = useCallback(async () => {
+    const seq = ++loadSeq.current;
     try {
       const r = await fetch("/api/supplies", { cache: "no-store" });
       const d = await r.json();
+      if (seq !== loadSeq.current) return;
       if (!r.ok) throw new Error(d.error);
       setData(d);
       setLoadError(null);
     } catch (e) {
+      if (seq !== loadSeq.current) return;
       setLoadError(e instanceof Error && e.message ? e.message : "供給を読み込めませんでした。再読み込みしてください。");
     }
   }, []);
@@ -114,10 +119,18 @@ function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: stri
   }
 
   // − / ＋ は数量を 1kg ずつ動かすだけ。送るのは主ボタンを押したときの確定値（0〜100kg）
+  const inputRef = useRef<HTMLInputElement>(null);
   const step = (d: number) => {
     const cur = Number.isInteger(Number(kg)) && kg !== "" ? Number(kg) : s.availableKg;
-    setKg(String(Math.min(100, Math.max(0, cur + d))));
+    const next = Math.min(100, Math.max(0, cur + d));
+    setKg(String(next));
+    // 数字が切り替わったことが分かる、ごく短い動き（動きを減らす設定では行わない）
+    if (next !== cur && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      inputRef.current?.animate([{ transform: `translateY(${d > 0 ? 6 : -6}px)`, opacity: 0.35 }, { transform: "none", opacity: 1 }], { duration: 180, easing: "ease-out" });
+    }
   };
+  const nextKg = Number.isFinite(Number(kg)) && kg !== "" ? Math.max(0, Number(kg)) : s.availableKg;
+  const scale = Math.max(s.availableKg, nextKg, 1);
   const kgId = `kg-${s.id}`;
   const changed = kg !== String(s.availableKg);
   return (
@@ -136,7 +149,7 @@ function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: stri
           <label className="qty-next" htmlFor={kgId}>
             <span className="qty-label">変更後</span>
             <span className="with-unit">
-              <input id={kgId} type="number" inputMode="numeric" min={0} max={100} step={1} value={kg} onChange={(e) => setKg(e.target.value)} aria-label={`${s.item.name}の変更後の量`} />
+              <input ref={inputRef} id={kgId} type="number" inputMode="numeric" min={0} max={100} step={1} value={kg} onChange={(e) => setKg(e.target.value)} aria-label={`${s.item.name}の変更後の量`} />
               <em>kg</em>
             </span>
           </label>
@@ -144,6 +157,11 @@ function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: stri
             <button type="button" onClick={() => step(-1)} aria-label="1kg減らす" disabled={busy}><Icon name="minus" size={28} strokeWidth={2.4} /></button>
             <button type="button" onClick={() => step(1)} aria-label="1kg増やす" disabled={busy}><Icon name="plus" size={28} strokeWidth={2.4} /></button>
           </div>
+        </div>
+        {/* 量のバー：現在（薄い枠）と変更後（濃いオレンジ）。増えたか減ったかが読まなくても分かる */}
+        <div className="qty-bars" aria-hidden="true">
+          <span className="qty-bar-label">現在</span><span className="qty-track"><i className="qty-bar now" style={{ width: `${(s.availableKg / scale) * 100}%` }} /></span>
+          <span className="qty-bar-label">変更後</span><span className="qty-track"><i className="qty-bar next" style={{ width: `${(nextKg / scale) * 100}%` }} /></span>
         </div>
         <button type="submit" className="btn-primary btn-block" disabled={busy || !changed} aria-busy={busy}>
           {busy ? <><span className="spinner" aria-hidden="true" />変更しています…</> : changed ? `${kg || "?"}kgに変更する` : "量を変えると更新できます"}

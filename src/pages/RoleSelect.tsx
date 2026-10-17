@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Me } from "../App";
 import { Icon } from "../components/Icon";
+import { ProducerArt, RestaurantArt } from "../components/RoleArt";
 
 // サービスのトップ：役割を選ぶ → 下から出るシートでログイン（新規登録はない）。
 // デモ環境ではその役割のデモ用アカウントを候補に出す（パスワードは表示・保存しない）。
@@ -24,22 +25,26 @@ export default function RoleSelect({ onLoggedIn }: { onLoggedIn: (me: Me) => voi
     <main className="screen">
       <h1 className="display">どちらで使いますか？</h1>
 
-      {/* 役割の入口：アイコン＋役割名＋1行。淡い役割色の面全体が1つのボタン */}
+      {/* 入口：役割ごとに大きな線画・色・役割名。面全体が1つのボタン */}
       <div className="role-cards">
         <section className="role-card restaurant" aria-labelledby="role-r">
           <button type="button" onClick={() => setSheet("restaurant")} aria-describedby="role-r-desc">
-            <span className="role-icon" aria-hidden="true"><Icon name="store" size={28} strokeWidth={1.8} /></span>
-            <span className="role-name" id="role-r">飲食店</span>
-            <span className="role-desc" id="role-r-desc">食材を仕入れる</span>
-            <Icon name="arrowRight" size={22} strokeWidth={2.2} className="role-go" />
+            <span className="role-art"><RestaurantArt /></span>
+            <span className="role-text">
+              <span className="role-name" id="role-r">飲食店</span>
+              <span className="role-desc" id="role-r-desc">食材を仕入れる</span>
+            </span>
+            <span className="role-go" aria-hidden="true"><Icon name="arrowRight" size={22} strokeWidth={2.4} /></span>
           </button>
         </section>
         <section className="role-card producer" aria-labelledby="role-p">
           <button type="button" onClick={() => setSheet("producer")} aria-describedby="role-p-desc">
-            <span className="role-icon" aria-hidden="true"><Icon name="sprout" size={28} strokeWidth={1.8} /></span>
-            <span className="role-name" id="role-p">生産者</span>
-            <span className="role-desc" id="role-p-desc">出せる量を登録</span>
-            <Icon name="arrowRight" size={22} strokeWidth={2.2} className="role-go" />
+            <span className="role-art"><ProducerArt /></span>
+            <span className="role-text">
+              <span className="role-name" id="role-p">生産者</span>
+              <span className="role-desc" id="role-p-desc">今日出せる量を登録する</span>
+            </span>
+            <span className="role-go" aria-hidden="true"><Icon name="arrowRight" size={22} strokeWidth={2.4} /></span>
           </button>
         </section>
       </div>

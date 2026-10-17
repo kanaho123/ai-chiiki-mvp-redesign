@@ -25,35 +25,43 @@ function Num({ children, stale }: { children: React.ReactNode; stale: boolean })
 
 /**
  * 束ね図：複数の農家の供給が1つの必要量にまとまることを示す（装飾ではなく、プロダクトの価値の説明）。
- * 棒の長さは「今回必要な量」を100%とした比率。棒だけで判断させないよう、量の数字を必ず添える。
- * 足りないときは、集まった量の先に点線で「不足 Nkg」を置く。
+ * 上に農家ごとのタイル（量の数字＋必要量の中での位置を示すバー）、線で合流し、下で1つの量（積み上げバー）になる。
+ * バーの長さは「今回必要な量」を100%とした比率。足りないときは積み上げの先に点線の「不足 Nkg」を置く。
  */
 function Bundle({ plan, stale }: { plan: PlanResult; stale: boolean }) {
   const need = plan.requestedKg;
   const gap = plan.status !== "MATCHED" && plan.shortageKg > 0 ? plan.shortageKg : 0;
-  const width = (kg: number) => `${Math.min(100, (kg / need) * 100)}%`;
-  const rows = plan.allocations.length + (gap ? 1 : 0);
-  const label = `${plan.allocations.map((a) => `${a.producerName} ${a.kg}kg`).join("、")}${gap ? `、不足 ${gap}kg` : ""}。合わせて${plan.fulfilledKg}kg（必要 ${need}kg）`;
+  const pct = (kg: number) => Math.min(100, (kg / need) * 100);
+  let offset = 0;
+  const segs = plan.allocations.map((a, i) => {
+    const seg = { a, left: offset, w: pct(a.kg), shade: i % 3 };
+    offset += seg.w;
+    return seg;
+  });
+  const label = `${plan.allocations.map((a) => `${a.producerName} ${a.kg}kg`).join("、")}を束ねて${plan.fulfilledKg}kg${gap ? `。必要 ${need}kgまで不足 ${gap}kg` : ""}`;
   return (
     <figure className={`bundle ${gap ? "has-gap" : ""} ${stale ? "is-stale" : ""}`} aria-label={label}>
-      <div className="bundle-grid">
-        {plan.allocations.map((a, i) => (
-          <div className="bundle-row" key={a.supplyId} style={{ gridRow: i + 1 }}>
-            <span className="bundle-label"><b className="bundle-name">{a.producerName}</b><span className="bundle-kg num">{a.kg}kg</span></span>
-            <span className="bundle-track"><i className="bundle-bar" style={{ width: width(a.kg) }} /></span>
-          </div>
+      <ul className="bundle-sources" style={{ "--n": segs.length } as React.CSSProperties}>
+        {segs.map((s) => (
+          <li key={s.a.supplyId} className={`bundle-row shade-${s.shade}`}>
+            <span className="bundle-name">{s.a.producerName}</span>
+            <span className="bundle-kg num">{s.a.kg}kg</span>
+            <span className="bundle-track"><i className="bundle-bar" style={{ left: `${s.left}%`, width: `${s.w}%` }} /></span>
+          </li>
         ))}
-        {gap > 0 && (
-          <div className="bundle-row gap" style={{ gridRow: rows }}>
-            <span className="bundle-label"><b className="bundle-name">不足</b><span className="bundle-kg num">{gap}kg</span></span>
-            <span className="bundle-track"><i className="bundle-bar" style={{ width: width(gap) }} /></span>
-          </div>
-        )}
-        <span className="bundle-bracket" style={{ gridRow: `1 / span ${rows}` }} aria-hidden="true" />
-        <span className="bundle-total" style={{ gridRow: `1 / span ${rows}` }}>
+      </ul>
+      <div className="bundle-join" style={{ "--n": segs.length } as React.CSSProperties} aria-hidden="true" />
+      <div className="bundle-total">
+        <span className="bundle-total-head">
+          <Icon name="box" size={24} />
           <b className="num">{plan.fulfilledKg}kg</b>
-          {gap > 0 && <small>必要 {need}kg</small>}
+          <span>{gap ? `必要 ${need}kg` : "必要な量を束ねました"}</span>
         </span>
+        <span className="bundle-stack">
+          {segs.map((s) => <i key={s.a.supplyId} className={`shade-${s.shade}`} style={{ width: `${s.w}%` }} />)}
+          {gap > 0 && <i className="gap" style={{ width: `${pct(gap)}%` }} />}
+        </span>
+        {gap > 0 && <span className="bundle-gap-label num">不足 {gap}kg</span>}
       </div>
     </figure>
   );

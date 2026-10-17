@@ -1,16 +1,16 @@
 import { REQUEST_TEXT_MAX } from "../../lib/validate.js";
 import { BottomBar } from "../../components/BottomBar";
-import { Icon } from "../../components/Icon";
+import { Icon, type IconName } from "../../components/Icon";
 
 // STEP 1：仕入れたい内容を普段の言葉で入力。項目を選んで入力することもできる（自然文入力を強制しない）。
 // 読み取り中は1画面の待機表示（実際の進み具合は示さない控えめな演出）。
 
-export const EXAMPLE_TEXT = "10月23日金曜に大阪産トマト10kg、受渡費込み8,000円以内。A農園を優先、初回の農家もOK";
-// 短い入力例（品目を必ず含める）。押すと入力欄に入る
-const EXAMPLES = [
-  { label: "トマト 10kg", text: "大阪産トマトを10kg" },
-  { label: "A農園を優先", text: "A農園を優先してトマト10kg" },
-  { label: "日付と予算も", text: EXAMPLE_TEXT },
+// 何を書けばいいかを目で示す4つの手がかり（押すと入力欄に加わる）。品目・量・産地・受け取り日
+const HINTS: { icon: IconName; word: string; label: string }[] = [
+  { icon: "basket", word: "トマト", label: "品目" },
+  { icon: "weight", word: "10kg", label: "量" },
+  { icon: "pin", word: "大阪産", label: "産地" },
+  { icon: "calendar", word: "10/23 午前", label: "受け取り" },
 ];
 
 export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable, error, emptyHint }: {
@@ -41,18 +41,21 @@ export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable
         <label>
           <span className="sr-only">仕入れたい内容</span>
           <textarea rows={4} maxLength={REQUEST_TEXT_MAX} value={text} onChange={(e) => onText(e.target.value)}
-            placeholder="例：10月23日に大阪産トマトを10kg" aria-describedby="step1-note" />
+            placeholder="ここに書いてください" aria-describedby="step1-note" />
         </label>
+        <div className="hint-tiles" role="group" aria-label="書く内容の例（押すと入力欄に加わります）">
+          {HINTS.map((h) => (
+            <button key={h.word} type="button" className={`hint-tile example-chip ${text.includes(h.word) ? "used" : ""}`}
+              onClick={() => onText(text.includes(h.word) ? text : text.trim() ? `${text.trim()} ${h.word}` : h.word)}>
+              <Icon name={h.icon} size={20} /><span className="hint-word">{h.word}</span><span className="sr-only">（{h.label}）</span>
+            </button>
+          ))}
+        </div>
         {text.length > REQUEST_TEXT_MAX * 0.8 && <span className="count">{text.length.toLocaleString("ja-JP")}/{REQUEST_TEXT_MAX.toLocaleString("ja-JP")}</span>}
       </div>
       <p className="ai-note" id="step1-note"><Icon name="edit" size={16} />AIが品目・数量・日付を読み取ります</p>
 
-      <div className="example-list" role="group" aria-label="入力例（押すと入力欄に入ります）">
-        <span className="example-title" aria-hidden="true">例</span>
-        {EXAMPLES.map((ex) => <button key={ex.label} type="button" className="example-chip example" onClick={() => onText(ex.text)}>{ex.label}</button>)}
-      </div>
-
-      {emptyHint && <div className="alert warn" role="status"><Icon name="info" />文章が空です。例を押すか、「項目で入力」を使ってください。</div>}
+      {emptyHint && <div className="alert warn" role="status"><Icon name="info" />文章が空です。上の例を押すか、「項目で入力」を使ってください。</div>}
       {aiOff && <div className="alert info" role="status"><Icon name="info" />AIによる読み取りは現在使えません。項目を選んで入力してください（計算結果は同じです）。</div>}
       {error && (
         <div className="alert bad" role="alert">
