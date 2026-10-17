@@ -25,19 +25,14 @@ function Num({ children, stale }: { children: React.ReactNode; stale: boolean })
 
 /**
  * 束ね図：複数の農家の供給が1つの必要量にまとまることを示す（装飾ではなく、プロダクトの価値の説明）。
- * 上に農家ごとのタイル（量の数字＋必要量の中での位置を示すバー）、線で合流し、下で1つの量（積み上げバー）になる。
+ * 上に農家ごとの量（数字＋左端から始まるバー）、線で合流し、下で1つの量になる。足りないときだけ不足のバーを添える。
  * バーの長さは「今回必要な量」を100%とした比率。足りないときは積み上げの先に点線の「不足 Nkg」を置く。
  */
 function Bundle({ plan, stale }: { plan: PlanResult; stale: boolean }) {
   const need = plan.requestedKg;
   const gap = plan.status !== "MATCHED" && plan.shortageKg > 0 ? plan.shortageKg : 0;
   const pct = (kg: number) => Math.min(100, (kg / need) * 100);
-  let offset = 0;
-  const segs = plan.allocations.map((a, i) => {
-    const seg = { a, left: offset, w: pct(a.kg), shade: i % 3 };
-    offset += seg.w;
-    return seg;
-  });
+  const segs = plan.allocations.map((a, i) => ({ a, w: pct(a.kg), shade: i % 3 }));
   const label = `${plan.allocations.map((a) => `${a.producerName} ${a.kg}kg`).join("、")}を束ねて${plan.fulfilledKg}kg${gap ? `。必要 ${need}kgまで不足 ${gap}kg` : ""}`;
   return (
     <figure className={`bundle ${gap ? "has-gap" : ""} ${stale ? "is-stale" : ""}`} aria-label={label}>
@@ -46,14 +41,15 @@ function Bundle({ plan, stale }: { plan: PlanResult; stale: boolean }) {
           <li key={s.a.supplyId} className={`bundle-row shade-${s.shade}`}>
             <span className="bundle-name">{s.a.producerName}</span>
             <span className="bundle-kg num">{s.a.kg}<span className="unit">kg</span></span>
-            <span className="bundle-track"><i className="bundle-bar" style={{ left: `${s.left}%`, width: `${s.w}%` }} /></span>
+            <span className="bundle-track"><i className="bundle-bar" style={{ width: `${s.w}%` }} /></span>
           </li>
         ))}
       </ul>
       {/* 合流の線（ロゴと同じ「束ねる線」）：各農家の中心から1点へ曲線でまとまる */}
       <svg className="bundle-join" viewBox="0 0 100 32" preserveAspectRatio="none" aria-hidden="true" focusable="false">
         {segs.map((s, i) => {
-          const x = ((i + 0.5) / segs.length) * 100;
+          // 各農家のバーの終点の真下から出す（バーは左端から始まり、長さ＝必要量に対する比率）
+          const x = Math.min(((i + s.w / 100) / segs.length) * 100, ((i + 1) / segs.length) * 100 - 2);
           return <path key={s.a.supplyId} d={`M${x} 0C${x} 18 50 14 50 32`} vectorEffect="non-scaling-stroke" />;
         })}
       </svg>
@@ -63,11 +59,16 @@ function Bundle({ plan, stale }: { plan: PlanResult; stale: boolean }) {
           <b className="num">{plan.fulfilledKg}<span className="unit">kg</span></b>
           <span>{gap ? `必要 ${need}kg` : "必要な量を束ねました"}</span>
         </span>
-        <span className="bundle-stack">
-          {segs.map((s) => <i key={s.a.supplyId} className={`shade-${s.shade}`} style={{ width: `${s.w}%` }} />)}
-          {gap > 0 && <i className="gap" style={{ width: `${pct(gap)}%` }} />}
-        </span>
-        {gap > 0 && <span className="bundle-gap-label num">不足 {gap}kg</span>}
+        {/* 足りないときだけ、集まった量の先に点線の不足を見せる（揃ったときは同じ内訳を繰り返さない） */}
+        {gap > 0 && (
+          <>
+            <span className="bundle-stack">
+              {segs.map((s) => <i key={s.a.supplyId} className={`shade-${s.shade}`} style={{ width: `${s.w}%` }} />)}
+              <i className="gap" style={{ width: `${pct(gap)}%` }} />
+            </span>
+            <span className="bundle-gap-label num">不足 {gap}kg</span>
+          </>
+        )}
       </div>
     </figure>
   );

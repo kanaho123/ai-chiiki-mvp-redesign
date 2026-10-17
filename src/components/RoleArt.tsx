@@ -32,6 +32,7 @@ export function RestaurantArt() {
       <circle cx="170" cy="164" r="9" fill="var(--g500)" />
       <circle cx="204" cy="158" r="20" fill={YELLOW} />
       <circle cx="238" cy="166" r="15" fill="var(--g200)" />
+      <path d="M238 154v24M230 160l8 6l8-6" stroke="var(--g500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
       <path d="M204 138c-6-8-2-15 4-17c1 7-1 12-4 17z" fill="var(--g500)" />
       <rect x="146" y="172" width="120" height="56" rx="6" fill={CREAM} />
       <rect x="146" y="188" width="120" height="6" fill="var(--g200)" />
@@ -58,9 +59,16 @@ export function ProducerArt() {
       <path d="M220 79c-7-1-11-5-11-11c7 0 11 5 11 11z" fill={CREAM_WARM} />
       <path d="M220 77c6-1 9-5 9-10c-6 0-9 4-9 10z" fill={CREAM_WARM} />
       {/* 収穫箱と野菜（右手前） */}
+      {/* 玉ねぎ（筋と先） */}
+      <path d="M222 112c-2 4-1 6 0 7" stroke="#c9952a" strokeWidth="3" strokeLinecap="round" fill="none" />
       <circle cx="222" cy="134" r="15" fill={YELLOW} />
-      <circle cx="252" cy="130" r="17" fill={CREAM_WARM} />
+      <path d="M216 122c-4 7-4 17 0 24M228 122c4 7 4 17 0 24" stroke="#d8a531" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+      {/* トマト（へた） */}
+      <circle cx="252" cy="131" r="17" fill="var(--o600)" />
+      <path d="M252 116l3 5l6-2l-4 5l5 3l-6 1l-1 6l-3-5l-3 5l-1-6l-6-1l5-3l-4-5l6 2z" fill="var(--o800)" />
+      {/* 人参（葉） */}
       <path d="M276 140l12-38l-22 8z" fill="var(--o300)" />
+      <path d="M281 104c-2-8 0-13 5-15M284 106c4-6 9-8 14-6" stroke={CREAM_WARM} strokeWidth="3" strokeLinecap="round" fill="none" />
       <rect x="200" y="140" width="96" height="56" rx="6" fill={CREAM_WARM} />
       <rect x="200" y="157" width="96" height="6" fill="var(--o300)" />
       <rect x="200" y="176" width="96" height="6" fill="var(--o300)" />

@@ -144,27 +144,32 @@ function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: stri
 
       {/* 現在 → 変更後（いちばん大きい数字）→ 更新 */}
       <form className="qty-tool" onSubmit={(e) => { e.preventDefault(); patch({ availableKg: kg }); }}>
-        <p className="supply-now"><span className="qty-label">現在</span><span className="figure stock">{s.availableKg}<small>kg</small></span></p>
+        {/* 数字＋±＋量のバーで1つの道具。灰色のバー＝現在、オレンジのバー＝変更後（上の大きな数字） */}
         <div className={`qty-panel ${changed ? "changed" : ""}`}>
-          <label className="qty-next" htmlFor={kgId}>
-            <span className="qty-label">変更後</span>
-            <span className="with-unit">
-              <input ref={inputRef} id={kgId} type="number" inputMode="numeric" min={0} max={100} step={1} value={kg} onChange={(e) => setKg(e.target.value)} aria-label={`${s.item.name}の変更後の量`} />
-              <em>kg</em>
-            </span>
-          </label>
-          <div className="stepper">
-            <button type="button" onClick={() => step(-1)} aria-label="1kg減らす" disabled={busy}><Icon name="minus" size={28} strokeWidth={2.4} /></button>
-            <button type="button" onClick={() => step(1)} aria-label="1kg増やす" disabled={busy}><Icon name="plus" size={28} strokeWidth={2.4} /></button>
+          <div className="qty-top">
+            <label className="qty-next" htmlFor={kgId}>
+              <span className="qty-label">変更後</span>
+              <span className="with-unit">
+                <input ref={inputRef} id={kgId} type="number" inputMode="numeric" min={0} max={100} step={1} value={kg} onChange={(e) => setKg(e.target.value)} aria-label={`${s.item.name}の変更後の量`} />
+                <em>kg</em>
+              </span>
+            </label>
+            <div className="stepper">
+              <button type="button" onClick={() => step(-1)} aria-label="1kg減らす" disabled={busy}><Icon name="minus" size={28} strokeWidth={2.4} /></button>
+              <button type="button" onClick={() => step(1)} aria-label="1kg増やす" disabled={busy}><Icon name="plus" size={28} strokeWidth={2.4} /></button>
+            </div>
+          </div>
+          <div className="qty-bars">
+            <span className="qty-bar-label">現在</span>
+            <span className="qty-track" aria-hidden="true"><i className="qty-bar now" style={{ width: `${(s.availableKg / scale) * 100}%` }} /></span>
+            <span className="qty-bar-val num current-kg">{s.availableKg}kg</span>
+            <span aria-hidden="true" />
+            <span className="qty-track" aria-hidden="true"><i className="qty-bar next" style={{ width: `${(nextKg / scale) * 100}%` }} /></span>
+            <span aria-hidden="true" />
           </div>
         </div>
-        {/* 量のバー：現在（薄い枠）と変更後（濃いオレンジ）。増えたか減ったかが読まなくても分かる */}
-        <div className="qty-bars" aria-hidden="true">
-          <span className="qty-bar-label">現在</span><span className="qty-track"><i className="qty-bar now" style={{ width: `${(s.availableKg / scale) * 100}%` }} /></span><span className="qty-bar-val num">{s.availableKg}kg</span>
-          <span className="qty-bar-label">変更後</span><span className="qty-track"><i className="qty-bar next" style={{ width: `${(nextKg / scale) * 100}%` }} /></span><span className="qty-bar-val num">{nextKg}kg</span>
-        </div>
         <button type="submit" className="btn-primary btn-block" disabled={busy || !changed} aria-busy={busy}>
-          {busy ? <><span className="spinner" aria-hidden="true" />変更しています…</> : changed ? `${kg || "?"}kgに変更する` : "量を変えると更新できます"}
+          {busy ? <><span className="spinner" aria-hidden="true" />変更しています…</> : changed ? `${kg || "?"}kgに変更する` : "変更する"}
         </button>
       </form>
       {msg && (

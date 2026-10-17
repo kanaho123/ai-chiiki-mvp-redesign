@@ -23,7 +23,7 @@ export default function RoleSelect({ onLoggedIn }: { onLoggedIn: (me: Me) => voi
 
   return (
     <main className="screen role-screen">
-      <h1 className="display">どちらで使いますか？</h1>
+      <h1 className="role-question">どちらで使いますか？</h1>
 
       {/* 入口：画面全体を「飲食店の世界」と「生産者の世界」に分ける（面積は対等）。世界全体が1つのボタン */}
       <div className="role-cards">
@@ -57,7 +57,6 @@ export default function RoleSelect({ onLoggedIn }: { onLoggedIn: (me: Me) => voi
         </section>
       </div>
 
-      <p className="about-line"><Icon name="info" size={18} />農家・在庫・価格はすべて架空です。注文や支払いはしません。</p>
 
       {sheet && (
         <LoginSheet role={sheet} accounts={accounts.filter((a) => a.role === sheet)} onClose={() => setSheet(null)} onLoggedIn={onLoggedIn} />
@@ -136,6 +135,7 @@ function LoginSheet({ role, accounts, onClose, onLoggedIn }: {
         <button type="submit" className="btn-primary btn-block" disabled={busy || !loginId || !password} aria-busy={busy}>
           {busy ? <><span className="spinner" aria-hidden="true" />確認しています…</> : "ログイン"}
         </button>
+        <p className="sheet-note"><Icon name="info" size={18} />農家・在庫・価格はすべて架空のデモデータです。注文・在庫の確保・支払い・配送はしません。</p>
       </form>
     </div>
   );

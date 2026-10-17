@@ -646,3 +646,39 @@ h1, h2, h3 { letter-spacing: -0.02em; }
 @media (min-width: 700px) {
   .role-screen .role-card.producer .role-art { width: 104%; bottom: -112px; }
 }
+
+/* =========================================================================
+   最終仕上げ（3点）：入口の白い帯をなくす／束ね図を簡潔に／生産者の数量を1つの道具に
+   ========================================================================= */
+
+/* ① 入口：ヘッダーの下を2つの世界だけで満たす（見える面積は対等） */
+.role-screen { position: relative; padding: 0; }
+.role-screen .role-card button { --world-h: max(250px, calc((100dvh - 60px + var(--slant)) / 2)); }
+.role-question { position: absolute; z-index: 2; top: 18px; left: 24px; margin: 0; font-size: 15px; font-weight: 500; letter-spacing: 0; color: var(--g200); pointer-events: none; }
+@media (min-width: 700px) {
+  .role-screen { padding-top: 20px; }
+  .role-question { top: 38px; left: calc(50% - 320px + 24px); }
+}
+.role-screen .role-name { font-weight: 500; }
+.role-screen .role-card.producer .role-name { color: #3a1a08; }
+.sheet-note { display: flex; gap: 6px; align-items: flex-start; font-size: 14px; line-height: 1.5; color: var(--color-muted); }
+.sheet-note svg { margin-top: 2px; }
+
+/* ② 結果：農家ごとのバーは左端から。合流先は揃ったとき文字だけ */
+.bundle-bar { left: 0; }
+
+/* ③ 生産者：数字＋±＋量のバーを1つの面に。見出しは控えめに */
+.role-producer .screen > h1.display { font-size: 20px; font-weight: 600; color: var(--color-muted); letter-spacing: -0.01em; }
+.qty-panel { display: grid; gap: 14px; padding: 18px 18px 20px 22px; }
+.qty-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.qty-panel .qty-bars { grid-template-columns: auto 1fr auto; gap: 8px 10px; }
+.qty-panel .qty-track { background: rgba(255, 255, 255, 0.8); }
+.qty-panel .qty-bar.now { background: #cfc6bb; }
+.qty-panel .qty-bar-label { color: var(--color-muted); }
+.btn-primary:disabled { background: #efeeea; border-color: #efeeea; color: #6b6b6b; }
+/* 世界が画面いっぱいになった分、絵を大きくして空きを埋める（文字の場所は空けたまま） */
+.role-screen .role-card.restaurant .role-art { width: min(92%, 400px); right: -60px; bottom: -24px; }
+.role-screen .role-card.producer .role-art { width: 124%; left: -50px; bottom: -36px; }
+@media (min-width: 700px) {
+  .role-screen .role-card.producer .role-art { width: 104%; left: -18px; bottom: -112px; }
+}
