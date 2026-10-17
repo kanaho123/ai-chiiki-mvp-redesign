@@ -10,6 +10,8 @@ import { Icon, Logo } from "./Icon";
 
 export const ROLE_TEXT = { restaurant: "飲食店", producer: "生産者" } as const;
 export const nameOf = (me: Me) => (me.role === "producer" ? me.producer?.farmName ?? me.displayName : me.displayName);
+/** 初回登録の途中は、まだ店舗名・農園名がないので「登録中」と出す */
+const headerName = (me: Me) => (me.onboarded ? nameOf(me) : "登録中");
 
 export function AppHeader({ me, children }: { me: Me | null; children?: React.ReactNode }) {
   const { demoNow } = useSession();
@@ -20,9 +22,9 @@ export function AppHeader({ me, children }: { me: Me | null; children?: React.Re
         {me ? (
           <>
             <Logo size={30} />
-            <span className="who session-name" aria-label={`${nameOf(me)}（${ROLE_TEXT[me.role]}）として操作中`}>
+            <span className="who session-name" aria-label={`${headerName(me)}（${ROLE_TEXT[me.role]}）として操作中`}>
               <span className="who-role">{ROLE_TEXT[me.role]}</span>
-              <span className="who-name">{nameOf(me)}</span>
+              <span className="who-name">{headerName(me)}</span>
             </span>
             {demo}
           </>

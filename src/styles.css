@@ -754,3 +754,44 @@ a.btn-primary.link-btn:hover { filter: brightness(1.08); }
 .account-rows dd { margin: 0; font-weight: 700; text-align: right; min-width: 0; }
 .onboarding-outline { margin: 0; padding: 4px 16px 4px 40px; border-radius: var(--r-zone); background: var(--color-zone); display: grid; gap: 0; }
 .onboarding-outline li { padding: 10px 0; font-weight: 700; }
+
+/* ── 初回登録（Phase 3）：1画面1テーマ ───────────────────────────
+   ・上に「戻る」と進み具合（1 / 4）。主ボタンは画面下の1つだけ
+   ・選択肢は大きめの行（押せる範囲52px以上）。選んだ状態は色に加えてチェックの形・太字で示す
+   ・必須／任意は文字の札で示す（14px）。誤りは各項目のすぐ下 */
+.onb { gap: 20px; }
+.onb-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: var(--tap-min); margin: -4px 0 -8px; }
+.onb-top .flow-progress { flex: 1; justify-content: flex-end; }
+.onb-top .flow-segs { margin-left: 4px; }
+.onb-back { margin-left: -12px; padding: 0 12px 0 6px; gap: 2px; }
+.onb-form { display: grid; gap: 28px; min-width: 0; }
+.onb .display { font-size: 24px; }
+.tag-req, .tag-opt { padding: 0 7px; border-radius: var(--r-tag); font-size: 14px; font-weight: 700; line-height: 1.6; }
+.tag-req { background: var(--color-text); color: #fff; }
+.tag-opt { background: var(--color-sunken); color: var(--color-muted); }
+legend.label { padding: 0; margin-bottom: 8px; width: 100%; }
+.choice-count { margin-left: auto; font-size: 14px; font-weight: 700; color: var(--accent-ink); font-variant-numeric: tabular-nums; }
+.choice-list { display: grid; gap: 8px; }
+.choice-list.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.option-card.choice { min-height: 56px; padding: 10px 12px; }
+.option-card.choice b { font-weight: 600; }
+.option-card.choice:has(input:checked) b { font-weight: 800; }
+.option-card .tick.square { border-radius: 6px; }
+.option-card.at-limit { opacity: 0.6; }
+.limit-note { display: flex; gap: 6px; align-items: flex-start; padding: 10px 12px; border-radius: var(--r-input); background: var(--color-amber-tint); color: var(--color-amber); font-size: 14px; font-weight: 700; }
+.limit-note svg { margin-top: 2px; }
+.later-block, .contact-block { display: grid; gap: 14px; padding: 16px; border-radius: var(--r-input); background: var(--color-zone); }
+.later-title { font-size: 17px; }
+.contact-note { display: flex; gap: 8px; align-items: flex-start; font-weight: 700; color: var(--accent-ink); }
+.contact-note svg { margin-top: 3px; }
+.style-card { display: grid; gap: 6px; padding: 18px 18px 16px; border-left: 5px solid var(--accent); background: var(--accent-tint); border-radius: 0 var(--r-input) var(--r-input) 0; }
+.style-text { font-size: 24px; font-weight: 800; line-height: 1.45; color: var(--accent-ink); font-feature-settings: "palt"; }
+.summary-rows { margin: 0; display: grid; }
+.summary-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "dt edit" "dd dd"; gap: 0 12px; align-items: center; padding: 10px 0 12px; border-bottom: 1px solid var(--color-line); }
+.summary-row dt { grid-area: dt; color: var(--color-muted); font-size: 15px; }
+.summary-row dd { grid-area: dd; margin: 0; font-weight: 700; min-width: 0; }
+.summary-row .summary-edit { grid-area: edit; }
+.summary-line { display: block; }
+.summary-edit { min-height: var(--tap-min); margin: -6px -12px -6px 0; font-size: 15px; }
+.choice-list.cols-2 .span-all { grid-column: 1 / -1; }
+.style-x { color: var(--color-muted); font-weight: 600; }

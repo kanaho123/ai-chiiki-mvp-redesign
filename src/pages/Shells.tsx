@@ -1,12 +1,22 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { nameOf, ROLE_TEXT } from "../components/AppShell";
 import { Icon } from "../components/Icon";
 import { PATHS } from "../routes/paths";
 import { useMe, useSession } from "../routes/session";
+import { WELCOME_KEY } from "./onboarding/parts";
 import { ProducerConfirmations } from "./ProducerConfirmations";
 
 // まだ作り込んでいない画面の最小の枠（Phase 3 以降で中身を置き換える）。
 // 各画面とも、見出し＋その画面でいちばん大事な操作（原則1つ）だけを置く。
+
+/** 初回登録を終えた直後に1回だけ出すお知らせ */
+function WelcomeNotice({ role, text }: { role: "restaurant" | "producer"; text: string }) {
+  const [show] = useState(() => { try { return sessionStorage.getItem(WELCOME_KEY) === role; } catch { return false; } });
+  useEffect(() => { try { sessionStorage.removeItem(WELCOME_KEY); } catch {} }, []);
+  if (!show) return null;
+  return <div className="alert ok" role="status"><Icon name="check" /><div><b>登録が完了しました</b><br />{text}</div></div>;
+}
 
 export function RestaurantHome() {
   const me = useMe();
@@ -16,6 +26,7 @@ export function RestaurantHome() {
         <span className="eyebrow">ホーム</span>
         <h1 className="display">{nameOf(me)}</h1>
       </div>
+      <WelcomeNotice role="restaurant" text="さっそく、欲しい食材の仕入れ案をつくってみましょう。" />
       <Link className="btn-primary btn-block link-btn" to={PATHS.restaurant.buy}><Icon name="basket" />新しい仕入れ案をつくる</Link>
     </main>
   );
@@ -40,6 +51,7 @@ export function ProducerHome() {
         <span className="eyebrow">ホーム</span>
         <h1 className="display">{nameOf(me)}</h1>
       </div>
+      <WelcomeNotice role="producer" text="次は、今日出せる野菜と量を登録しましょう。" />
       <Link className="btn-primary btn-block link-btn" to={PATHS.producer.listings}><Icon name="box" />今日出せる量を更新する</Link>
     </main>
   );
@@ -66,26 +78,6 @@ export function MyPage() {
         <div><dt>{me.role === "producer" ? "農園名" : "店舗名"}</dt><dd>{nameOf(me)}</dd></div>
       </dl>
       <button type="button" className="btn-secondary btn-block" onClick={logout}><Icon name="logout" />ログアウト</button>
-    </main>
-  );
-}
-
-/** 初回登録（オンボーディング）の枠。Phase 3 で質問の画面に置き換える */
-export function OnboardingPlaceholder() {
-  const me = useMe();
-  const restaurant = me.role === "restaurant";
-  return (
-    <main className="screen">
-      <div className="title-block">
-        <span className="eyebrow">はじめに</span>
-        <h1 className="display">{restaurant ? "お店の情報を登録します" : "農園の情報を登録します"}</h1>
-        <p className="muted">{restaurant
-          ? "店舗名・場所・よく仕入れる量などを伺います。登録が済むと、仕入れ案をつくれるようになります。"
-          : "農園名・場所・育てている品目・参加する受渡場所などを伺います。登録が済むと、出品できるようになります。"}</p>
-      </div>
-      <ol className="onboarding-outline">
-        {(restaurant ? ["お店について", "仕入れの好み", "受け取り"] : ["農園について", "育てている品目", "受渡場所", "連絡先"]).map((t) => <li key={t}>{t}</li>)}
-      </ol>
     </main>
   );
 }

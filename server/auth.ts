@@ -133,6 +133,15 @@ export async function requireOnboardedUser(request: Request): Promise<Guard<Sess
   return g;
 }
 
+/** 初回登録（オンボーディング）の API 専用：ログイン済みで、指定のロールであること（登録前でも通す）。
+ *  ほかの API では使わない（ロール別の API は requireRole で登録済みを求める） */
+export async function requireOnboardingUser<R extends Role>(request: Request, role: R): Promise<Guard<SessionUser & { role: R }>> {
+  const g = await requireUser(request);
+  if (!g.ok) return g;
+  if (g.user.role !== role) return { ok: false, response: json({ error: "この操作を行う権限がありません" }, 403) };
+  return g as Guard<SessionUser & { role: R }>;
+}
+
 /** ロールの確認。オンボーディング前のユーザーはどのロールの操作も使えない */
 export async function requireRole<R extends Role>(request: Request, role: R): Promise<Guard<SessionUser & { role: R }>> {
   const g = await requireOnboardedUser(request);

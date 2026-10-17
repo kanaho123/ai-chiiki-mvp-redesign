@@ -6,6 +6,8 @@ import { upcomingOccurrences } from "./service-time.js";
 // ・受渡拠点と定期枠（運営が管理。生産者は自由に作らず、ここから参加する）
 // ・定期枠から作る実際の受渡の回（HandoverSlot）。何度実行しても重複しない（seriesId＋開始時刻で一意）
 // 受渡拠点の名前は実在の事業者と紛れないよう、地域名＋「（仮）」にしている。
+// SlotSeries.active=false の定期枠（運営が止めたもの）は、新しい受渡の回を作らない。
+// すでに作った回・参加者はそのまま残す（自動で削除・取り消ししない）。active は seed で上書きしない（運営が DB で切り替える）。
 
 export const GENERAL_ITEMS = ["トマト", "なす", "きゅうり", "葉物", "根菜", "玉ねぎ"] as const;
 export const DEFAULT_VARIETY = "指定なし";
@@ -28,7 +30,7 @@ export const MATERIALIZE_DAYS = 28;
 const WEEKDAY = "日月火水木金土";
 
 export async function seedGeneralMaster(prisma: PrismaClient, now: Date) {
-  const result = { items: 0, varieties: 0, places: 0, series: 0, slotsCreated: 0, participantsAdded: 0 };
+  const result = { items: 0, varieties: 0, places: 0, series: 0, inactiveSeries: 0, slotsCreated: 0, participantsAdded: 0 };
   // 品目と「指定なし」
   for (const name of GENERAL_ITEMS) {
     const item = await prisma.item.upsert({ where: { name }, update: {}, create: { name } });
@@ -44,8 +46,12 @@ export async function seedGeneralMaster(prisma: PrismaClient, now: Date) {
   // 定期枠と、実際の回
   for (const s of GENERAL_SERIES) {
     const { id, ...data } = s;
-    await prisma.slotSeries.upsert({ where: { id }, update: data, create: { id, ...data } });
+    const row = await prisma.slotSeries.upsert({ where: { id }, update: data, create: { id, ...data }, select: { active: true } });
     result.series++;
+    if (!row.active) {
+      result.inactiveSeries++;
+      continue;
+    }
     const place = GENERAL_PLACES.find((p) => p.id === s.placeId)!;
     const members = await prisma.slotSeriesParticipant.findMany({ where: { seriesId: id }, select: { producerId: true } });
     for (const o of upcomingOccurrences(s, now, MATERIALIZE_DAYS)) {

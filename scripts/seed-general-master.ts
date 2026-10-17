@@ -13,7 +13,7 @@ console.log(`接続先: ${describeDb(process.env.DATABASE_URL)}（一般ユー�
 try {
   const r = await seedGeneralMaster(prisma, new Date());
   console.log(`品目 ${r.items}件・品種「指定なし」 ${r.varieties}件・受渡拠点 ${r.places}件・定期枠 ${r.series}件を確認／作成しました`);
-  console.log(`実際の受渡の回：新しく ${r.slotsCreated}件作成・参加者 ${r.participantsAdded}件追加（既存の回はそのまま）`);
+  console.log(`実際の受渡の回：新しく ${r.slotsCreated}件作成・参加者 ${r.participantsAdded}件追加（既存の回はそのまま。止めている定期枠 ${r.inactiveSeries}件は新しい回を作らない）`);
 } finally {
   await prisma.$disconnect();
 }

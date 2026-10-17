@@ -25,6 +25,14 @@ type Session = {
 
 const SessionContext = createContext<Session | null>(null);
 
+/** 初回登録の入力途中の内容など（このタブの sessionStorage）。ログアウトで消す */
+const ONBOARDING_STORAGE_PREFIX = "ai-chiiki:onboarding:";
+function clearOnboardingStorage() {
+  try {
+    for (const k of Object.keys(sessionStorage)) if (k.startsWith(ONBOARDING_STORAGE_PREFIX)) sessionStorage.removeItem(k);
+  } catch {}
+}
+
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [me, setMe] = useState<Me | null | undefined>(undefined);
   const [appMode, setAppMode] = useState<AppMode | null>(null);
@@ -56,6 +64,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    clearOnboardingStorage();
     setMe(null);
   }, []);
 

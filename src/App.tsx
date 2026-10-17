@@ -6,7 +6,9 @@ import { SessionProvider, useMe } from "./routes/session";
 import Producer from "./pages/Producer";
 import Restaurant from "./pages/Restaurant";
 import { Demo, Login, Signup, Welcome } from "./pages/Guest";
-import { MyPage, OnboardingPlaceholder, ProducerHome, ProducerRequests, RestaurantConsultations, RestaurantHome } from "./pages/Shells";
+import ProducerOnboarding from "./pages/onboarding/ProducerOnboarding";
+import RestaurantOnboarding from "./pages/onboarding/RestaurantOnboarding";
+import { MyPage, ProducerHome, ProducerRequests, RestaurantConsultations, RestaurantHome } from "./pages/Shells";
 import { FallbackRedirect, GuestGate, OnboardingGate, RoleGate } from "./routes/guards";
 
 // アプリの枠：URL ごとの画面とガード。
@@ -75,12 +77,12 @@ export function AppRoutes() {
 
       <Route path={`${PATHS.onboarding.restaurant}/*`} element={<OnboardingGate role="restaurant" />}>
         <Route element={<OnboardingShell />}>
-          <Route path="*" element={<OnboardingPlaceholder />} />
+          <Route path="*" element={<RestaurantOnboarding />} />
         </Route>
       </Route>
       <Route path={`${PATHS.onboarding.producer}/*`} element={<OnboardingGate role="producer" />}>
         <Route element={<OnboardingShell />}>
-          <Route path="*" element={<OnboardingPlaceholder />} />
+          <Route path="*" element={<ProducerOnboarding />} />
         </Route>
       </Route>
 

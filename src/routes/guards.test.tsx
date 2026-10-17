@@ -97,22 +97,22 @@ describe("未ログイン", () => {
 
 describe("初回登録がまだのユーザー（onboarded=false）", () => {
   it.each(["/", "/login", "/signup", "/demo", "/restaurant/home", "/restaurant/buy", "/producer/home", "/onboarding/producer"])(
-    "飲食店が %s → /onboarding/restaurant", async (path) => {
+    "飲食店が %s → /onboarding/restaurant/1", async (path) => {
       stubSession(restaurant(false));
       const r = await open(path);
-      expect(r.path).toBe("/onboarding/restaurant");
-      expect(r.h1).toContain("お店の情報");
+      expect(r.path).toBe("/onboarding/restaurant/1");
+      expect(r.h1).toBe("お店について教えてください");
     });
   it.each(["/", "/login", "/producer/home", "/producer/listings", "/restaurant/home", "/onboarding/restaurant/step-1"])(
-    "生産者が %s → /onboarding/producer", async (path) => {
+    "生産者が %s → /onboarding/producer/1", async (path) => {
       stubSession(producer(false));
       const r = await open(path);
-      expect(r.path).toBe("/onboarding/producer");
-      expect(r.h1).toContain("農園の情報");
+      expect(r.path).toBe("/onboarding/producer/1");
+      expect(r.h1).toBe("農園について教えてください");
     });
-  it("登録画面の深い URL はそのまま表示する", async () => {
+  it("登録画面の STEP の URL はそのまま表示する（入力済みの STEP まで）", async () => {
     stubSession(restaurant(false));
-    expect((await open("/onboarding/restaurant/step-3")).path).toBe("/onboarding/restaurant/step-3");
+    expect((await open("/onboarding/restaurant/1")).path).toBe("/onboarding/restaurant/1");
   });
   it("登録中は下部ナビを出さず、ログアウトだけ置く", async () => {
     for (const me of [restaurant(false), producer(false)]) {

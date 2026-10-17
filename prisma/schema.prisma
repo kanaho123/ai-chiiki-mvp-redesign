@@ -278,6 +278,8 @@ model SlotSeries {
   deadlineHours Int // 受渡開始の何時間前を確認締切にするか
   feeYen        Int
   maxKg         Int
+  // active=false（MVP の意味）：新しい生産者は参加できない（初回登録 API が拒否）・今後の受渡の回を作る対象から外す（seed-general-master）。
+  // すでに作った受渡の回（HandoverSlot）や参加者は、自動で削除・取り消ししない（受渡の回の取り消しは別の機能として扱う）
   active        Boolean                 @default(true)
   slots         HandoverSlot[]
   participants  SlotSeriesParticipant[]
