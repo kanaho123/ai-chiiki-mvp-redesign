@@ -73,14 +73,17 @@ export default function App() {
                   <span className="who-name">{name}</span>
                 </span>
               </span>
+              {demoNow && <span className="demo-tag" title={`デモの基準日時 ${formatJstDateTime(demoNow)}`}>デモ</span>}
               <button type="button" className="header-btn logout" onClick={logout}>ログアウト</button>
             </>
           ) : (
-            <span className="app-brand"><Logo />AI地域商社</span>
+            <>
+              <span className="app-brand"><Logo />AI地域商社</span>
+              {demoNow && <span className="demo-tag" title={`デモの基準日時 ${formatJstDateTime(demoNow)}`}>デモ</span>}
+            </>
           )}
         </div>
       </header>
-      {demoNow && <p className="demo-strip"><span>デモ（架空データ）{formatJstDateTime(demoNow).replace(/月/, "/").replace(/日/, "")}時点</span></p>}
       {loadError && <div className="screen"><div className="alert bad" role="alert"><Icon name="alert" />ログイン状態を確認できませんでした。再読み込みしてください。</div></div>}
       {!me ? <RoleSelect onLoggedIn={setMe} /> : me.role === "restaurant" ? <Restaurant me={me} /> : <Producer me={me} />}
     </div>

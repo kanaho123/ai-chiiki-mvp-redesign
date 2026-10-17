@@ -6,11 +6,11 @@ import { Icon } from "../../components/Icon";
 // 読み取り中は1画面の待機表示（実際の進み具合は示さない控えめな演出）。
 
 export const EXAMPLE_TEXT = "10月23日金曜に大阪産トマト10kg、受渡費込み8,000円以内。A農園を優先、初回の農家もOK";
-// 例文チップ（品目を必ず含める）。押すと入力欄に入る
+// 短い入力例（品目を必ず含める）。押すと入力欄に入る
 const EXAMPLES = [
-  { label: "大阪産トマトを10kg", text: "大阪産トマトを10kg" },
-  { label: "A農園を優先してトマト10kg", text: "A農園を優先してトマト10kg" },
-  { label: "10月23日・大阪産トマト10kg・8,000円以内", text: EXAMPLE_TEXT },
+  { label: "トマト 10kg", text: "大阪産トマトを10kg" },
+  { label: "A農園を優先", text: "A農園を優先してトマト10kg" },
+  { label: "日付と予算も", text: EXAMPLE_TEXT },
 ];
 
 export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable, error, emptyHint }: {
@@ -33,31 +33,27 @@ export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable
     <form onSubmit={(e) => { e.preventDefault(); onExtract(); }} aria-labelledby="step1-title" style={{ display: "grid", gap: "var(--gap)" }}>
       <h1 className="display" id="step1-title">何を仕入れたいですか？</h1>
 
+      {/* 主役は大きな入力欄。AIの役割は入力欄の下端に1行だけ */}
       <div className="composer">
         <label>
           <span className="sr-only">仕入れたい内容</span>
           <textarea rows={4} maxLength={REQUEST_TEXT_MAX} value={text} onChange={(e) => onText(e.target.value)}
-            placeholder="例：10月23日に大阪産トマトを10kg" aria-describedby="step1-count step1-note" />
+            placeholder="例：10月23日に大阪産トマトを10kg" aria-describedby="step1-note" />
         </label>
-        <div className="composer-foot"><span id="step1-count">{text.length.toLocaleString("ja-JP")} / {REQUEST_TEXT_MAX.toLocaleString("ja-JP")}文字</span></div>
+        <p className="composer-foot" id="step1-note">
+          <Icon name="edit" size={18} /><span className="ai-note">AIが品目・数量・日付を読み取ります</span>
+          {text.length > REQUEST_TEXT_MAX * 0.8 && <span className="count">{text.length.toLocaleString("ja-JP")}/{REQUEST_TEXT_MAX.toLocaleString("ja-JP")}</span>}
+        </p>
       </div>
-      <p className="ai-note" id="step1-note">AIは、文章から品目・数量・日付などを読み取るだけです。量と金額の計算はしません。</p>
 
-      {/* 入力例：押すと入力欄に入る（全幅の行） */}
-      <section className="example-list" aria-labelledby="ex-title">
-        <h2 className="example-title" id="ex-title">例を使う</h2>
-        <ul>
-          {EXAMPLES.map((ex) => (
-            <li key={ex.label}>
-              <button type="button" className="example-chip example" onClick={() => onText(ex.text)}>
-                <span>{ex.label}</span><Icon name="chevronRight" size={22} strokeWidth={2.2} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <div className="example-list" role="group" aria-label="入力例（押すと入力欄に入ります）">
+        <span className="example-title" aria-hidden="true">例</span>
+        {EXAMPLES.map((ex) => <button key={ex.label} type="button" className="example-chip example" onClick={() => onText(ex.text)}>{ex.label}</button>)}
+      </div>
 
-      {emptyHint && <div className="alert warn" role="status"><Icon name="info" />文章が空です。例文を押すか、「項目を選んで入力」を使ってください。</div>}
+      {!aiOff && <button type="button" className="btn-secondary manual-btn" onClick={onManual}><Icon name="edit" size={20} />項目を選んで入力</button>}
+
+      {emptyHint && <div className="alert warn" role="status"><Icon name="info" />文章が空です。例を押すか、「項目を選んで入力」を使ってください。</div>}
       {aiOff && <div className="alert info" role="status"><Icon name="info" />AIによる読み取りは現在使えません。項目を選んで入力してください（計算結果は同じです）。</div>}
       {error && (
         <div className="alert bad" role="alert">
@@ -78,7 +74,6 @@ export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable
         ) : (
           <>
             <button type="submit" className="btn-primary btn-block">条件を整理する<Icon name="arrowRight" /></button>
-            <button type="button" className="btn-secondary btn-block" onClick={onManual}>項目を選んで入力</button>
           </>
         )}
       </BottomBar>

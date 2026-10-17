@@ -1,4 +1,4 @@
-import type { ExclusionDetail, NoticeCode, ReasonCode } from "../../lib/allocate.js";
+import type { ExclusionDetail, NoticeCode, PlanResult, ReasonCode } from "../../lib/allocate.js";
 import { RESOLVE_NOTICE_TEXT, type ResolveNotice } from "../../lib/resolve.js";
 
 // 画面表示用の言い換え（内部の理由コード・lib/reasons.ts の文言は変えない）。
@@ -55,3 +55,25 @@ const PLAIN_RESOLVE: Partial<Record<ResolveNotice, string>> = {
   BUDGET_EXCLUDES_FEE: "予算は「受け渡し費用を含めた合計」で判定します。金額を確認してください",
 };
 export const plainResolveNotice = (n: ResolveNotice) => PLAIN_RESOLVE[n] ?? RESOLVE_NOTICE_TEXT[n];
+
+/**
+ * 「なぜこの組み合わせ？」の1行目（計算結果の rankingReason と農家ごとの量から作る。理由そのものは変えない）
+ * 例：SUPPLEMENTED（1農家では揃わないため補完）→「A農園だけでは足りない5kgを、B農園で補いました」
+ */
+export function rankingSummary(p: Pick<PlanResult, "rankingReason" | "allocations">): string | null {
+  const r = p.rankingReason;
+  const [first, ...rest] = p.allocations;
+  if (!r || !first) return null;
+  switch (r.code) {
+    case "SUPPLEMENTED":
+      return rest.length
+        ? `${first.producerName}だけでは足りない${rest.reduce((n, a) => n + a.kg, 0)}kgを、${rest.map((a) => a.producerName).join("・")}で補いました`
+        : null;
+    case "SINGLE_PRODUCER":
+      return `${first.producerName}だけで揃うため、1つの農家にまとめました`;
+    case "FEWER_PRODUCERS":
+      return "仕入れ先がなるべく少なくなる組み合わせを選びました";
+    case "PRIOR_TRADE_FIRST":
+      return "取引経験のある農家を優先しました（いちばん安い組み合わせではありません）";
+  }
+}

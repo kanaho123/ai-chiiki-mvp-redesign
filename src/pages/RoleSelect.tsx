@@ -24,31 +24,25 @@ export default function RoleSelect({ onLoggedIn }: { onLoggedIn: (me: Me) => voi
     <main className="screen">
       <h1 className="display">どちらで使いますか？</h1>
 
-      {/* 目的で分けた入口：役割の色で塗った大きな四角。入口全体が1つのボタン */}
+      {/* 役割の入口：アイコン＋役割名＋1行。役割の色で塗ったカード全体が1つのボタン */}
       <div className="role-cards">
         <section className="role-card restaurant" aria-labelledby="role-r">
           <button type="button" onClick={() => setSheet("restaurant")} aria-describedby="role-r-desc">
-            <Icon name="store" size={30} strokeWidth={1.8} className="role-icon" />
-            <span className="role-text">
-              <span className="role-name" id="role-r">飲食店の方</span>
-              <span className="role-desc" id="role-r-desc">食材を仕入れる</span>
-            </span>
-            <Icon name="arrowRight" size={26} strokeWidth={2.2} className="role-go" />
+            <span className="role-icon" aria-hidden="true"><Icon name="store" size={30} strokeWidth={1.8} /></span>
+            <span className="role-name" id="role-r">飲食店</span>
+            <span className="role-desc" id="role-r-desc">食材を仕入れる</span>
           </button>
         </section>
         <section className="role-card producer" aria-labelledby="role-p">
           <button type="button" onClick={() => setSheet("producer")} aria-describedby="role-p-desc">
-            <Icon name="sprout" size={30} strokeWidth={1.8} className="role-icon" />
-            <span className="role-text">
-              <span className="role-name" id="role-p">生産者の方</span>
-              <span className="role-desc" id="role-p-desc">今日出せる量を登録する</span>
-            </span>
-            <Icon name="arrowRight" size={26} strokeWidth={2.2} className="role-go" />
+            <span className="role-icon" aria-hidden="true"><Icon name="sprout" size={30} strokeWidth={1.8} /></span>
+            <span className="role-name" id="role-p">生産者</span>
+            <span className="role-desc" id="role-p-desc">出せる量を登録</span>
           </button>
         </section>
       </div>
 
-      <p className="about-line">これはデモです。農家・在庫・価格はすべて架空で、注文・在庫の確保・支払い・配送はしません。</p>
+      <p className="about-line"><Icon name="info" size={18} />農家・在庫・価格はすべて架空です。注文や支払いはしません。</p>
 
       {sheet && (
         <LoginSheet role={sheet} accounts={accounts.filter((a) => a.role === sheet)} onClose={() => setSheet(null)} onLoggedIn={onLoggedIn} />

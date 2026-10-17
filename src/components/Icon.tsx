@@ -115,6 +115,14 @@ const PATHS = {
     </>
   ),
   play: <path d="M8 5.5v13l10-6.5-10-6.5z" />,
+  // 数量（おもり）
+  weight: (
+    <>
+      <path d="M6.5 9.5h11l2 10h-15l2-10z" />
+      <path d="M9.5 9.5a2.5 2.5 0 1 1 5 0" />
+    </>
+  ),
+  arrowDown: <path d="M12 5v14M6 13l6 6 6-6" />,
 } as const;
 
 export type IconName = keyof typeof PATHS;
