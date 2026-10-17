@@ -1,6 +1,7 @@
 import { formatJstDateTime, jstTimeOf } from "../../lib/dates.js";
 import { EXCLUSION_TEXT, headlineText, NOTICE_TEXT, rankingText, REASON_TEXT, STATUS_TEXT } from "../../lib/reasons.js";
 import type { Suggestion } from "../../lib/suggest.js";
+import { BottomBar } from "../../components/BottomBar";
 import { Icon } from "../../components/Icon";
 import type { Freshness, Shown } from "./types";
 
@@ -119,7 +120,7 @@ export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, o
                     {a.irregularReason && <span className="chip chip-warn">規格外：{a.irregularReason}</span>}
                     {!a.participationConfirmed && <span className="chip chip-need">受渡枠への参加確認が必要</span>}
                   </div>
-                  <p className="farm-foot">{a.varietyName}・供給更新 {formatJstDateTime(a.updatedAt)}</p>
+                  <dl className="farm-foot"><dt>供給更新</dt><dd>{formatJstDateTime(a.updatedAt)}</dd></dl>
                 </li>
               ))}
             </ul>
@@ -187,8 +188,7 @@ export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, o
       </div>
 
       {/* 次の行動は「再計算」と「条件を変更」だけ（注文・予約・送信はできない） */}
-      <div className="bottom-bar next-actions">
-        <div className="bottom-bar-inner">
+      <BottomBar className="next-actions">
           {editIsPrimary ? (
             <>
               <button type="button" className="btn-primary btn-block" onClick={onEdit}>条件を変更する<Icon name="arrowRight" /></button>
@@ -202,8 +202,7 @@ export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, o
               <button type="button" className="btn-link btn-block" onClick={onEdit}>条件を変更する</button>
             </>
           )}
-        </div>
-      </div>
+      </BottomBar>
     </section>
   );
 }

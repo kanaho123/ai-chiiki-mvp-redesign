@@ -139,7 +139,7 @@ function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: stri
       <div className="supply-body">
         <div className="supply-head">
           <span className="supply-emoji" aria-hidden="true">{ITEM_EMOJI[s.item.name] ?? "🥬"}</span>
-          <span className="supply-title"><b>{s.item.name}</b><small>{s.variety.name}・{s.originPrefecture}産・{s.grade === "irregular" ? `規格外：${s.irregularReason}` : "通常品"}</small></span>
+          <span className="supply-title"><b>{s.item.name}</b><small>{s.originPrefecture}産・{s.grade === "irregular" ? `規格外：${s.irregularReason}` : "通常品"}</small></span>
           <span className={`chip ${s.published ? "chip-on" : "chip-off"}`}><Icon name={s.published ? "check" : "pause"} size={14} />{s.published ? "公開中" : "公開停止中"}</span>
         </div>
 
@@ -219,18 +219,28 @@ function NewSupply({ data, defaultOrigin, onCreated }: { data: Data; defaultOrig
         <div className="row2">
           <label className="field">
             <span className="label">品目</span>
-            <select value={f.itemId} onChange={(e) => setF((x) => ({ ...x, itemId: e.target.value, varietyId: "" }))} aria-required="true">
+            <select
+              value={f.itemId}
+              onChange={(e) => {
+                // 品種が1つだけの品目は、その品種を自動で選ぶ（選択欄は出さない）
+                const next = data.items.find((i) => i.id === e.target.value);
+                setF((x) => ({ ...x, itemId: e.target.value, varietyId: next && next.varieties.length === 1 ? next.varieties[0].id : "" }));
+              }}
+              aria-required="true"
+            >
               <option value="">選択</option>
               {data.items.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
             </select>
           </label>
-          <label className="field">
-            <span className="label">品種</span>
-            <select value={f.varietyId} onChange={(e) => set("varietyId", e.target.value)} aria-required="true">
-              <option value="">選択</option>
-              {item?.varieties.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-            </select>
-          </label>
+          {item && item.varieties.length > 1 && (
+            <label className="field">
+              <span className="label">品種</span>
+              <select value={f.varietyId} onChange={(e) => set("varietyId", e.target.value)} aria-required="true">
+                <option value="">選択</option>
+                {item.varieties.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+              </select>
+            </label>
+          )}
         </div>
         <div className="row2">
           <label className="field">

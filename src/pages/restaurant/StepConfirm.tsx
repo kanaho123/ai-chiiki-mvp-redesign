@@ -1,6 +1,7 @@
 import { formatDateJa, formatJstDateTime, jstDate, jstDateOf, jstTimeOf } from "../../lib/dates.js";
 import { missingFields, type RequestForm, type YesNo } from "../../lib/request-form.js";
 import { RESOLVE_NOTICE_TEXT, type DraftField } from "../../lib/resolve.js";
+import { BottomBar } from "../../components/BottomBar";
 import { Icon, type IconName } from "../../components/Icon";
 import type { CatalogData, ExtractResult } from "./types";
 
@@ -79,10 +80,12 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, ai
               <em>kg</em>
             </span>
           </div>
-          <select value={form.varietyId} onChange={(e) => set("varietyId", e.target.value)} aria-label="品種">
-            <option value="">品種の指定なし（同じ品種どうしで組みます）</option>
-            {item?.varieties.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-          </select>
+          {item && item.varieties.length > 1 && (
+            <select value={form.varietyId} onChange={(e) => set("varietyId", e.target.value)} aria-label="品種">
+              <option value="">品種の指定なし（同じ品種どうしで組みます）</option>
+              {item.varieties.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+            </select>
+          )}
         </div>
         <div className="item-row">
           <Head icon="pin" label="産地" f="originPrefectures" id="lbl-origin" />
@@ -184,16 +187,16 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, ai
       {error && <div className="alert bad" role="alert"><Icon name="alert" />{error}</div>}
       <button type="button" className="btn-link" onClick={onBack}>文章の入力に戻る</button>
 
-      <div className="bottom-bar">
-        <div className="bottom-bar-inner">
-          {missing.length > 0 && (
-            <p className="bottom-note" role="status">あと{missing.length}項目を選んでください：{missing.map((f) => FIELD_LABEL[f]).join("・")}</p>
-          )}
-          <button type="submit" className="btn-primary btn-block" disabled={busy || missing.length > 0} aria-busy={busy}>
-            {busy ? <><span className="spinner" aria-hidden="true" />計算中…</> : <>この条件で仕入れ案を見る<Icon name="arrowRight" /></>}
-          </button>
-        </div>
-      </div>
+      <BottomBar>
+        {missing.length > 0 && (
+          <p className="bottom-note" role="status" title={missing.map((f) => FIELD_LABEL[f]).join("・")}>
+            あと{missing.length}項目を選んでください<span className="sr-only">：{missing.map((f) => FIELD_LABEL[f]).join("・")}</span>
+          </p>
+        )}
+        <button type="submit" className="btn-primary btn-block" disabled={busy || missing.length > 0} aria-busy={busy}>
+          {busy ? <><span className="spinner" aria-hidden="true" />計算中…</> : <>この条件で仕入れ案を見る<Icon name="arrowRight" /></>}
+        </button>
+      </BottomBar>
     </form>
   );
 }

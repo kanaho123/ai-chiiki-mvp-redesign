@@ -377,3 +377,12 @@ details.more[open] > summary svg { transform: rotate(180deg); }
 .composer textarea { min-height: clamp(104px, 15dvh, 190px); }
 @media (min-height: 900px) { .composer textarea { min-height: 170px; } }
 .composer textarea { height: clamp(112px, 17dvh, 180px); min-height: 0; }
+
+/* 下部固定領域：不透明の背景＋上端の影で本文と重ねない。本文の下余白は実際の高さ（--bar-h）に合わせる */
+.bottom-bar { background: var(--color-background); box-shadow: 0 -6px 18px rgba(73, 58, 30, 0.08); border-top: 1px solid var(--color-line); padding: 12px 0 calc(12px + env(safe-area-inset-bottom)); }
+.screen.has-bar { padding-bottom: calc(var(--bar-h, 170px) + 28px); }
+.bottom-note { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 農家カード下部：見出しと日時の2段表示 */
+.farm-foot { display: grid; gap: 0; margin: 2px 0 0; }
+.farm-foot dt { font-size: 0.75rem; }
+.farm-foot dd { margin: 0; font-size: 0.875rem; color: var(--color-text); font-variant-numeric: tabular-nums; }

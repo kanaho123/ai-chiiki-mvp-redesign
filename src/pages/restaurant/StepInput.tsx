@@ -1,4 +1,5 @@
 import { REQUEST_TEXT_MAX } from "../../lib/validate.js";
+import { BottomBar } from "../../components/BottomBar";
 import { Icon } from "../../components/Icon";
 
 // STEP 1：仕入れたい内容を普段の言葉で入力。項目を選んで入力することもできる（自然文入力を強制しない）。
@@ -69,18 +70,16 @@ export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable
         </div>
       )}
 
-      <div className="bottom-bar">
-        <div className="bottom-bar-inner">
-          {aiOff ? (
-            <button type="button" className="btn-primary btn-block" onClick={onManual}>項目を選んで入力<Icon name="arrowRight" /></button>
-          ) : (
-            <>
-              <button type="submit" className="btn-primary btn-block">条件を整理する<Icon name="arrowRight" /></button>
-              <button type="button" className="btn-link btn-block" onClick={onManual}>項目を選んで入力</button>
-            </>
-          )}
-        </div>
-      </div>
+      <BottomBar>
+        {aiOff ? (
+          <button type="button" className="btn-primary btn-block" onClick={onManual}>項目を選んで入力<Icon name="arrowRight" /></button>
+        ) : (
+          <>
+            <button type="submit" className="btn-primary btn-block">条件を整理する<Icon name="arrowRight" /></button>
+            <button type="button" className="btn-link btn-block" onClick={onManual}>項目を選んで入力</button>
+          </>
+        )}
+      </BottomBar>
     </form>
   );
 }
