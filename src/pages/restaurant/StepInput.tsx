@@ -1,5 +1,6 @@
 import { REQUEST_TEXT_MAX } from "../../lib/validate.js";
 import { BottomBar } from "../../components/BottomBar";
+import { MergeMark } from "../../components/Motif";
 import { Icon, type IconName } from "../../components/Icon";
 
 // STEP 1：仕入れたい内容を普段の言葉で入力。項目を選んで入力することもできる（自然文入力を強制しない）。
@@ -20,9 +21,9 @@ export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable
   if (busy) {
     return (
       <section className="loading" role="status" aria-live="polite" aria-labelledby="loading-title">
+        <MergeMark flowing className="loading-mark" />
         <h2 className="loading-title" id="loading-title">文章を読み取っています</h2>
-        <div className="loading-line" aria-hidden="true"><span /></div>
-        <p>品目・数量・日付などを読み取っています。10秒ほどかかることがあります。</p>
+        <p className="loading-text">品目・数量・日付に整理しています（10秒ほど）</p>
         <button type="button" className="btn-secondary btn-block" onClick={onManual}>待たずに手入力する</button>
       </section>
     );
@@ -47,13 +48,13 @@ export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable
           {HINTS.map((h) => (
             <button key={h.word} type="button" className={`hint-tile example-chip ${text.includes(h.word) ? "used" : ""}`}
               onClick={() => onText(text.includes(h.word) ? text : text.trim() ? `${text.trim()} ${h.word}` : h.word)}>
-              <Icon name={h.icon} size={20} /><span className="hint-word">{h.word}</span><span className="sr-only">（{h.label}）</span>
+              <Icon name={text.includes(h.word) ? "check" : h.icon} size={20} /><span className="hint-word">{h.word}</span><span className="sr-only">（{h.label}）</span>
             </button>
           ))}
         </div>
+        <p className="ai-note" id="step1-note">AIが品目・数量・日付を読み取ります</p>
         {text.length > REQUEST_TEXT_MAX * 0.8 && <span className="count">{text.length.toLocaleString("ja-JP")}/{REQUEST_TEXT_MAX.toLocaleString("ja-JP")}</span>}
       </div>
-      <p className="ai-note" id="step1-note"><Icon name="edit" size={16} />AIが品目・数量・日付を読み取ります</p>
 
       {emptyHint && <div className="alert warn" role="status"><Icon name="info" />文章が空です。上の例を押すか、「項目で入力」を使ってください。</div>}
       {aiOff && <div className="alert info" role="status"><Icon name="info" />AIによる読み取りは現在使えません。項目を選んで入力してください（計算結果は同じです）。</div>}

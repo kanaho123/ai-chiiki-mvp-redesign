@@ -160,8 +160,8 @@ function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: stri
         </div>
         {/* 量のバー：現在（薄い枠）と変更後（濃いオレンジ）。増えたか減ったかが読まなくても分かる */}
         <div className="qty-bars" aria-hidden="true">
-          <span className="qty-bar-label">現在</span><span className="qty-track"><i className="qty-bar now" style={{ width: `${(s.availableKg / scale) * 100}%` }} /></span>
-          <span className="qty-bar-label">変更後</span><span className="qty-track"><i className="qty-bar next" style={{ width: `${(nextKg / scale) * 100}%` }} /></span>
+          <span className="qty-bar-label">現在</span><span className="qty-track"><i className="qty-bar now" style={{ width: `${(s.availableKg / scale) * 100}%` }} /></span><span className="qty-bar-val num">{s.availableKg}kg</span>
+          <span className="qty-bar-label">変更後</span><span className="qty-track"><i className="qty-bar next" style={{ width: `${(nextKg / scale) * 100}%` }} /></span><span className="qty-bar-val num">{nextKg}kg</span>
         </div>
         <button type="submit" className="btn-primary btn-block" disabled={busy || !changed} aria-busy={busy}>
           {busy ? <><span className="spinner" aria-hidden="true" />変更しています…</> : changed ? `${kg || "?"}kgに変更する` : "量を変えると更新できます"}

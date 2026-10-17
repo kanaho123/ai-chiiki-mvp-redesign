@@ -192,8 +192,8 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, ai
       {/* まとめ：読み取れた数と、残りの数（「読み取り済み」はここで1回だけ示す） */}
       <div className="summary-card">
         <div className="summary-line">
-          {extraction ? <span className="read-count"><Icon name="check" size={22} strokeWidth={2.4} />{readCount}項目を読み取りました</span> : <span className="read-count">項目を選んでください</span>}
-          {missing.length > 0 ? <span className="left-count">あと{missing.length}項目</span> : <span className="done-count">すべて入力済み</span>}
+          {extraction ? <span className="read-count"><b className="num">{readCount}</b>項目を読み取りました</span> : <span className="read-count">項目を選んでください</span>}
+          {missing.length > 0 ? <span className="left-count">あと<b className="num">{missing.length}</b>項目</span> : <span className="done-count">すべて入力済み</span>}
         </div>
         {sourceText && (
           <details className="source-quote">

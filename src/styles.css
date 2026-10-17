@@ -46,6 +46,13 @@
   --accent-ink: var(--color-restaurant-dark);
   --accent-tint: var(--color-restaurant-tint);
 
+  /* 色の濃淡（同じ系統の段階で使い分ける） */
+  --g900: #123d2d; --g700: #1f5e45; --g600: #2b7454; --g500: #3e8a66; --g200: #cfe6d8; --g50: #eff6f1;
+  --o800: #8a3e12; --o600: #d9692b; --o400: #f08a4b; --o300: #f6a877; --o50: #fdf1e8;
+  /* 奥行き：主役の面だけに付ける、役割色を混ぜたごく薄い影 */
+  --lift-green: 0 20px 36px -24px rgba(18, 61, 45, 0.55);
+  --lift-orange: 0 20px 36px -24px rgba(138, 62, 18, 0.45);
+
   /* 形・余白 */
   --r-zone: 20px;
   --r-input: 12px;
@@ -455,3 +462,122 @@ details.more[open] > summary svg { transform: rotate(180deg); }
 @supports (field-sizing: content) {
   .qty-next .with-unit input { field-sizing: content; width: auto; min-width: 1ch; text-align: left; }
 }
+
+/* =========================================================================
+   仕上げ（アートディレクション）：文字組み・色の濃淡・意図的な余白・少しの非対称・固有モチーフ
+   構成は変えず、見え方だけを整える
+   ========================================================================= */
+
+/* ── 文字組み：短いUI文は締め、長い説明文だけ行間を広げる ── */
+body { line-height: 1.5; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+h1, h2, h3 { letter-spacing: -0.02em; }
+.display { font-size: 26px; font-weight: 700; line-height: 1.3; letter-spacing: -0.03em; }
+.num, .figure, .answer-yen, .bundle-kg, .bundle-total-head b, .qty-next input, .read-count b, .left-count b { font-variant-numeric: tabular-nums; letter-spacing: -0.04em; }
+.unit, .cur { letter-spacing: 0; font-weight: 700; }
+.small, .hint, .item-help, .ai-note, .about-line, .answer-meta, .answer-tag, .farm-calc, .supply-facts { line-height: 1.5; }
+.ob-text, .why-summary, .reasons, .excluded, .foot-meta p, .alert { line-height: 1.65; }
+.who-name { font-weight: 600; }
+.flow-progress, .flow-name { font-weight: 500; }
+.block-title { font-weight: 700; letter-spacing: -0.01em; }
+
+/* ── 抜け：ヘッダーと下部の境界線をなくし、ごく薄い影だけで分ける ── */
+.app-header { border-bottom: 0; }
+.bottom-bar { border-top: 0; box-shadow: 0 -12px 24px -20px rgba(18, 40, 30, 0.4); }
+
+/* ── 役割選択：面積は50:50で対等。中の構図だけ非対称にする ── */
+.role-guest .display { font-size: 20px; font-weight: 600; color: var(--color-muted); letter-spacing: -0.01em; }
+.role-cards { gap: 16px; }
+.role-card button { min-height: clamp(236px, 35dvh, 300px); border-radius: 28px; padding: 24px; }
+.role-card.restaurant button { background: var(--g700); --art-line: var(--g200); --art-fill: var(--g600); box-shadow: var(--lift-green); }
+.role-card.producer button { background: var(--o400); --art-line: var(--o800); --art-fill: var(--o300); box-shadow: var(--lift-orange); }
+.role-name { font-size: 40px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; }
+.role-desc { font-size: 15px; font-weight: 500; margin-top: 6px; opacity: 1; }
+.role-card.restaurant .role-desc { color: var(--g200); }
+.role-card.producer .role-desc { color: var(--o800); }
+/* 飲食店：線画は右上へはみ出し、文字は左下、矢印は右下 */
+.role-card.restaurant .role-art { top: -14px; right: -40px; width: 80%; }
+/* 生産者：線画は左下から右上へ流れ、文字は左上、矢印は右上（重心を逆に） */
+.role-card.producer button { grid-template-rows: auto 1fr; align-items: start; }
+.role-card.producer .role-text { grid-row: 1; }
+.role-card.producer .role-art { top: auto; right: auto; bottom: -30px; left: -18px; width: 92%; }
+.role-card.producer .role-go { top: 24px; bottom: auto; }
+.role-go { border-radius: 14px; }
+
+/* ── 入力：書く場所だけを主役に。中の手がかりは箱にしない ── */
+.title-row .display { font-size: 26px; }
+.composer { background: var(--g50); border-radius: 28px; padding-bottom: 14px; }
+.composer:focus-within { box-shadow: 0 0 0 2px var(--g500); }
+.composer textarea { font-size: 22px; line-height: 1.45; letter-spacing: -0.01em; padding: 24px 22px 8px; height: clamp(150px, 24dvh, 220px); }
+.hint-tiles { gap: 2px 4px; padding: 0 10px; }
+.hint-tile { background: transparent; min-height: 48px; padding: 0 10px; border-radius: 12px; font-weight: 600; color: var(--g700); }
+.hint-tile svg { color: var(--g500); }
+.hint-tile:hover { background: rgba(255, 255, 255, 0.7); }
+.hint-tile.used { background: transparent; color: var(--g900); }
+.hint-tile.used svg { color: var(--g500); }
+.composer .ai-note { margin: 6px 22px 0; color: #5a6f63; }
+
+/* ── 読み取り中：3本の線が1本にまとまる（約0.8秒のループ） ── */
+.loading { gap: 12px; padding-top: 56px; }
+.loading-mark { width: 136px; height: auto; margin-bottom: 14px; }
+.loading-text { font-size: 15px; color: var(--color-muted); }
+.merge-mark .merge-in { stroke: var(--g200); stroke-width: 3.5; }
+.merge-mark .merge-out { stroke: var(--g700); stroke-width: 5; }
+.merge-mark.is-flowing .merge-in { stroke: var(--g500); stroke-dasharray: 10 8; animation: merge-flow 0.8s linear infinite; }
+.merge-mark.is-flowing .merge-out { stroke-dasharray: 10 8; animation: merge-flow 0.8s linear infinite; }
+@keyframes merge-flow { from { stroke-dashoffset: 18; } to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { .merge-mark.is-flowing .merge-in, .merge-mark.is-flowing .merge-out { animation: none; stroke-dasharray: none; } }
+
+/* ── 確認：状況を数字で見せる。決まった項目は箱にしない ── */
+.summary-line { align-items: baseline; gap: 4px 22px; }
+.read-count { gap: 6px; align-items: baseline; font-size: 15px; font-weight: 600; color: var(--color-text); }
+.read-count b { font-size: 34px; font-weight: 800; line-height: 1; color: var(--g700); }
+.left-count { padding: 0; background: transparent; color: var(--color-amber); font-size: 15px; font-weight: 600; }
+.left-count b { font-size: 34px; font-weight: 800; line-height: 1; margin: 0 3px; }
+.need-card { border-radius: 24px; padding: 8px 18px 20px; }
+.need-title { font-weight: 700; }
+.tile { padding: 12px 6px; }
+.tile-icon { width: auto; height: auto; background: transparent; color: var(--g500); }
+.tile-label { font-weight: 500; }
+.tile-value { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+.tile-edit { font-weight: 600; }
+
+/* ── 結果：金額が主役。束ね図は箱を減らし、合流先だけを浮かせる ── */
+.answer-head { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+.answer.warn .answer-head { font-size: 30px; letter-spacing: -0.03em; }
+.answer-yen { font-size: 64px; font-weight: 800; letter-spacing: -0.045em; line-height: 1.05; margin-top: 4px; }
+.answer-yen .cur { font-size: 0.55em; margin-right: 0.04em; }
+.answer-yen small { letter-spacing: 0; }
+.answer.warn .answer-yen { font-size: 28px; }
+.answer-meta { font-size: 14px; font-weight: 500; color: var(--color-muted); }
+.bundle { margin: 22px 0 14px; }
+.bundle-sources { gap: 0; }
+.bundle-row { background: transparent; padding: 0 12px 0 0; border-radius: 0; }
+.bundle-row::after { display: none; }
+.bundle-name { font-size: 14px; font-weight: 600; color: var(--color-muted); }
+.bundle-kg { font-size: 22px; }
+.bundle-kg .unit, .bundle-total-head b .unit { font-size: 0.62em; margin-left: 1px; }
+.bundle-track { background: var(--g50); height: 6px; margin-top: 8px; }
+.bundle-join { display: block; width: 100%; height: 30px; margin: 2px 0 0; border: 0; overflow: visible; }
+.bundle-join path { fill: none; stroke: var(--g500); stroke-width: 2; }
+.bundle-total { border-radius: 20px; background: var(--g700); box-shadow: var(--lift-green); }
+.bundle-total-head b { font-size: 28px; }
+.has-gap .bundle-total { box-shadow: inset 0 0 0 2px var(--g500), 0 18px 30px -26px rgba(18, 61, 45, 0.35); }
+.bundle.is-stale .bundle-join path { stroke: var(--color-stale); }
+/* 詳しい情報は画面の端まで続く地の色で受ける（角丸の箱にしない） */
+.detail-zone { border-radius: 0; margin: 10px calc(-1 * var(--gutter)) 0; padding: 26px var(--gutter) 10px; }
+@media (min-width: 640px) { .detail-zone { border-radius: 24px; margin-inline: 0; } }
+
+/* ── 生産者：変更後の数字が主役。±は押せる部品としてはっきり ── */
+.supply-icon { width: auto; height: auto; background: transparent; color: var(--o800); }
+.supply-title { font-size: 28px; letter-spacing: -0.03em; }
+.supply-now .figure { font-size: 18px; }
+.qty-panel { background: var(--o50); border-radius: 28px; padding: 18px 16px 18px 22px; box-shadow: var(--lift-orange); }
+.qty-panel.changed { box-shadow: inset 0 0 0 2px var(--o400), var(--lift-orange); }
+.qty-next .with-unit input { font-size: 72px; letter-spacing: -0.045em; min-height: 80px; }
+.qty-next em { font-size: 22px; }
+.stepper button { background: var(--color-producer-dark); color: #fff; border-radius: 16px; }
+.stepper button:hover:not(:disabled) { background: var(--color-producer-dark); filter: brightness(1.08); }
+.qty-bars { grid-template-columns: auto 1fr auto; }
+.qty-track { height: 6px; }
+.qty-bar-val { min-width: 3.2em; text-align: right; font-size: 14px; font-weight: 600; color: var(--color-muted); }
+.bundle-kg .unit { font-size: 14px; }

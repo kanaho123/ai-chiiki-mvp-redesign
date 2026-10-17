@@ -41,20 +41,26 @@ function Bundle({ plan, stale }: { plan: PlanResult; stale: boolean }) {
   const label = `${plan.allocations.map((a) => `${a.producerName} ${a.kg}kg`).join("、")}を束ねて${plan.fulfilledKg}kg${gap ? `。必要 ${need}kgまで不足 ${gap}kg` : ""}`;
   return (
     <figure className={`bundle ${gap ? "has-gap" : ""} ${stale ? "is-stale" : ""}`} aria-label={label}>
-      <ul className="bundle-sources" style={{ "--n": segs.length } as React.CSSProperties}>
+      <ul className="bundle-sources" style={{ gridTemplateColumns: `repeat(${segs.length}, minmax(0, 1fr))` }}>
         {segs.map((s) => (
           <li key={s.a.supplyId} className={`bundle-row shade-${s.shade}`}>
             <span className="bundle-name">{s.a.producerName}</span>
-            <span className="bundle-kg num">{s.a.kg}kg</span>
+            <span className="bundle-kg num">{s.a.kg}<span className="unit">kg</span></span>
             <span className="bundle-track"><i className="bundle-bar" style={{ left: `${s.left}%`, width: `${s.w}%` }} /></span>
           </li>
         ))}
       </ul>
-      <div className="bundle-join" style={{ "--n": segs.length } as React.CSSProperties} aria-hidden="true" />
+      {/* 合流の線（ロゴと同じ「束ねる線」）：各農家の中心から1点へ曲線でまとまる */}
+      <svg className="bundle-join" viewBox="0 0 100 32" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+        {segs.map((s, i) => {
+          const x = ((i + 0.5) / segs.length) * 100;
+          return <path key={s.a.supplyId} d={`M${x} 0C${x} 18 50 14 50 32`} vectorEffect="non-scaling-stroke" />;
+        })}
+      </svg>
       <div className="bundle-total">
         <span className="bundle-total-head">
           <Icon name="box" size={24} />
-          <b className="num">{plan.fulfilledKg}kg</b>
+          <b className="num">{plan.fulfilledKg}<span className="unit">kg</span></b>
           <span>{gap ? `必要 ${need}kg` : "必要な量を束ねました"}</span>
         </span>
         <span className="bundle-stack">
@@ -141,7 +147,7 @@ export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, o
           {hasPlan && (
             <p className="answer-yen">
               <span className="sr-only">合計（税込）</span>
-              {plan.totalYen === null ? <span className="pending">合計は未確定</span> : <Num stale={stale}>{yen(plan.totalYen)}</Num>}
+              {plan.totalYen === null ? <span className="pending">合計は未確定</span> : <Num stale={stale}><span className="cur">¥</span>{plan.totalYen.toLocaleString("ja-JP")}</Num>}
               <small>税込・受け渡し費用込み</small>
             </p>
           )}
