@@ -1,4 +1,4 @@
-import { requireRole, requireUser } from "../../server/auth.js";
+import { requireRole, requireOnboardedUser } from "../../server/auth.js";
 import { approvals, approvalHandle, parseContact } from "../../server/approvals.js";
 import { json, readJson } from "../../server/http.js";
 import { prisma } from "../../server/db.js";
@@ -11,7 +11,7 @@ export const GET = approvalHandle(async request => {
     const contact = await prisma.producer.findFirst({ where: { id: g.user.producer.id, ownerUserId: g.user.id }, select: { contactPhone: true, contactEmail: true } });
     return contact ? json({ contact }) : json({ error: "生産者情報がありません" }, 404);
   }
-  const g = await requireUser(request);
+  const g = await requireOnboardedUser(request);
   if (!g.ok) return g.response;
   const fingerprint = new URL(request.url).searchParams.get("fingerprint") ?? undefined;
   return json({ requests: await approvals.list(g.user, fingerprint) });

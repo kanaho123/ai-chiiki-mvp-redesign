@@ -19,7 +19,7 @@ vi.mock("./repo.js", () => {
   const sessionUser = (id: string): SessionUser | null => {
     const u = db.users.get(id);
     if (!u) return null;
-    return { id: u.id, role: u.role, displayName: u.displayName, producer: u.producerId ? { id: u.producerId, farmName: u.displayName, originPrefecture: "大阪府" } : null };
+    return { id: u.id, role: u.role, displayName: u.displayName, producer: u.producerId ? { id: u.producerId, farmName: u.displayName, originPrefecture: "大阪府" } : null, onboarded: true };
   };
   return {
     repo: {

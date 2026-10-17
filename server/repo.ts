@@ -1,3 +1,4 @@
+import { Prisma } from "./generated/prisma/client.js";
 import { prisma } from "./db.js";
 
 // 認証・供給 API が使う DB アクセスをここに集める（権限テストではこのモジュールを差し替える）。
@@ -10,7 +11,25 @@ export type SessionUser = {
   role: Role;
   displayName: string;
   producer: { id: string; farmName: string; originPrefecture: string } | null;
+  /** オンボーディングを終えたか。デモ環境（APP_MODE=demo）のデモアカウントは最初から完了扱い */
+  onboarded: boolean;
 };
+
+/** 一般ユーザーの新規作成に渡す値（同意の版・日時はサーバーで決めた値だけを渡す） */
+export type GeneralUserCreate = {
+  email: string; loginId: string; passwordHash: string; role: Role;
+  legalAcceptedAt: Date; termsVersion: string; privacyVersion: string;
+};
+export type CreateUserResult = { ok: true; id: string } | { ok: false; conflict: "email" | "loginId" };
+
+/** unique 制約違反（P2002）がどの列か。読めなければ null */
+function uniqueConflict(e: unknown): "email" | "loginId" | null {
+  if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== "P2002") return null;
+  const target = JSON.stringify(e.meta?.target ?? "");
+  if (target.includes("email")) return "email";
+  if (target.includes("loginId")) return "loginId";
+  return null;
+}
 
 export type SupplyView = {
   id: string;
@@ -63,11 +82,32 @@ export const repo = {
     return prisma.user.findUnique({ where: { loginId }, select: { id: true, passwordHash: true } });
   },
 
+  /** メールアドレス（小文字に正規化済み）でログイン用の情報を探す */
+  async findLoginUserByEmail(email: string): Promise<{ id: string; passwordHash: string | null } | null> {
+    return prisma.user.findUnique({ where: { email }, select: { id: true, passwordHash: true } });
+  },
+
   async findSessionUser(id: string): Promise<SessionUser | null> {
-    const u = await prisma.user.findUnique({ where: { id }, include: { producers: { orderBy: { id: "asc" }, take: 1 } } });
+    const u = await prisma.user.findUnique({ where: { id }, include: { producer: true } });
     if (!u) return null;
-    const p = u.producers[0];
-    return { id: u.id, role: u.role, displayName: u.displayName, producer: p ? { id: p.id, farmName: p.farmName, originPrefecture: p.originPrefecture } : null };
+    const p = u.producer;
+    return {
+      id: u.id, role: u.role, displayName: u.displayName,
+      producer: p ? { id: p.id, farmName: p.farmName, originPrefecture: p.originPrefecture } : null,
+      onboarded: process.env.APP_MODE?.trim() === "demo" || u.onboardedAt !== null,
+    };
+  },
+
+  /** 一般ユーザーを作る。メールアドレスか内部用ログインIDが重複したら、どちらかを返す（例外にしない） */
+  async createGeneralUser(data: GeneralUserCreate): Promise<CreateUserResult> {
+    try {
+      const u = await prisma.user.create({ data: { ...data, displayName: "（未設定）" }, select: { id: true } });
+      return { ok: true, id: u.id };
+    } catch (e) {
+      const conflict = uniqueConflict(e);
+      if (conflict) return { ok: false, conflict };
+      throw e;
+    }
   },
 
   async listOwnSupplies(producerId: string): Promise<SupplyView[]> {

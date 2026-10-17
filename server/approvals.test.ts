@@ -61,7 +61,7 @@ beforeEach(() => {
   db.rows = []; db.version = "v1"; db.now = new Date("2026-10-22T03:00:00Z"); db.users.clear(); db.contacts.clear();
   for (const id of ["r1", "r2", "a", "b"]) {
     const producer = ["a", "b"].includes(id);
-    db.users.set(id, { id, role: producer ? "producer" : "restaurant", displayName: id, producer: producer ? { id: `p-${id}`, farmName: id, originPrefecture: "大阪府" } : null });
+    db.users.set(id, { id, role: producer ? "producer" : "restaurant", displayName: id, producer: producer ? { id: `p-${id}`, farmName: id, originPrefecture: "大阪府" } : null, onboarded: true });
     if (producer) db.contacts.set(`p-${id}`, { ownerUserId: id, contactPhone: null, contactEmail: `${id}@example.invalid` });
   }
   const slot: PlanSlot = { id: "gp", label: "G-P", placeName: "P", startAt: "2026-10-23T01:00:00Z", endAt: "2026-10-23T02:00:00Z", confirmDeadlineAt: "2026-10-22T08:00:00Z", feeYen: 800, feeConfirmed: true, maxKg: 20, conditionsConfirmed: true };

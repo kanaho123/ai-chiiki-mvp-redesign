@@ -124,8 +124,18 @@ export async function requireUser(request: Request): Promise<Guard<SessionUser>>
   return user ? { ok: true, user } : { ok: false, response: json({ error: "ログインしてください" }, 401) };
 }
 
-export async function requireRole<R extends Role>(request: Request, role: R): Promise<Guard<SessionUser & { role: R }>> {
+/** 初回のプロフィール登録（オンボーディング）を終えたユーザーだけ。デモ用アカウントは常に登録済み扱い。
+ *  プロフィール登録の API そのものは requireUser を使う */
+export async function requireOnboardedUser(request: Request): Promise<Guard<SessionUser>> {
   const g = await requireUser(request);
+  if (!g.ok) return g;
+  if (!g.user.onboarded) return { ok: false, response: json({ error: "はじめにプロフィールを登録してください", code: "onboarding-required" }, 403) };
+  return g;
+}
+
+/** ロールの確認。オンボーディング前のユーザーはどのロールの操作も使えない */
+export async function requireRole<R extends Role>(request: Request, role: R): Promise<Guard<SessionUser & { role: R }>> {
+  const g = await requireOnboardedUser(request);
   if (!g.ok) return g;
   if (g.user.role !== role) return { ok: false, response: json({ error: "この操作を行う権限がありません" }, 403) };
   return g as Guard<SessionUser & { role: R }>;

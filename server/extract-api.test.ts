@@ -6,8 +6,8 @@ import { PREFECTURES } from "../src/lib/constants.js";
 vi.mock("./repo.js", () => ({
   repo: {
     findSessionUser: async (id: string) =>
-      id === "u-r" ? { id, role: "restaurant", displayName: "飲食店R", producer: null }
-        : id === "u-a" ? { id, role: "producer", displayName: "A農園", producer: { id: "p-a", farmName: "A農園", originPrefecture: "大阪府" } } : null,
+      id === "u-r" ? { id, role: "restaurant", displayName: "飲食店R", producer: null, onboarded: true }
+        : id === "u-a" ? { id, role: "producer", displayName: "A農園", producer: { id: "p-a", farmName: "A農園", originPrefecture: "大阪府" }, onboarded: true } : null,
   },
 }));
 vi.mock("./catalog.js", () => ({

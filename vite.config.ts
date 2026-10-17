@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import react from "@vitejs/plugin-react";
-import { loadApprovalEnvironment } from "./server/local-env.js";
+import { loadLocalEnvironment } from "./server/local-env.js";
 
 /**
  * 開発時だけ、/api/* へのリクエストを api/ フォルダの関数（Vercel Functions と同じファイル）で処理する。
@@ -67,11 +67,12 @@ function localApi(): Plugin {
   };
 }
 
-export default defineConfig(({ command }) => {
+export default defineConfig(({ command, mode }) => {
   if (command === "serve") {
     // .env.local（Vercel から取り込んだ接続情報）を API 関数用に読み込む。
     // VITE_ で始まらない変数はブラウザ側には渡らない。
-    loadApprovalEnvironment();
+    // 開発サーバーの接続先：通常はデモ用の開発DB、`vite --mode general` なら一般ユーザー向けの開発DB
+    loadLocalEnvironment(mode === "general" ? "general" : "demo");
   }
   return {
     plugins: [react(), localApi()],

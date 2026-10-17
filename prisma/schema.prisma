@@ -33,9 +33,16 @@ model User {
   id            String         @id @default(cuid())
   role          UserRole
   displayName   String
-  loginId       String?        @unique // デモ用ログイン名
+  loginId       String?        @unique // ログイン用の内部ID。デモは demo-r 等、一般ユーザーは登録時に自動生成（u- で始まる・画面に出さない）
   passwordHash  String? // scrypt のハッシュ（平文は保存しない）。null ならログイン不可
-  producers     Producer[]
+  email           String?   @unique // 一般ユーザーのログイン用（小文字に正規化して保存）。デモは null
+  legalAcceptedAt DateTime? // 利用規約・プライバシーポリシーに同意した日時（1つのチェックで両方に同意）
+  termsVersion    String?   // 同意した利用規約の版
+  privacyVersion  String?   // 同意したプライバシーポリシーの版
+  onboardedAt     DateTime? // オンボーディング完了。null ならオンボーディングへ誘導
+  createdAt       DateTime  @default(now())
+  producer      Producer?
+  restaurant    Restaurant?
   relationships Relationship[]
   approvalRequests ApprovalRequest[]
 
@@ -44,7 +51,7 @@ model User {
 
 model Producer {
   id               String            @id @default(cuid())
-  ownerUserId      String
+  ownerUserId      String            @unique // 1ユーザー1農園（適用前に各DBで重複0件を確認する）
   owner            User              @relation(fields: [ownerUserId], references: [id])
   farmName         String
   originPrefecture String // 産地（都道府県）
@@ -54,9 +61,142 @@ model Producer {
   contactPhone     String?
   contactEmail     String?
   approvalRequests ApprovalRequest[]
+  producerName          String?
+  city                  String?
+  otherCrops            String? // プロフィール用の自由記入。出品できるのは品目マスタにある品目だけ
+  productionStyle       ProductionStyle?
+  salesChannels         SalesChannel[]       @default([])
+  directTradeExperience DirectTradeExperience?
+  capabilities          ProducerCapability[] @default([])
+  mainItems             ProducerItem[]
+  seriesMemberships     SlotSeriesParticipant[]
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @default(now()) @updatedAt
 
-  @@index([ownerUserId])
+  @@index([ownerUserId]) // 既存の索引は残す（unique と重複するが、削除しないことで追加のみの変更にする）
   @@map("producers")
+}
+
+enum ProductionStyle {
+  many_small // 少量多品目
+  specialized // 特定品目中心
+  seasonal // 季節によって変わる
+  other
+}
+
+enum SalesChannel {
+  market // 市場
+  ja
+  direct_store // 直売所
+  restaurant // 飲食店
+  ec
+  other
+}
+
+enum DirectTradeExperience {
+  often // よくある
+  sometimes // 何度かある
+  rarely // ほとんどない
+  never // 初めて
+}
+
+enum ProducerCapability {
+  small_lot // 少ない量でも販売できる
+  irregular // 規格外も販売できる
+  surplus // 余った分だけでも販売できる
+  direct_talk // 飲食店と直接相談できる
+}
+
+// 主な作物（品目マスタへの参照）
+model ProducerItem {
+  producerId String
+  producer   Producer @relation(fields: [producerId], references: [id])
+  itemId     String
+  item       Item     @relation(fields: [itemId], references: [id])
+
+  @@id([producerId, itemId])
+  @@index([itemId])
+  @@map("producer_items")
+}
+
+// 飲食店プロフィール（User と 1対1。承認依頼・取引経験は従来どおり User を指す）
+model Restaurant {
+  id                String             @id @default(cuid())
+  ownerUserId       String             @unique
+  owner             User               @relation(fields: [ownerUserId], references: [id])
+  name              String
+  businessType      BusinessType
+  businessTypeOther String? // businessType=other のときの業態（短い自由記入）
+  prefecture        String
+  city              String
+  address           String? // 任意・後から設定可。生産者には表示しない
+  phone             String? // 任意。生産者には表示しない
+  purchaseFrequency PurchaseFrequency?
+  purchaseVolume    PurchaseVolume?
+  irregularPolicy   IrregularPolicy?
+  firstTimePolicy   FirstTimePolicy?
+  pickupTimes       PickupTime[]       @default([])
+  priorities        PurchasePriority[] @default([]) // 最大3（アプリで検証）
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @default(now()) @updatedAt
+
+  @@map("restaurants")
+}
+
+enum BusinessType {
+  japanese // 和食
+  izakaya // 居酒屋
+  italian
+  french
+  cafe
+  bakery
+  chinese
+  western // 洋食
+  other
+}
+
+enum PurchaseFrequency {
+  almost_daily // ほぼ毎日
+  few_times_weekly // 週2〜3回
+  weekly // 週1回
+  as_needed // 必要なときだけ
+}
+
+enum PurchaseVolume {
+  small // 少量中心
+  kg5_10
+  kg10_30
+  kg30_plus
+}
+
+enum IrregularPolicy {
+  welcome // 積極的に使いたい
+  depends // 条件次第
+  avoid // 基本使わない
+}
+
+enum FirstTimePolicy {
+  include // 候補に含めてOK
+  prefer_known // 取引済み生産者を優先
+}
+
+enum PickupTime {
+  early_morning
+  morning
+  afternoon
+  evening
+  any // 特になし
+}
+
+enum PurchasePriority {
+  local // 近くで作られている
+  freshness
+  price
+  stable_supply
+  small_lots
+  use_irregular
+  rare_items
+  direct_connection
 }
 
 // 店ごとの取引経験の申告。アプリ内の成約実績ではない。
@@ -77,6 +217,7 @@ model Item {
   name      String    @unique
   varieties Variety[]
   supplies  Supply[]
+  producerItems ProducerItem[]
 
   @@map("items")
 }
@@ -97,6 +238,7 @@ model Place {
   name    String
   address String
   slots   HandoverSlot[]
+  series  SlotSeries[]
 
   @@map("places")
 }
@@ -116,9 +258,45 @@ model HandoverSlot {
   conditionsConfirmed Boolean           @default(false)
   participants        SlotParticipant[]
   supplies            Supply[]
+  seriesId            String? // 定期枠から作った回なら、その定期枠
+  series              SlotSeries?       @relation(fields: [seriesId], references: [id])
 
+  @@unique([seriesId, startAt])
   @@index([placeId])
   @@map("handover_slots")
+}
+
+// 受渡の定期枠（運営がスクリプトで管理。曜日・時刻はサービス基準の Asia/Tokyo）
+model SlotSeries {
+  id            String                  @id @default(cuid())
+  placeId       String
+  place         Place                   @relation(fields: [placeId], references: [id])
+  label         String // 例「毎週金曜 午前」
+  weekday       Int // 0=日〜6=土（Asia/Tokyo）
+  startTime     String // "10:00"（Asia/Tokyo）
+  endTime       String // "11:00"（Asia/Tokyo）
+  deadlineHours Int // 受渡開始の何時間前を確認締切にするか
+  feeYen        Int
+  maxKg         Int
+  active        Boolean                 @default(true)
+  slots         HandoverSlot[]
+  participants  SlotSeriesParticipant[]
+
+  @@index([placeId])
+  @@map("slot_series")
+}
+
+// 生産者がオンボーディングで選ぶ「利用できる受渡場所・時間」
+model SlotSeriesParticipant {
+  seriesId   String
+  series     SlotSeries @relation(fields: [seriesId], references: [id])
+  producerId String
+  producer   Producer   @relation(fields: [producerId], references: [id])
+  joinedAt   DateTime   @default(now())
+
+  @@id([seriesId, producerId])
+  @@index([producerId])
+  @@map("slot_series_participants")
 }
 
 model SlotParticipant {
