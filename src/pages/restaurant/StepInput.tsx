@@ -20,13 +20,12 @@ export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable
   if (busy) {
     return (
       <section className="loading" role="status" aria-live="polite" aria-labelledby="loading-title">
-        <div className="loading-art" aria-hidden="true">
-          <span className="loading-core"><Icon name="sparkle" size={48} strokeWidth={1.5} /></span>
-        </div>
+        <p className="eyebrow">1/3 希望</p>
         <h2 className="loading-title" id="loading-title">希望条件を整理しています</h2>
-        <p className="lede">AIは条件を読み取るだけです</p>
-        <p className="muted small">最大10秒ほどかかります</p>
-        <button type="button" className="btn-link" onClick={onManual}>待たずに手入力する</button>
+        <div className="loading-line" aria-hidden="true"><span /></div>
+        <p className="lede">入力した文章から、品目・数量・受渡日などを読み取っています。最大10秒ほどかかります。</p>
+        <p className="muted small">数量・価格はこのあと登録情報をもとに計算します。</p>
+        <div><button type="button" className="btn-secondary" onClick={onManual}>待たずに手入力する</button></div>
       </section>
     );
   }
@@ -53,7 +52,7 @@ export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable
         {EXAMPLES.map((ex) => <button key={ex.label} type="button" className="example-chip example" onClick={() => onText(ex.text)}>{ex.label}</button>)}
       </div>
 
-      <p className="ai-note"><Icon name="sparkle" size={18} />AIは言葉を整理するだけです。数量・価格・受渡条件は、確認したあと登録情報をもとにプログラムが計算します。</p>
+      <p className="ai-note">文章は条件の読み取りだけに使います。数量・価格・受渡条件は、確認したあと登録情報をもとにプログラムが計算します。</p>
 
       {emptyHint && <div className="alert warn" role="status"><Icon name="info" />文章が空です。例文を押すか、「項目を選んで入力」を使ってください。</div>}
       {aiOff && <div className="alert info" role="status"><Icon name="info" />AIによる読み取りは現在使えません。項目を選んで入力してください（計算結果は同じです）。</div>}

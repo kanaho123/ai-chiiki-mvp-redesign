@@ -210,12 +210,17 @@ export default function RestaurantPage({ me }: { me: Me }) {
 
   return (
     <main className={`screen ${loading ? "" : "has-bar"}`}>
-      {/* 進行状況：細い3段のバーと「1/3 希望を入力」 */}
+      {/* 進行状況：①希望 ― ②確認 ― ③仕入れ案（今の工程を太字で示す） */}
       {!loading && (
-        <div className="flow-progress" aria-label={`進行状況 ${stepIndex + 1}/3 ${stepName}`}>
-          <div className="flow-bar" aria-hidden="true">{[0, 1, 2].map((k) => <i key={k} className={k <= stepIndex ? "on" : ""} />)}</div>
-          <span className="flow-label">{stepIndex + 1}/3 {stepName}</span>
-        </div>
+        <nav className="flow-progress" aria-label={`進行状況 ${stepIndex + 1}/3 ${stepName}`}>
+          <ol className="flow-steps">
+            {["希望", "確認", "仕入れ案"].map((label, k) => (
+              <li key={label} className={k === stepIndex ? "on" : k < stepIndex ? "done" : ""} aria-current={k === stepIndex ? "step" : undefined}>
+                <b>{k + 1}</b>{label}
+              </li>
+            ))}
+          </ol>
+        </nav>
       )}
 
       {catalogError && <div className="alert bad" role="alert"><Icon name="alert" />登録データを読み込めませんでした。再読み込みしてください。</div>}

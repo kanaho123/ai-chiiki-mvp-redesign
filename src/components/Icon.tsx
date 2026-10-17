@@ -143,12 +143,12 @@ export function Icon({ name, size = 20, ...rest }: { name: IconName; size?: numb
 export function Logo({ size = 28 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-      <rect width="32" height="32" rx="9" fill="#256B42" />
+      <rect width="32" height="32" rx="7" fill="#2F5E45" />
       <rect x="7" y="9" width="8" height="3" rx="1.5" fill="#fff" />
       <rect x="7" y="14.5" width="6" height="3" rx="1.5" fill="#fff" />
       <rect x="7" y="20" width="4" height="3" rx="1.5" fill="#fff" />
       <path d="M16 10.5h3.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H16" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
-      <rect x="22.5" y="14.5" width="3" height="3" rx="1.5" fill="#9fe0bd" />
+      <rect x="22.5" y="14.5" width="3" height="3" rx="1.5" fill="#E9B48F" />
     </svg>
   );
 }

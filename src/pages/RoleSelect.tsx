@@ -22,24 +22,26 @@ export default function RoleSelect({ onLoggedIn }: { onLoggedIn: (me: Me) => voi
 
   return (
     <main className="screen">
-      <div className="title-block">
-        <p className="eyebrow">地域の食材を、やさしく賢くつなぐ</p>
-        <h1 className="display">どちらで使いますか？</h1>
+      <div className="brand-intro">
+        <h1 className="brand-tagline"><span className="nowrap">地域の供給を、</span><span className="nowrap">まとめて仕入れる</span></h1>
+        <p className="brand-sub">どちらの立場で使うかを選んでください。</p>
       </div>
 
       <div className="role-cards">
         <section className="role-card restaurant" aria-labelledby="role-r">
-          <span className="role-icon" aria-hidden="true"><Icon name="store" size={40} strokeWidth={1.5} /></span>
+          <span className="role-icon" aria-hidden="true"><Icon name="store" size={24} strokeWidth={1.6} /></span>
+          <span className="role-accent" aria-hidden="true" />
           <span className="role-label">飲食店の方</span>
           <h2 className="role-name" id="role-r">飲食店</h2>
-          <p className="role-desc">地域の供給から仕入れ案をつくる</p>
+          <p className="role-desc">欲しい食材と量を伝えて、地域の供給から仕入れ案をつくります。</p>
           <button type="button" onClick={() => setSheet("restaurant")}>飲食店としてログイン<Icon name="arrowRight" /></button>
         </section>
         <section className="role-card producer" aria-labelledby="role-p">
-          <span className="role-icon" aria-hidden="true"><Icon name="sprout" size={40} strokeWidth={1.5} /></span>
+          <span className="role-icon" aria-hidden="true"><Icon name="sprout" size={24} strokeWidth={1.6} /></span>
+          <span className="role-accent" aria-hidden="true" />
           <span className="role-label">生産者の方</span>
           <h2 className="role-name" id="role-p">生産者</h2>
-          <p className="role-desc">販売できる量をかんたんに更新</p>
+          <p className="role-desc">今日販売できる量を、数タップで更新します。</p>
           <button type="button" onClick={() => setSheet("producer")}>生産者としてログイン<Icon name="arrowRight" /></button>
         </section>
       </div>

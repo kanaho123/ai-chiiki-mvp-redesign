@@ -17,8 +17,8 @@ const SLIDES: Slide[] = [
 ];
 
 const TONE = {
-  green: { "--ob-color": "var(--color-restaurant)", "--ob-deep": "var(--color-restaurant-deep)", "--ob-tint": "var(--color-restaurant-tint)", "--ob-accent": "var(--color-producer)", "--ob-shadow": "rgba(37, 107, 66, 0.25)", "--ob-btn": "var(--color-restaurant-dark)" },
-  orange: { "--ob-color": "var(--color-producer)", "--ob-deep": "var(--color-producer-dark)", "--ob-tint": "var(--color-producer-tint)", "--ob-accent": "var(--color-restaurant)", "--ob-shadow": "rgba(194, 84, 15, 0.25)", "--ob-btn": "var(--color-producer-dark)" },
+  green: { "--ob-color": "var(--color-restaurant)", "--ob-btn": "var(--color-restaurant-dark)" },
+  orange: { "--ob-color": "var(--color-producer)", "--ob-btn": "var(--color-producer-dark)" },
 } as const;
 
 export default function Onboarding({ onDone }: { onDone: () => void }) {
@@ -36,11 +36,8 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
       </div>
 
       <div className="ob-body" aria-live="polite">
-        <div className="ob-art" aria-hidden="true">
-          <div className="ob-circle"><Icon name={s.icon} size={92} strokeWidth={1.4} /></div>
-          <span className="ob-dot a" />
-          <span className="ob-dot b" />
-        </div>
+        <div className="ob-art" aria-hidden="true"><Icon name={s.icon} size={38} strokeWidth={1.5} /></div>
+        <span className="ob-mark" aria-hidden="true" />
         <h1 className="ob-title">{s.title.map((l) => <span key={l} className="nowrap">{l}</span>)}</h1>
         <p className="ob-text">{s.text}</p>
       </div>

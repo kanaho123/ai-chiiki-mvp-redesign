@@ -2,7 +2,7 @@ import { formatDateJa, formatJstDateTime, jstDate, jstDateOf, jstTimeOf } from "
 import { missingFields, type RequestForm, type YesNo } from "../../lib/request-form.js";
 import { RESOLVE_NOTICE_TEXT, type DraftField } from "../../lib/resolve.js";
 import { BottomBar } from "../../components/BottomBar";
-import { Icon, type IconName } from "../../components/Icon";
+import { Icon } from "../../components/Icon";
 import type { CatalogData, ExtractResult } from "./types";
 
 // STEP 2：「この条件で合っていますか？」。AI の読み取り結果は必ず利用者が確認し、未確定の項目は利用者が選ぶ。
@@ -38,24 +38,24 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, ai
   const slots = catalog.slots.filter((s) => !form.desiredDate || jstDateOf(s.startAt) === form.desiredDate);
   const required = extraction?.extracted.producerRequired === true;
 
-  /** 項目ごとの目印：AI が読み取った値は淡い緑、人が決める必要があるものはオレンジ（どちらも変更できる） */
-  const Badge = ({ f }: { f: DraftField | DraftField[] }) => {
-    const fs = Array.isArray(f) ? f : [f];
-    return fs.some((x) => missing.includes(x)) ? <span className="chip chip-need">確認してください</span>
-      : fs.some((x) => aiFields.includes(x)) ? <span className="chip chip-ai">AIが読み取り</span> : null;
-  };
-  const Head = ({ icon, label, f, id }: { icon: IconName; label: string; f: DraftField | DraftField[]; id?: string }) => (
+  /** 項目ごとの目印：AI が読み取った値は小さく「AI」、人が決める必要があるものは「要選択」（どちらも変更できる） */
+  const fieldsOf = (f: DraftField | DraftField[]) => (Array.isArray(f) ? f : [f]);
+  const needs = (f: DraftField | DraftField[]) => fieldsOf(f).some((x) => missing.includes(x));
+  const rowClass = (f: DraftField | DraftField[]) => (needs(f) ? "item-row need" : "item-row");
+  const Mark = ({ f }: { f: DraftField | DraftField[] }) =>
+    needs(f) ? <span className="mark mark-need">要選択</span>
+      : fieldsOf(f).some((x) => aiFields.includes(x)) ? <span className="mark mark-ai" title="AIが読み取った値">AI</span> : null;
+  const Head = ({ label, f, id }: { label: string; f: DraftField | DraftField[]; id?: string }) => (
     <div className="item-head">
-      <span className="item-icon" aria-hidden="true"><Icon name={icon} size={18} /></span>
       <span className="item-label" id={id}>{label}</span>
-      <Badge f={f} />
+      <Mark f={f} />
     </div>
   );
 
   return (
     <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }} aria-labelledby="step2-title" style={{ display: "grid", gap: "var(--gap)" }}>
       <div className="title-block">
-        <p className="eyebrow">{extraction ? "AIが読み取った条件" : "項目を選んで入力"}</p>
+        <p className="eyebrow">{extraction ? "文章から読み取った条件" : "項目を選んで入力"}</p>
         <h1 className="display" id="step2-title"><span className="nowrap">この条件で</span><span className="nowrap">合っていますか？</span></h1>
         {extraction
           ? <p className="lede">数量・価格・受渡条件は、確定後に登録情報から計算します。どの項目も変更できます。</p>
@@ -68,8 +68,8 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, ai
       {/* 基本条件 */}
       <section className="card group-card" aria-labelledby="g-basic">
         <h3 id="g-basic">基本条件</h3>
-        <div className="item-row">
-          <Head icon="basket" label="品目と数量" f={["itemId", "quantityKg", "varietyId"]} />
+        <div className={rowClass(["itemId", "quantityKg", "varietyId"])}>
+          <Head label="品目と数量" f={["itemId", "quantityKg", "varietyId"]} />
           <div className="row2">
             <select value={form.itemId} onChange={(e) => setForm({ ...form, itemId: e.target.value, varietyId: "" })} aria-label="品目" aria-required="true">
               <option value="">品目を選ぶ</option>
@@ -87,8 +87,8 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, ai
             </select>
           )}
         </div>
-        <div className="item-row">
-          <Head icon="pin" label="産地" f="originPrefectures" id="lbl-origin" />
+        <div className={rowClass("originPrefectures")}>
+          <Head label="産地" f="originPrefectures" id="lbl-origin" />
           <div className="pick" role="group" aria-labelledby="lbl-origin">
             {prefs.map((p) => (
               <label key={p}>
@@ -100,8 +100,8 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, ai
           </div>
           <span className="item-help">どこで採れたか。受取場所とは別の条件です。</span>
         </div>
-        <div className="item-row">
-          <Head icon="yen" label="予算（税込・受渡費込みの総額）" f="budget" id="lbl-budget" />
+        <div className={rowClass("budget")}>
+          <Head label="予算（税込・受渡費込みの総額）" f="budget" id="lbl-budget" />
           <div className="seg" role="radiogroup" aria-labelledby="lbl-budget">
             <label><input type="radio" name="budget" checked={form.budgetMode === "limit"} onChange={() => set("budgetMode", "limit")} />金額を指定</label>
             <label><input type="radio" name="budget" checked={form.budgetMode === "none"} onChange={() => set("budgetMode", "none")} />上限なし</label>
@@ -118,8 +118,8 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, ai
       {/* 受渡条件 */}
       <section className="card group-card" aria-labelledby="g-handover">
         <h3 id="g-handover">受渡条件</h3>
-        <div className="item-row">
-          <Head icon="calendar" label="受け取りたい日" f="desiredDate" />
+        <div className={rowClass("desiredDate")}>
+          <Head label="受け取りたい日" f="desiredDate" />
           <input type="date" min={today} value={form.desiredDate} onChange={(e) => setForm({ ...form, desiredDate: e.target.value, slotId: "" })} aria-label="受け取りたい日" aria-required="true" />
           {dateCands.length > 1 && (
             <div className="date-cands" role="group" aria-label="日付の候補">
@@ -130,8 +130,8 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, ai
           )}
           {form.desiredDate && <span className="item-help">{formatDateJa(form.desiredDate)}{catalog.demoClock && `（デモ基準日時 ${formatJstDateTime(catalog.now)} から計算）`}</span>}
         </div>
-        <div className="item-row">
-          <Head icon="truck" label="受渡枠（受取場所・時間）" f="slotId" id="lbl-slot" />
+        <div className={rowClass("slotId")}>
+          <Head label="受渡枠（受取場所・時間）" f="slotId" id="lbl-slot" />
           {slots.length === 0 ? (
             <p className="muted">{form.desiredDate ? "この日の受渡枠は登録されていません。日付を確認してください。" : "先に受け取りたい日を選んでください。"}</p>
           ) : (
@@ -156,25 +156,25 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, ai
       {/* 許容条件 */}
       <section className="card group-card" aria-labelledby="g-allow">
         <h3 id="g-allow">許容条件</h3>
-        <div className="item-row">
-          <Head icon="sprout" label="初回の農家" f="allowFirstTime" id="lbl-first" />
+        <div className={rowClass("allowFirstTime")}>
+          <Head label="初回の農家" f="allowFirstTime" id="lbl-first" />
           <Seg name="q-first" value={form.allowFirstTime} onChange={(v) => set("allowFirstTime", v)} no="含めない" yes="含める" labelId="lbl-first" />
           <span className="item-help">取引経験は店の申告情報です。品質や信用の保証ではありません。</span>
         </div>
-        <div className="item-row">
-          <Head icon="leaf" label="規格外（形の不揃い等）" f="allowIrregular" id="lbl-irr" />
+        <div className={rowClass("allowIrregular")}>
+          <Head label="規格外（形の不揃い等）" f="allowIrregular" id="lbl-irr" />
           <Seg name="q-irr" value={form.allowIrregular} onChange={(v) => set("allowIrregular", v)} no="許可しない" yes="許可する" labelId="lbl-irr" />
         </div>
-        <div className="item-row">
-          <Head icon="basket" label="異なる品種の混在" f="allowMixedVarieties" id="lbl-mixv" />
+        <div className={rowClass("allowMixedVarieties")}>
+          <Head label="異なる品種の混在" f="allowMixedVarieties" id="lbl-mixv" />
           <Seg name="q-mixv" value={form.allowMixedVarieties} onChange={(v) => set("allowMixedVarieties", v)} no="混ぜない" yes="混ぜてよい" labelId="lbl-mixv" />
         </div>
-        <div className="item-row">
-          <Head icon="leaf" label="通常品と規格外品の混在" f="allowMixedGrades" id="lbl-mixg" />
+        <div className={rowClass("allowMixedGrades")}>
+          <Head label="通常品と規格外品の混在" f="allowMixedGrades" id="lbl-mixg" />
           <Seg name="q-mixg" value={form.allowMixedGrades} onChange={(v) => set("allowMixedGrades", v)} no="混ぜない" yes="混ぜてよい" labelId="lbl-mixg" />
         </div>
-        <div className="item-row">
-          <Head icon="store" label="優先する取引先（任意）" f="preferredProducerId" />
+        <div className={rowClass("preferredProducerId")}>
+          <Head label="優先する取引先（任意）" f="preferredProducerId" />
           <select value={form.preferredProducerId} onChange={(e) => set("preferredProducerId", e.target.value)} aria-label="優先する取引先">
             <option value="">指定なし</option>
             {catalog.priorTradeProducers.map((p) => <option key={p.id} value={p.id}>{p.name}（取引経験あり）</option>)}
