@@ -48,29 +48,31 @@ export default function Login({ onLoggedIn }: { onLoggedIn: (me: Me) => void }) 
       </header>
 
       {accounts.length > 0 && (
-        <section className="section" aria-labelledby="demo-title">
-          <h2 id="demo-title" className="list-title">デモ用アカウント</h2>
+        <section className="card" aria-labelledby="demo-title">
+          <h2 className="card-title" id="demo-title">デモ用アカウント</h2>
           <p className="hint">選ぶとログイン名が入ります。パスワードはデモ担当者に確認してください。</p>
-          <div className="choice">
+          <div className="account-list" role="group" aria-labelledby="demo-title">
             {accounts.map((a) => (
-              <label key={a.loginId}>
-                <input
-                  type="radio"
-                  name="demo-account"
-                  checked={loginId === a.loginId}
-                  onChange={() => {
-                    setLoginId(a.loginId);
-                    setTimeout(() => passwordRef.current?.focus(), 0);
-                  }}
-                />
-                <span>{a.displayName}<small>{a.role === "restaurant" ? "飲食店" : "生産者"}・{a.loginId}</small></span>
-              </label>
+              <button
+                key={a.loginId}
+                type="button"
+                className="account"
+                aria-pressed={loginId === a.loginId}
+                onClick={() => {
+                  setLoginId(a.loginId);
+                  setTimeout(() => passwordRef.current?.focus(), 0);
+                }}
+              >
+                <Icon name={a.role === "restaurant" ? "store" : "box"} />
+                <span className="account-name"><b>{a.displayName}</b><small>{a.loginId}</small></span>
+                <span className={`chip ${a.role === "restaurant" ? "chip-restaurant" : "chip-producer"}`}>{a.role === "restaurant" ? "飲食店" : "生産者"}</span>
+              </button>
             ))}
           </div>
         </section>
       )}
 
-      <form className="qform" onSubmit={submit}>
+      <form className="card" onSubmit={submit} aria-label="ログイン">
         <label className="field">
           <span className="label">ログイン名</span>
           <input value={loginId} onChange={(e) => setLoginId(e.target.value)} autoComplete="username" autoCapitalize="none" aria-required="true" />

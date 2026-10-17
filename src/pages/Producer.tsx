@@ -62,43 +62,45 @@ export default function ProducerPage({ me }: { me: Me }) {
   }, [reload]);
 
   return (
-    <div className="page grower-page">
+    <div className="page">
       <header className="page-head">
-        <p className="page-role grower"><Icon name="box" />生産者の方</p>
-        <h1>自分の供給を確認する</h1>
-        <p className="lead">{me.producer?.farmName ?? me.displayName}の、今回販売に回せる量（既存の注文分を除いた量）です。</p>
+        <p className="page-role"><Icon name="box" />生産者の方</p>
+        <h1>自分の供給</h1>
+        <p className="lead">{me.producer?.farmName ?? me.displayName}の、今回販売に回せる量（既存の注文分を除いた量）です。数量はいつでも変更できます。</p>
       </header>
 
-      <div className="alert warn" role="note">
+      {loadError && <div className="alert bad" role="alert"><Icon name="alert" />{loadError}</div>}
+      {data === null && !loadError && <p className="muted">読み込み中…</p>}
+      <ul className="listing-list" aria-label="供給一覧">
+        {data?.supplies.map((s) => (
+          <SupplyCard
+            key={`${s.id}:${s.version}`}
+            supply={s}
+            done={done?.id === s.id ? done.text : null}
+            onChanged={(text, updated) => {
+              setDone(text ? { id: s.id, text } : null);
+              // 更新 API が返した最新の供給をすぐ表示に反映し（古い数量が見えないように）、その後で一覧を読み直す
+              if (updated) setData((d) => d && { ...d, supplies: d.supplies.map((x) => (x.id === updated.id ? updated : x)) });
+              reload();
+            }}
+          />
+        ))}
+      </ul>
+      {data && data.supplies.length === 0 && <p className="muted">まだ供給は登録されていません。</p>}
+
+      <div className="alert info" role="note">
         <Icon name="info" />
         <div>
-          仕入れ案に表示されても、この数量が自動で減るわけではありません。数量の変更・公開停止をすると、飲食店に表示中の仕入れ案は「現在の情報ではない」と表示され、再計算が必要になります。
+          数量の変更・公開停止をすると、飲食店に表示中の仕入れ案は「現在の情報ではない」と表示され、再計算が必要になります。
         </div>
       </div>
-
-      <section aria-labelledby="list-title" style={{ marginTop: 16 }}>
-        <h2 id="list-title" className="list-title">供給一覧</h2>
-        {loadError && <div className="alert bad" role="alert"><Icon name="alert" />{loadError}</div>}
-        {data === null && !loadError && <p className="muted">読み込み中…</p>}
-        <ul className="listing-list">
-          {data?.supplies.map((s) => (
-            <SupplyCard
-              key={`${s.id}:${s.version}`}
-              supply={s}
-              done={done?.id === s.id ? done.text : null}
-              onChanged={(text) => { setDone(text ? { id: s.id, text } : null); reload(); }}
-            />
-          ))}
-        </ul>
-        {data && data.supplies.length === 0 && <p className="muted">まだ供給は登録されていません。</p>}
-      </section>
 
       {data && <NewSupply data={data} defaultOrigin={me.producer?.originPrefecture ?? ""} onCreated={reload} />}
     </div>
   );
 }
 
-function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: string | null; onChanged: (text?: string) => void }) {
+function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: string | null; onChanged: (text?: string, updated?: Supply) => void }) {
   const [kg, setKg] = useState(String(s.availableKg));
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: "ok" | "bad"; text: string; conflict?: boolean } | null>(null);
@@ -118,42 +120,61 @@ function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: stri
     const text = body.availableKg !== undefined
       ? `${before.availableKg}kg → ${after.availableKg}kgに更新しました`
       : after.published ? "公開を再開しました（仕入れ案に使われます）" : "公開を停止しました（仕入れ案に使われません）";
-    onChanged(text);
+    onChanged(text, after);
   }
 
+  // − / ＋ は入力欄の値を 1kg ずつ動かすだけ。送るのは「数量を変更」を押したときの確定値（0〜100kg）
+  const step = (d: number) => {
+    const cur = Number.isInteger(Number(kg)) && kg !== "" ? Number(kg) : s.availableKg;
+    setKg(String(Math.min(100, Math.max(0, cur + d))));
+  };
   const kgId = `kg-${s.id}`;
+  const changed = kg !== String(s.availableKg);
   return (
-    <li className={`listing ${s.published ? "" : "paused"}`}>
+    <li className={`card listing ${s.published ? "" : "paused"}`}>
       <div className="listing-top">
         <div>
-          <div className="listing-item">{s.item.name}（{s.variety.name}）</div>
-          <div className="listing-producer">{s.originPrefecture}産・{s.grade === "irregular" ? `規格外：${s.irregularReason}` : "通常品"}</div>
+          <div className="listing-item">{s.item.name}<span className="muted" style={{ fontWeight: 500, fontSize: "1rem" }}>（{s.variety.name}）</span></div>
+          <div className="listing-sub">{s.originPrefecture}産・{s.grade === "irregular" ? `規格外：${s.irregularReason}` : "通常品"}</div>
         </div>
-        <div className="listing-stock">
-          <span className="figure stock">{s.availableKg}<small>kg</small></span>
-          <div className={`listing-state ${s.published ? "on" : "off"}`}>
-            <Icon name={s.published ? "check" : "pause"} size={16} />
-            {s.published ? "公開中" : "公開停止中"}
+        <span className={`chip ${s.published ? "chip-on" : "chip-off"}`}>
+          <Icon name={s.published ? "check" : "pause"} size={16} />{s.published ? "公開中" : "公開停止中"}
+        </span>
+      </div>
+
+      <div className="stock-line">
+        <span className="muted">現在の販売可能量</span>
+        <span className="figure stock">{s.availableKg}<small>kg</small></span>
+      </div>
+      <dl className="listing-meta">
+        <dt>単価</dt><dd>{yen(s.priceYenPerKg)}/kg（税込）・最低{s.minKg}kg・1kg刻み</dd>
+        <dt>受渡枠</dt><dd>{slotText(s.slot)}</dd>
+        <dt>最終更新</dt><dd>{formatJstDateTime(s.updatedAt)}</dd>
+      </dl>
+
+      {done && (
+        <div className="alert ok" role="status">
+          <Icon name="check" />
+          <div>
+            <strong>{done}</strong>
+            <p className="update-note">仕入れ案に表示されても、数量が自動で減ることはありません。</p>
           </div>
         </div>
-      </div>
-      <div className="listing-meta">
-        <span>{yen(s.priceYenPerKg)}/kg（税込）・最低{s.minKg}kg・1kg刻み</span>
-        <span>受渡枠 {slotText(s.slot)}</span>
-        <span className="muted">最終更新 {formatJstDateTime(s.updatedAt)}</span>
-      </div>
+      )}
 
-      {done && <div className="alert ok" role="status"><Icon name="check" />{done}</div>}
-
-      <form className="qty-editor" onSubmit={(e) => { e.preventDefault(); patch({ availableKg: kg }); }}>
-        <label className="field" htmlFor={kgId}>
-          <span className="label">販売可能量を変更</span>
+      <form className="field" onSubmit={(e) => { e.preventDefault(); patch({ availableKg: kg }); }}>
+        <label className="label" htmlFor={kgId}>販売可能量を変更</label>
+        <div className="stepper">
+          <button type="button" onClick={() => step(-1)} aria-label="1kg減らす" disabled={busy}>−</button>
           <span className="with-unit">
             <input id={kgId} type="number" inputMode="numeric" min={0} max={100} step={1} value={kg} onChange={(e) => setKg(e.target.value)} aria-label={`${s.item.name}の販売可能量`} />
             <em>kg</em>
           </span>
-        </label>
-        <button type="submit" className="primary" disabled={busy || kg === String(s.availableKg)} aria-busy={busy}>数量を変更</button>
+          <button type="button" onClick={() => step(1)} aria-label="1kg増やす" disabled={busy}>＋</button>
+        </div>
+        <button type="submit" className="primary block" disabled={busy || !changed} aria-busy={busy}>
+          {busy ? <><span className="spinner" aria-hidden="true" />更新中…</> : changed ? `${s.availableKg}kg → ${kg || "?"}kg に変更する` : "数量を変更"}
+        </button>
       </form>
       {msg && (
         <div className={`alert ${msg.tone}`} role="alert">
@@ -173,7 +194,7 @@ function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: stri
         <span className="hint">{s.published ? "仕入れ案に使われます" : "仕入れ案に使われません（数量はそのまま残ります）"}</span>
         <button className={s.published ? "danger-ghost" : "secondary"} onClick={() => patch({ published: !s.published })} disabled={busy}>
           <Icon name={s.published ? "pause" : "play"} size={16} />
-          {s.published ? "公開停止" : "公開再開"}
+          {s.published ? "公開を停止する" : "公開を再開する"}
         </button>
       </div>
     </li>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Me } from "../App";
 import { Icon } from "../components/Icon";
 import { EMPTY_FORM, formFromDraft, formFromRequest, toPlanBody, type RequestForm } from "../lib/request-form.js";
@@ -62,6 +62,8 @@ export default function RestaurantPage({ me }: { me: Me }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [emptyHint, setEmptyHint] = useState(false);
   const [restored, setRestored] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const extractAbort = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const saved = load(me.id);
@@ -120,10 +122,14 @@ export default function RestaurantPage({ me }: { me: Me }) {
       return;
     }
     setEmptyHint(false);
-    setBusy(true);
+    if (extractAbort.current) return; // 読み取り中の多重送信はしない
+    const controller = new AbortController();
+    extractAbort.current = controller;
+    setExtracting(true);
     try {
-      const r = await fetch("/api/extract", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+      const r = await fetch("/api/extract", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }), signal: controller.signal });
       const d = await r.json().catch(() => ({}));
+      if (controller.signal.aborted) return; // 手入力に切り替えた後の結果は使わない
       if (!r.ok) {
         setError(d.error ?? "AIで条件を読み取れませんでした。入力内容を残したまま手入力できます。");
         return;
@@ -136,13 +142,16 @@ export default function RestaurantPage({ me }: { me: Me }) {
       setStep("confirm");
       top();
     } catch {
-      setError("AIで条件を読み取れませんでした。入力内容を残したまま手入力できます。");
+      // 「待たずに手入力する」で中断した場合はエラーを出さない
+      if (!controller.signal.aborted) setError("AIで条件を読み取れませんでした。入力内容を残したまま手入力できます。");
     } finally {
-      setBusy(false);
+      extractAbort.current = null;
+      setExtracting(false);
     }
   }
 
   function manual() {
+    extractAbort.current?.abort(); // 読み取り中なら中断し、後から結果で上書きしない
     setExtraction(null);
     setAiFields([]);
     setError(null);
@@ -198,21 +207,27 @@ export default function RestaurantPage({ me }: { me: Me }) {
   return (
     <div className="page">
       <header className="page-head">
-        <p className="page-role buyer"><Icon name="store" />飲食店の方</p>
-        <h1>仕入れ案を作る</h1>
-        <ol className="steps" aria-label="手順">
-          {(["input", "confirm", "result"] as const).map((s, i) => (
-            <li key={s} className={step === s ? "current" : ""} aria-current={step === s ? "step" : undefined}>
-              <span className="step-no">{i + 1}</span>{["希望を入力", "条件を確認", "仕入れ案を見る"][i]}
-            </li>
-          ))}
+        <p className="page-role"><Icon name="store" />飲食店の仕入れ案</p>
+        {/* 進行状況：1 希望を入力 → 2 条件を確認 → 3 仕入れ案（済んだ段階は ✓、今の段階は色と太字） */}
+        <ol className="steps" aria-label="進行状況">
+          {(["input", "confirm", "result"] as const).map((s, i) => {
+            const cur = ["input", "confirm", "result"].indexOf(step);
+            const state = i < cur ? "done" : i === cur ? "current" : "";
+            return (
+              <li key={s} className={state} aria-current={state === "current" ? "step" : undefined}>
+                <span className="step-no">{state === "done" ? <Icon name="check" size={14} /> : i + 1}</span>
+                {["希望を入力", "条件を確認", "仕入れ案"][i]}
+                {state === "done" && <span className="sr-only">（済）</span>}
+              </li>
+            );
+          })}
         </ol>
       </header>
 
       {catalogError && <div className="alert bad" role="alert"><Icon name="alert" />登録データを読み込めませんでした。再読み込みしてください。</div>}
 
       {step === "input" && (
-        <StepInput text={text} onText={(t) => { setText(t); setEmptyHint(false); }} onExtract={extract} onManual={manual} busy={busy}
+        <StepInput text={text} onText={(t) => { setText(t); setEmptyHint(false); }} onExtract={extract} onManual={manual} busy={extracting}
           aiAvailable={catalog ? catalog.aiAvailable : null} error={error} emptyHint={emptyHint} />
       )}
 

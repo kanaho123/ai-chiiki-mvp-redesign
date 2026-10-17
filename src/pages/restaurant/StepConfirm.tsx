@@ -45,30 +45,32 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, ai
   const slots = catalog.slots.filter((s) => !form.desiredDate || jstDateOf(s.startAt) === form.desiredDate);
   const required = extraction?.extracted.producerRequired === true;
 
-  /** 項目ごとの状態の目印（AI が読み取った値か、利用者の確認が必要か） */
+  /** 項目ごとの目印：未確定は「確認してください」、AI が読み取った値は「AIが読み取り」（どちらも変更できる） */
   const Badge = ({ f }: { f: DraftField }) =>
-    missing.includes(f) ? <span className="req">要確認</span> : aiFields.includes(f) ? <span className="ai-tag">AIが読み取り</span> : null;
+    missing.includes(f) ? <span className="chip chip-need">確認してください</span>
+      : aiFields.includes(f) ? <span className="chip chip-ai">AIが読み取り</span> : null;
 
   return (
-    <form className="qform" onSubmit={(e) => { e.preventDefault(); onSubmit(); }} aria-labelledby="step2-title">
-      <h2 className="q-title" id="step2-title"><span className="step-no">2</span>条件を確認</h2>
-
-      {extraction ? (
-        <div className="alert ok" role="note">
-          <Icon name="info" />
-          <div>
-            AIが文章から読み取った条件の候補です。<b>内容を確認・修正してから</b>計算します。農家の組み合わせ・数量・金額は、AIではなく登録データから通常の計算で決まります。
-            <p className="source-text">入力した文章：「{sourceText}」</p>
+    <form className="page" onSubmit={(e) => { e.preventDefault(); onSubmit(); }} aria-labelledby="step2-title">
+      <section className="card">
+        <h2 className="card-title" id="step2-title">条件を確認してください</h2>
+        {extraction ? (
+          <div className="alert info" role="note">
+            <Icon name="info" />
+            <div>
+              AIが文章から読み取った条件の候補です。<b>内容を確認・修正してから</b>計算します。農家の組み合わせ・数量・金額は、AIではなく登録データから通常の計算で決まります。
+              <p className="source-text">入力した文章：「{sourceText}」</p>
+            </div>
           </div>
-        </div>
-      ) : (
-        <p className="hint">条件を手入力で指定します。{sourceText && <>入力した文章：「{sourceText}」</>}</p>
-      )}
-      {extraction?.notices.map((n) => <div className="alert warn" key={n} role="status"><Icon name="alert" />{RESOLVE_NOTICE_TEXT[n]}</div>)}
-      {required && <div className="alert warn" role="status"><Icon name="alert" />農家の必須指定は今回の対応範囲外です。優先として扱う場合は「優先する取引先」で選んでください。</div>}
+        ) : (
+          <p className="hint">項目を選んで条件を指定します。{sourceText && <>入力した文章：「{sourceText}」</>}</p>
+        )}
+        {extraction?.notices.map((n) => <div className="alert warn" key={n} role="status"><Icon name="alert" />{RESOLVE_NOTICE_TEXT[n]}</div>)}
+        {required && <div className="alert warn" role="status"><Icon name="alert" />農家の必須指定は今回の対応範囲外です。優先として扱う場合は「優先する取引先」で選んでください。</div>}
+      </section>
 
-      <section className="q" aria-labelledby="c1">
-        <h3 className="q-title" id="c1">何を、どれくらい？</h3>
+      <section className="card group" aria-labelledby="g-basic">
+        <h3 className="group-title" id="g-basic">基本条件</h3>
         <div className="row">
           <label className="field">
             <span className="label">品目 <Badge f="itemId" /></span>
@@ -91,47 +93,8 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, ai
             <option value="">指定なし（同じ品種どうしで組みます）</option>
             {item?.varieties.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
           </select>
+          <span className="hint">整数kg・1〜100kgに対応しています。</span>
         </label>
-        <span className="hint">整数kg・1〜100kgに対応しています。</span>
-      </section>
-
-      <section className="q" aria-labelledby="c2">
-        <h3 className="q-title" id="c2">いつ、どこで受け取る？</h3>
-        <label className="field">
-          <span className="label">受け取りたい日 <Badge f="desiredDate" /></span>
-          <input type="date" min={today} value={form.desiredDate} onChange={(e) => setForm({ ...form, desiredDate: e.target.value, slotId: "" })} aria-required="true" />
-          {form.desiredDate && <span className="hint">{formatDateJa(form.desiredDate)}{catalog.demoClock && "（デモ用の基準日時 " + formatJstDateTime(catalog.now) + " から計算）"}</span>}
-        </label>
-        {dateCands.length > 1 && (
-          <div className="qform-tools" role="group" aria-label="日付の候補">
-            {dateCands.map((c) => (
-              <button key={c.id} type="button" className={form.desiredDate === c.id ? "secondary" : "ghost"} onClick={() => setForm({ ...form, desiredDate: c.id, slotId: "" })}>{c.label}</button>
-            ))}
-          </div>
-        )}
-        <fieldset className="field">
-          <legend className="label">受渡枠（受取場所・時間） <Badge f="slotId" /></legend>
-          {slots.length === 0 ? (
-            <p className="muted">{form.desiredDate ? "この日の受渡枠は登録されていません。日付を確認してください。" : "先に受け取りたい日を選んでください。"}</p>
-          ) : (
-            <div className="choice choice-stack">
-              {slots.map((s) => (
-                <label key={s.id}>
-                  <input type="radio" name="slot" checked={form.slotId === s.id} onChange={() => set("slotId", s.id)} />
-                  <span>
-                    {slotText(s)}
-                    <small>受渡費 {s.feeConfirmed ? `${s.feeYen.toLocaleString("ja-JP")}円（1案に1回）` : "未確認"}・最大{s.maxKg}kg・確認締切 {formatJstDateTime(s.confirmDeadlineAt)}{slotCands.has(s.id) && extraction?.extracted.handoverText && "・文章の受取場所に合う候補"}</small>
-                  </span>
-                </label>
-              ))}
-            </div>
-          )}
-          <span className="hint">同じ受渡枠の供給だけを組み合わせます。受取場所の条件で、産地とは別です。</span>
-        </fieldset>
-      </section>
-
-      <section className="q" aria-labelledby="c3">
-        <h3 className="q-title" id="c3">産地と予算</h3>
         <fieldset className="field">
           <legend className="label">産地（どこで採れたか。受取場所とは別） <Badge f="originPrefectures" /></legend>
           <div className="choice">
@@ -165,8 +128,43 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, ai
         </div>
       </section>
 
-      <section className="q" aria-labelledby="c4">
-        <h3 className="q-title" id="c4">組み合わせてよい供給</h3>
+      <section className="card group" aria-labelledby="g-handover">
+        <h3 className="group-title" id="g-handover">受渡条件</h3>
+        <label className="field">
+          <span className="label">受け取りたい日 <Badge f="desiredDate" /></span>
+          <input type="date" min={today} value={form.desiredDate} onChange={(e) => setForm({ ...form, desiredDate: e.target.value, slotId: "" })} aria-required="true" />
+          {form.desiredDate && <span className="hint">{formatDateJa(form.desiredDate)}{catalog.demoClock && `（デモ基準日時 ${formatJstDateTime(catalog.now)} から計算）`}</span>}
+        </label>
+        {dateCands.length > 1 && (
+          <div className="date-cands" role="group" aria-label="日付の候補">
+            {dateCands.map((c) => (
+              <button key={c.id} type="button" className={form.desiredDate === c.id ? "secondary" : "ghost"} onClick={() => setForm({ ...form, desiredDate: c.id, slotId: "" })}>{c.label}</button>
+            ))}
+          </div>
+        )}
+        <fieldset className="field">
+          <legend className="label">受渡枠（受取場所・時間） <Badge f="slotId" /></legend>
+          {slots.length === 0 ? (
+            <p className="muted">{form.desiredDate ? "この日の受渡枠は登録されていません。日付を確認してください。" : "先に受け取りたい日を選んでください。"}</p>
+          ) : (
+            <div className="choice choice-stack">
+              {slots.map((s) => (
+                <label key={s.id}>
+                  <input type="radio" name="slot" checked={form.slotId === s.id} onChange={() => set("slotId", s.id)} />
+                  <span>
+                    {slotText(s)}
+                    <small>受渡費 {s.feeConfirmed ? `${s.feeYen.toLocaleString("ja-JP")}円（1案に1回）` : "未確認"}・最大{s.maxKg}kg・確認締切 {formatJstDateTime(s.confirmDeadlineAt)}{slotCands.has(s.id) && extraction?.extracted.handoverText && "・文章の受取場所に合う候補"}</small>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+          <span className="hint">同じ受渡枠の供給だけを組み合わせます。受取場所の条件で、産地とは別です。</span>
+        </fieldset>
+      </section>
+
+      <section className="card group" aria-labelledby="g-allow">
+        <h3 className="group-title" id="g-allow">許容条件</h3>
         <div className="field">
           <span className="label" id="q-first-title">初回の農家 <Badge f="allowFirstTime" /></span>
           <YesNoChoice name="q-first" value={form.allowFirstTime} onChange={(v) => set("allowFirstTime", v)}
@@ -188,29 +186,26 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, ai
           <YesNoChoice name="q-mixg" value={form.allowMixedGrades} onChange={(v) => set("allowMixedGrades", v)}
             yes={["混ぜてよい", "規格外を許可した場合のみ"]} no={["混ぜない", "同じ規格どうしで組む"]} />
         </div>
-      </section>
-
-      <section className="q" aria-labelledby="c5">
-        <h3 className="q-title" id="c5">優先する取引先<span className="opt">任意</span> <Badge f="preferredProducerId" /></h3>
         <label className="field">
-          <span className="label">取引経験のある農家から選べます</span>
+          <span className="label">優先する取引先<span className="opt">任意</span> <Badge f="preferredProducerId" /></span>
           <select value={form.preferredProducerId} onChange={(e) => set("preferredProducerId", e.target.value)}>
             <option value="">指定なし</option>
             {catalog.priorTradeProducers.map((p) => <option key={p.id} value={p.id}>{p.name}（取引経験あり）</option>)}
           </select>
-          <span className="hint">優先は必須条件ではありません。仕入れ先の数が少ない案を先に選びます。</span>
+          <span className="hint">取引経験のある農家から選べます。優先は必須条件ではなく、仕入れ先の数が少ない案を先に選びます。</span>
         </label>
       </section>
 
-      {notice && <div className="alert warn" role="status"><Icon name="info" />{notice}</div>}
-      {missing.length > 0 && (
-        <div className="alert warn" role="status"><Icon name="alert" />まだ選んでいない項目：{missing.map((f) => FIELD_LABEL[f]).join("・")}</div>
-      )}
-      {error && <div className="alert bad" role="alert"><Icon name="alert" />{error}</div>}
-
-      <button type="submit" className="primary large block" disabled={busy || missing.length > 0} aria-busy={busy}>
-        {busy ? <><span className="spinner" aria-hidden="true" />計算中…</> : "この条件で仕入れ案を見る"}
-      </button>
+      <div className="sticky-submit">
+        {notice && <div className="alert info" role="status"><Icon name="info" />{notice}</div>}
+        {missing.length > 0 && (
+          <div className="alert warn" role="status"><Icon name="alert" />まだ選んでいない項目：{missing.map((f) => FIELD_LABEL[f]).join("・")}</div>
+        )}
+        {error && <div className="alert bad" role="alert"><Icon name="alert" />{error}</div>}
+        <button type="submit" className="primary large block" disabled={busy || missing.length > 0} aria-busy={busy}>
+          {busy ? <><span className="spinner" aria-hidden="true" />計算中…</> : "この条件で仕入れ案を見る"}
+        </button>
+      </div>
       <button type="button" className="ghost block" onClick={onBack}>文章の入力に戻る</button>
     </form>
   );

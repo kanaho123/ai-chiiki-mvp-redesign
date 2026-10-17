@@ -42,8 +42,11 @@ export default function App() {
     setMe(null);
   }
 
+  // 役割で画面の主役の色を切り替える（飲食店＝緑、生産者＝オレンジ）。文字でも役割を示す
+  const roleClass = me ? `role-${me.role}` : "role-guest";
+
   return (
-    <>
+    <div className={roleClass}>
       <header className="site-header">
         <div className="site-header-inner">
           <span className="brand"><Logo />AI地域商社</span>
@@ -81,6 +84,6 @@ export default function App() {
           <Producer me={me} />
         )}
       </main>
-    </>
+    </div>
   );
 }
