@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Confirmation, Contact } from "../../lib/approvals";
-import { confirmationLabel, overallConfirmation } from "../../lib/approvals";
+import { STALE_RECHECK, confirmationLabel, farmNames, isMatched, overallConfirmation } from "../../lib/approvals";
 import { confirmationApi, friendlyError } from "../../lib/confirmation-api";
+import { MatchBanner } from "./MatchBanner";
 import type { Freshness, Shown } from "./types";
 
 export function ApprovalPanel({ shown, freshness }: { shown: Shown; freshness: Freshness }) {
@@ -57,11 +58,15 @@ export function ApprovalPanel({ shown, freshness }: { shown: Shown; freshness: F
     } finally { actionLock.current = false; setBusy(false); }
   }
 
+  const names = farmNames(shown.plan.allocations);
+  const matched = !!rows && isMatched(rows);
   return <section className="confirmation-panel" aria-labelledby="confirm-producers-title">
-    <h3 className="block-title" id="confirm-producers-title">生産者に確認する</h3>
-    <p className="hint">この条件で直接相談を進めてもよいか、農園ごとに確認します。「対応できます」の返事は注文確定ではなく、在庫も確保されません。</p>
-    {!current ? <p role="status">最新の仕入れ案を計算してから確認してください。以前の返事は使いません。</p> : <>
-      <p className="confirmation-overall" role="status">{rows ? overallConfirmation(rows) : error ? "確認状態を取得できません" : "確認状態を読み込み中…"}</p>
+    <h3 className="block-title" id="confirm-producers-title">生産者に仕入れ相談する</h3>
+    <p className="hint">この仕入れ案の農家（{names}）に、この条件で相談できるか確認します。「対応できます」の返事は注文確定ではなく、在庫も確保されません。</p>
+    {!current ? <p role="status">{freshness === "stale" ? STALE_RECHECK : "最新の仕入れ案を計算してから確認してください。以前の返事は使いません。"}</p> : <>
+      {matched
+        ? <MatchBanner farms={rows!} onContactError={refresh} />
+        : <p className="confirmation-overall" role="status">{rows ? overallConfirmation(rows) : error ? "確認状態を取得できません" : "確認状態を読み込み中…"}</p>}
       {rows && rows.length > 0 && <ul className="confirmation-list">{rows.map(row => <li key={row.id}>
         <div className="confirmation-heading"><strong>{row.producerName} {row.quantityKg}kg</strong><span className={`confirmation-status ${row.status}`}>{confirmationLabel[row.status]}</span></div>
         {row.status === "approved" && <>
@@ -70,11 +75,11 @@ export function ApprovalPanel({ shown, freshness }: { shown: Shown; freshness: F
             {contacts[row.id].contactPhone && <a href={`tel:${contacts[row.id].contactPhone!.replace(/[^+\d]/g, "")}`}>電話：{contacts[row.id].contactPhone}</a>}
             {contacts[row.id].contactEmail && <a href={`mailto:${encodeURIComponent(contacts[row.id].contactEmail!)}`}>メール：{contacts[row.id].contactEmail}</a>}
             {!contacts[row.id].contactPhone && !contacts[row.id].contactEmail && <p>連絡先が未登録です。</p>}
-            <p className="hint">数量・受取条件を直接相談して確定してください。example.invalid はデモ用の架空の宛先です。</p>
+            <p className="hint">受け渡しの詳細や最終確認は、農家と直接相談して決めてください。example.invalid はデモ用の架空の宛先です。</p>
           </div>}
         </>}
       </li>)}</ul>}
-      {rows?.length === 0 && <button type="button" className="btn-primary btn-block" disabled={busy} onClick={send} aria-busy={busy}>{busy ? "送信中…" : "生産者に確認する"}</button>}
+      {rows?.length === 0 && <button type="button" className="btn-primary btn-block" disabled={busy} onClick={send} aria-busy={busy}>{busy ? "送信中…" : `${names}に仕入れ相談する（${shown.plan.allocations.length}件）`}</button>}
       {error && <p className="alert bad" role="alert">{error}</p>}
       {contactError && <p className="alert bad" role="alert">{contactError}</p>}
       <button type="button" className="text-btn" disabled={busy} onClick={refresh}>確認状態を更新する</button>

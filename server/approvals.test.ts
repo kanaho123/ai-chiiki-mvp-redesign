@@ -108,7 +108,8 @@ describe("承認・連絡先の権限と整合性", () => {
     const rows = await create(); const a = rows.find(r => r.producerName === "p-a")!; const b = rows.find(r => r.producerName === "p-b")!;
     expect((await one.GET(req("r1", "GET", undefined, `/api/approvals/${a.id}`))).status).toBe(403);
     expect((await one.PATCH(req("a", "PATCH", { status: "approved" }, `/api/approvals/${a.id}`))).status).toBe(200);
-    expect(overallConfirmation(await approvals.list(db.users.get("r1")))).toBe("返事待ち");
+    // 一部の農家だけの返事は「成立」とまとめず、返事待ちに回答済みの数だけを添える
+    expect(overallConfirmation(await approvals.list(db.users.get("r1")))).toBe("返事待ち（1/2農家が回答済み）");
     const contact = await one.GET(req("r1", "GET", undefined, `/api/approvals/${a.id}`));
     expect((await contact.json()).contact.contactEmail).toBe("a@example.invalid");
     await approvals.respond(db.users.get("b"), b.id, "rejected");
@@ -119,7 +120,8 @@ describe("承認・連絡先の権限と整合性", () => {
   it("全員承認済と再回答の扱い。承認は在庫を変更しない", async () => {
     const rows = await create(); const original = JSON.stringify(db.inputs);
     for (const row of rows) { const key = row.producerName.replace("p-", ""); await approvals.respond(db.users.get(key), row.id, "approved"); }
-    expect(overallConfirmation(await approvals.list(db.users.get("r1")))).toBe("対応できます");
+    // 全農家が「対応できます」で、条件が変わっていないときだけマッチ成立
+    expect(overallConfirmation(await approvals.list(db.users.get("r1")))).toBe("マッチ成立");
     await expect(approvals.respond(db.users.get("a"), rows[0].id, "approved")).resolves.toMatchObject({ status: "approved" });
     await expect(approvals.respond(db.users.get("a"), rows[0].id, "rejected")).rejects.toMatchObject({ status: 409 });
     expect(JSON.stringify(db.inputs)).toBe(original);

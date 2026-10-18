@@ -52,7 +52,7 @@ export function ProducerHome() {
         {hasPending && (
           <div className="new-requests" role="status">
             <Icon name="clipboard" size={26} />
-            <div><b>新しい相談が{pending!.length}件あります</b><br />飲食店があなたの返事を待っています。</div>
+            <div><b>あなたの出品条件に合う仕入れ相談が{pending!.length}件あります</b><br />飲食店があなたの返事を待っています。</div>
           </div>
         )}
         {pending && !hasPending && <p className="todo-text">いま返事が必要な相談はありません。今日出せる量を更新しておきましょう。</p>}
@@ -60,7 +60,7 @@ export function ProducerHome() {
 
       {hasPending && (
         <section aria-labelledby="pending-title">
-          <h2 className="section-title" id="pending-title">返事が必要な相談</h2>
+          <h2 className="section-title" id="pending-title">返事が必要な仕入れ相談</h2>
           <ul className="request-list compact">
             {pending!.slice(0, 3).map((r) => <li key={r.id} className="farm-row"><RequestBody r={r} /></li>)}
           </ul>
@@ -112,9 +112,12 @@ export function ProducerRequests() {
     locked.current = true;
     setBusy(id);
     setMessage(null);
+    const shop = data?.find((r) => r.id === id)?.restaurantName ?? "飲食店";
     try {
       await confirmationApi(`/api/approvals/${encodeURIComponent(id)}`, "PATCH", { status });
-      setMessage({ tone: "ok", text: status === "approved" ? "「対応できます」と返事をしました。この飲食店に、あなたの連絡先が表示されます。" : "「今回は対応できません」と返事をしました。" });
+      setMessage({ tone: "ok", text: status === "approved"
+        ? `${shop}の仕入れ相談に「対応できます」と回答しました。${shop}に、あなたの連絡先が表示されます。注文の確定や在庫の確保にはなりません。`
+        : `${shop}の仕入れ相談に「今回は対応できません」と回答しました。` });
     } catch (e) {
       setMessage({ tone: "bad", text: friendlyError(e, "返事を送れませんでした。もう一度お試しください") });
     } finally {

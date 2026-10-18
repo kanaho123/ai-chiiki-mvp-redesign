@@ -116,11 +116,19 @@ describe("飲食店のホーム", () => {
     expect($(".consult-card .state-tag")?.textContent).toBe("返事待ち");
     expect($(".todo-text")?.textContent).toContain("返事を待っています");
   });
-  it("全員が対応できる：連絡先の確認を「今やること」に", async () => {
+  it("全農家が対応できる：「マッチ成立」と取引相談への案内を「今やること」に", async () => {
     requests = [req("a", "approved"), req("b", "approved", { producerName: "B農園" })];
     await open("/restaurant/home");
-    expect($(".consult-card .state-tag")?.textContent).toBe("対応できます");
-    expect($(".todo-text")?.textContent).toContain("A農園・B農園が「対応できます」");
+    expect($(".consult-card .state-tag")?.textContent).toBe("マッチ成立");
+    expect($(".todo-text")?.textContent).toBe("🎉 マッチ成立：A農園・B農園と条件がそろいました。取引相談へ進みましょう（注文確定ではありません）");
+  });
+  it("一部の農家だけ対応できる：成立とは言わず、農家ごとの状態とほかの農家の返事待ち", async () => {
+    requests = [req("a", "approved"), req("b", "pending", { producerName: "B農園" })];
+    await open("/restaurant/home");
+    expect($(".consult-card .state-tag")?.textContent).toBe("返事待ち");
+    expect([...el.querySelectorAll(".farm-line")].map((x) => x.textContent)).toEqual(["A農園：対応できます", "B農園：返事待ち"]);
+    expect($(".todo-text")?.textContent).toBe("A農園が「対応できます」と返事をしました。ほかの農家の返事を待っています");
+    expect(text()).not.toMatch(/マッチ成立|一部成立/);
   });
   it("一部対応できない：相談の状態と農家ごとの状態", async () => {
     requests = [req("a", "approved"), req("b", "rejected", { producerName: "B農園" })];
@@ -160,6 +168,32 @@ describe("飲食店の相談一覧・詳細", () => {
     expect(calls.filter((c) => /^\/api\/approvals\/./.test(c.url)).map((c) => c.url)).toEqual(["/api/approvals/a"]);
     expect(el.querySelector('.bottom-nav a[aria-current="page"]')?.textContent).toContain("相談");
   });
+  it("詳細：全農家が対応できる相談は「🎉 マッチ成立」と注文確定ではない旨、取引相談へ進む", async () => {
+    requests = [req("a", "approved"), req("b", "approved", { producerName: "B農園" })];
+    await open("/restaurant/consultations/fp-1");
+    expect($(".match-banner .match-title")?.textContent).toBe("🎉 マッチ成立");
+    expect($(".match-banner .match-text")?.textContent).toBe("A農園・B農園と、数量・価格・受け渡し条件がそろいました");
+    expect($(".match-banner .match-note")?.textContent).toBe("これは注文確定ではありません。在庫の確保も行われません。");
+    expect($("main .state-tag")?.textContent).toBe("マッチ成立");
+    await click(button("取引相談へ進む"));
+    expect(el.querySelectorAll(".deal-farm")).toHaveLength(2);
+    expect($(".deal-farm .deal-mail")?.textContent).toBe("A農園にメールで相談する");
+    expect($(".deal-farm .deal-tel")?.getAttribute("href")).toBe("tel:00000000001");
+  });
+  it("詳細：一部の農家だけ対応できる相談にはマッチ成立を出さない", async () => {
+    requests = [req("a", "approved"), req("b", "pending", { producerName: "B農園" })];
+    await open("/restaurant/consultations/fp-1");
+    expect($(".match-banner")).toBeNull();
+    expect(text()).not.toContain("マッチ成立");
+    expect($("main .hint")?.textContent).toBe("「対応できます」は注文の確定ではありません。受け渡しの詳細や最終確認は、農家と直接相談して決めてください。");
+    expect(text()).not.toMatch(/数量・受け?取/);
+  });
+  it("詳細：在庫が変わった相談は、もう一度の確認を案内する（マッチ成立は出さない）", async () => {
+    requests = [req("a", "approved"), req("b", "stale", { producerName: "B農園" })];
+    await open("/restaurant/consultations/fp-1");
+    expect($(".match-banner")).toBeNull();
+    expect($("main .alert.warn")?.textContent).toBe("在庫や条件が変わったため、現在の条件でもう一度確認が必要です。仕入れ案を計算し直して、改めて相談してください。");
+  });
   it("相談がなければ案内と主ボタン", async () => {
     await open("/restaurant/consultations");
     expect(text()).toContain("まだ相談はありません");
@@ -179,11 +213,12 @@ describe("生産者のホームと下部ナビの数", () => {
     expect(text()).toContain("8kg");
     expect($(".next-slot")?.textContent).toContain("梅田エリア受渡所（仮）");
   });
-  it("未対応 1：最上部で「新しい相談が1件あります」・バッジ 1・主ボタンは相談への返事", async () => {
+  it("未対応 1：最上部で「あなたの出品条件に合う仕入れ相談が1件あります」・バッジ 1・主ボタンは相談への返事", async () => {
     requests = [req("a", "pending")];
     await open("/producer/home");
     const notice = $(".new-requests")!;
-    expect(notice.textContent).toContain("新しい相談が1件あります");
+    expect(notice.textContent).toContain("あなたの出品条件に合う仕入れ相談が1件あります");
+    expect(text()).toContain("返事が必要な仕入れ相談");
     // ホームの見出しのすぐ下（出品・受渡枠より前）
     const order = [...el.querySelectorAll("main .new-requests, main #listing-title, main #slot-title")].map((x) => x.className || x.id);
     expect(order[0]).toBe("new-requests");
@@ -194,7 +229,7 @@ describe("生産者のホームと下部ナビの数", () => {
   it("未対応が複数：件数とバッジ", async () => {
     requests = [req("a", "pending"), req("b", "pending", { restaurantName: "別の店" }), req("c", "pending"), req("d", "rejected"), req("e", "stale")];
     await open("/producer/home");
-    expect($(".new-requests")?.textContent).toContain("新しい相談が3件あります");
+    expect($(".new-requests")?.textContent).toContain("あなたの出品条件に合う仕入れ相談が3件あります");
     expect(badge()).toBe("3");
   });
 });
@@ -214,7 +249,8 @@ describe("生産者の「依頼」", () => {
     const inboxBefore = calls.filter((c) => c.url === "/api/inbox").length;
     await click(el.querySelector(".request-actions .btn-primary"));
     expect(calls.find((c) => c.method === "PATCH")).toMatchObject({ url: "/api/approvals/a", body: { status: "approved" } });
-    expect(text()).toContain("「対応できます」と返事をしました");
+    expect($("main .alert.ok")?.textContent).toBe("まちの食堂の仕入れ相談に「対応できます」と回答しました。まちの食堂に、あなたの連絡先が表示されます。注文の確定や在庫の確保にはなりません。");
+    expect(text()).not.toContain("成立");
     expect([...el.querySelectorAll("main .section-title")].map((t) => t.textContent)).toEqual(["未対応（0件）", "対応済（2件）", "今回は難しい（1件）"]);
     expect(calls.filter((c) => c.url === "/api/inbox").length).toBeGreaterThan(inboxBefore);
     expect(badge()).toBeNull();
@@ -224,6 +260,7 @@ describe("生産者の「依頼」", () => {
     await open("/producer/requests");
     await click(button("今回は対応できません"));
     expect(calls.find((c) => c.method === "PATCH")?.body).toEqual({ status: "rejected" });
+    expect($("main .alert.ok")?.textContent).toBe("まちの食堂の仕入れ相談に「今回は対応できません」と回答しました。");
     expect(text()).toContain("今回は難しい（1件）");
   });
 });

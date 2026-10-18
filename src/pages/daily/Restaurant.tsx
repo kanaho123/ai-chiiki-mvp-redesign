@@ -3,9 +3,10 @@ import { Link, useParams } from "react-router";
 import { nameOf } from "../../components/AppShell";
 import { Icon } from "../../components/Icon";
 import {
-  confirmationLabel, consultationLabel, groupConsultations, isOngoing, restaurantTodo, type Consultation, type Contact,
+  STALE_RECHECK, confirmationLabel, consultationLabel, groupConsultations, isMatched, isOngoing, restaurantTodo, type Consultation, type Contact,
 } from "../../lib/approvals";
 import { confirmationApi, friendlyError } from "../../lib/confirmation-api";
+import { MatchBanner } from "../restaurant/MatchBanner";
 import { PATHS } from "../../routes/paths";
 import { useMe } from "../../routes/session";
 import { ErrorRetry } from "./ErrorRetry";
@@ -13,7 +14,8 @@ import { WelcomeNotice } from "./WelcomeNotice";
 import { useConfirmations, whenText, yen } from "./data";
 
 // 飲食店のホーム・相談一覧・相談の詳細。
-// 相談＝同じ仕入れ案で生産者に確認を依頼したもの。状態は「返事待ち／対応できます／一部対応できません／今回は対応できません」で表す。
+// 相談＝同じ仕入れ案で生産者に確認を依頼したもの。状態は「返事待ち／マッチ成立／一部対応できません／今回は対応できません」で表す。
+// マッチ成立は全農家が「対応できます」のときだけ。それまでは農家ごとの状態で見せる。
 
 const consultationPath = (id: string) => `${PATHS.restaurant.consultations}/${id}`;
 
@@ -147,8 +149,10 @@ export function RestaurantConsultationDetail() {
             <p className="consult-when">{whenText(c.pickupStartAt, c.pickupEndAt)}・{c.pickupPlace}</p>
             <p><StatusTag status={c.status} /></p>
           </div>
-          <p className="hint">「対応できます」は注文の確定ではありません。数量・受け取りは、農家と直接相談して決めてください。</p>
-          {c.status === "stale" && <div className="alert warn" role="status"><Icon name="alert" />在庫や条件が変わったため、この相談は使えなくなりました。仕入れ案をつくり直してください。</div>}
+          {isMatched(c.farms)
+            ? <MatchBanner farms={c.farms} onContactError={reload} />
+            : <p className="hint">「対応できます」は注文の確定ではありません。受け渡しの詳細や最終確認は、農家と直接相談して決めてください。</p>}
+          {c.status === "stale" && <div className="alert warn" role="status"><Icon name="alert" />{STALE_RECHECK}</div>}
           <ul className="farm-list">
             {c.farms.map((f) => (
               <li key={f.id} className={`farm-row farm-${f.status}`}>
