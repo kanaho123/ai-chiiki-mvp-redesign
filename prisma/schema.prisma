@@ -2,6 +2,9 @@ generator client {
   provider     = "prisma-client"
   output       = "../server/generated/prisma"
   moduleFormat = "esm"
+  // 生成する import を必ず ./internal/class.js のように .js 付きにする（Vercel の Node.js（ESM）で読み込めるように。
+  // 指定しないと tsconfig の moduleResolution によって拡張子なしになり、本番で ERR_MODULE_NOT_FOUND になる）
+  importFileExtension = "js"
   // native: 手元の Windows、rhel-openssl-3.0.x: Vercel Functions（Node.js 22）
   binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
