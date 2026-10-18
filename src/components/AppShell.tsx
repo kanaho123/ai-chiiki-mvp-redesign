@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef } from "react";
 import { NavLink, Outlet } from "react-router";
 import { formatJstDateTime } from "../lib/dates.js";
 import { NAV, type NavItem } from "../routes/paths";
+import { InboxProvider, useInbox } from "../routes/inbox";
 import { useSession, type Me } from "../routes/session";
 import { Icon, Logo } from "./Icon";
 
@@ -40,9 +41,9 @@ export function AppHeader({ me, children }: { me: Me | null; children?: React.Re
   );
 }
 
-/** 将来の未対応件数（依頼・相談）。Phase 2 ではまだ数えないので常に 0 */
+/** 未対応件数（サーバーの実データ）。0 件ならバッジは出さない */
 function useBadgeCounts(): Record<NonNullable<NavItem["badge"]>, number> {
-  return { producerRequests: 0, restaurantConsultations: 0 };
+  return useInbox().counts;
 }
 
 export function BottomNav({ me }: { me: Me }) {
@@ -88,11 +89,13 @@ export function AppShell() {
   const { me } = useSession();
   if (!me) return null; // ガード（RoleGate）の内側でだけ使う
   return (
-    <div className={`role-${me.role}`}>
-      <AppHeader me={me} />
-      <Outlet />
-      <BottomNav me={me} />
-    </div>
+    <InboxProvider>
+      <div className={`role-${me.role}`}>
+        <AppHeader me={me} />
+        <Outlet />
+        <BottomNav me={me} />
+      </div>
+    </InboxProvider>
   );
 }
 

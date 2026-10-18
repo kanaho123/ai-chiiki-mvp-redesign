@@ -108,18 +108,18 @@ describe("承認・連絡先の権限と整合性", () => {
     const rows = await create(); const a = rows.find(r => r.producerName === "p-a")!; const b = rows.find(r => r.producerName === "p-b")!;
     expect((await one.GET(req("r1", "GET", undefined, `/api/approvals/${a.id}`))).status).toBe(403);
     expect((await one.PATCH(req("a", "PATCH", { status: "approved" }, `/api/approvals/${a.id}`))).status).toBe(200);
-    expect(overallConfirmation(await approvals.list(db.users.get("r1")))).toBe("確認中");
+    expect(overallConfirmation(await approvals.list(db.users.get("r1")))).toBe("返事待ち");
     const contact = await one.GET(req("r1", "GET", undefined, `/api/approvals/${a.id}`));
     expect((await contact.json()).contact.contactEmail).toBe("a@example.invalid");
     await approvals.respond(db.users.get("b"), b.id, "rejected");
     expect((await one.GET(req("r1", "GET", undefined, `/api/approvals/${b.id}`))).status).toBe(403);
-    expect(overallConfirmation(await approvals.list(db.users.get("r1")))).toBe("一部NG");
+    expect(overallConfirmation(await approvals.list(db.users.get("r1")))).toBe("一部対応できません");
     expect(JSON.stringify(await approvals.list(db.users.get("r1")))).not.toContain("example.invalid");
   });
   it("全員承認済と再回答の扱い。承認は在庫を変更しない", async () => {
     const rows = await create(); const original = JSON.stringify(db.inputs);
     for (const row of rows) { const key = row.producerName.replace("p-", ""); await approvals.respond(db.users.get(key), row.id, "approved"); }
-    expect(overallConfirmation(await approvals.list(db.users.get("r1")))).toBe("全員承認済");
+    expect(overallConfirmation(await approvals.list(db.users.get("r1")))).toBe("対応できます");
     await expect(approvals.respond(db.users.get("a"), rows[0].id, "approved")).resolves.toMatchObject({ status: "approved" });
     await expect(approvals.respond(db.users.get("a"), rows[0].id, "rejected")).rejects.toMatchObject({ status: 409 });
     expect(JSON.stringify(db.inputs)).toBe(original);
@@ -152,6 +152,15 @@ describe("承認・連絡先の権限と整合性", () => {
     expect((await api.GET(req("r1", "GET", undefined, "/api/approvals?view=contact"))).status).toBe(403);
     const response = await api.PATCH(req("a", "PATCH", { producerId: "p-b", contactPhone: "", contactEmail: "new@example.invalid" }));
     expect(response.status).toBe(200); expect(db.contacts.get("p-a").contactEmail).toBe("new@example.invalid"); expect(db.contacts.get("p-b").contactEmail).toBe("b@example.invalid");
+    // 電話だけ・メールだけで保存でき、両方空は拒否（変更しない）。飲食店は変更できない
+    expect((await api.PATCH(req("a", "PATCH", { contactPhone: "000-1111-2222", contactEmail: "" }))).status).toBe(200);
+    expect(db.contacts.get("p-a")).toMatchObject({ contactPhone: "000-1111-2222", contactEmail: null });
+    expect((await api.PATCH(req("a", "PATCH", { contactPhone: "", contactEmail: "only@example.invalid" }))).status).toBe(200);
+    expect(db.contacts.get("p-a")).toMatchObject({ contactPhone: null, contactEmail: "only@example.invalid" });
+    expect((await api.PATCH(req("a", "PATCH", { contactPhone: " ", contactEmail: "" }))).status).toBe(400);
+    expect(db.contacts.get("p-a")).toMatchObject({ contactPhone: null, contactEmail: "only@example.invalid" });
+    expect((await api.PATCH(req("r1", "PATCH", { contactPhone: "000-9999-9999", contactEmail: "" }))).status).toBe(403);
+    expect(db.contacts.get("p-b").contactEmail).toBe("b@example.invalid");
     expect(() => parseContact({ contactPhone: "javascript:alert(1)", contactEmail: "" })).toThrow();
     expect(() => parseContact({ contactPhone: "", contactEmail: "a@example.invalid\r\nBcc:x@y.com" })).toThrow();
   });

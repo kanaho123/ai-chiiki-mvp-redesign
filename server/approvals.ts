@@ -17,7 +17,7 @@ export const approvalHandle = (fn: (request: Request) => Promise<Response>) => h
   catch (e) { if (e instanceof ApprovalProblem) return json({ error: e.message }, e.status); throw e; }
 });
 const conflict = () => new ApprovalProblem(409, "在庫や条件が変わりました。仕入れ案を計算し直して、再確認してください");
-const notFound = () => new ApprovalProblem(404, "確認依頼が見つかりません");
+const notFound = () => new ApprovalProblem(404, "相談が見つかりません");
 type Tx = Prisma.TransactionClient;
 
 async function serial<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
@@ -112,22 +112,22 @@ export const approvals = {
   },
 
   async respond(user: SessionUser, id: string, status: unknown) {
-    if (user.role !== "producer") throw new ApprovalProblem(403, "生産者のみ回答できます");
-    if (status !== "approved" && status !== "rejected") throw new ApprovalProblem(400, "承認またはNGを選んでください");
+    if (user.role !== "producer") throw new ApprovalProblem(403, "生産者だけが返事をできます");
+    if (status !== "approved" && status !== "rejected") throw new ApprovalProblem(400, "「対応できます」か「今回は対応できません」を選んでください");
     return serial(async tx => {
       const row = await tx.approvalRequest.findUnique({ where: { id }, include: listInclude });
       if (!row || row.producerId !== user.producer?.id) throw notFound();
       if (!await isCurrent(tx, row)) throw conflict();
       if (row.status !== "pending") {
         if (row.status === status) return view(row, true);
-        throw new ApprovalProblem(409, "この依頼にはすでに回答しています");
+        throw new ApprovalProblem(409, "この相談にはすでに返事をしています");
       }
       if (status === "approved") {
         const contact = await tx.producer.findUnique({ where: { id: row.producerId }, select: { contactPhone: true, contactEmail: true } });
-        if (!contact?.contactPhone && !contact?.contactEmail) throw new ApprovalProblem(400, "承認する前に、開示する連絡先を登録してください");
+        if (!contact?.contactPhone && !contact?.contactEmail) throw new ApprovalProblem(400, "「対応できます」と返事をする前に、飲食店に伝える連絡先を登録してください");
       }
       const changed = await tx.approvalRequest.updateMany({ where: { id, status: "pending" }, data: { status, respondedAt: new Date() } });
-      if (changed.count !== 1) throw new ApprovalProblem(409, "すでに回答されています。再読み込みしてください");
+      if (changed.count !== 1) throw new ApprovalProblem(409, "すでに返事が届いています。画面を再読み込みしてください");
       return view({ ...row, status }, true);
     });
   },
@@ -137,7 +137,7 @@ export const approvals = {
     return serial(async tx => {
       const row = await tx.approvalRequest.findUnique({ where: { id } });
       if (!row || row.restaurantId !== user.id) throw notFound();
-      if (row.status !== "approved") throw new ApprovalProblem(403, "承認後に連絡先を確認できます");
+      if (row.status !== "approved") throw new ApprovalProblem(403, "生産者が「対応できます」と返事をした後に、連絡先を確認できます");
       if (!await isCurrent(tx, row)) throw conflict();
       const contact = await tx.producer.findUnique({ where: { id: row.producerId }, select: { contactPhone: true, contactEmail: true } });
       if (!contact) throw notFound();

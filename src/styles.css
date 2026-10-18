@@ -695,7 +695,7 @@ h1, h2, h3 { letter-spacing: -0.02em; }
 .confirmation-overall { font-weight: 700; }
 .confirmation-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .contact-details, .contact-form { display: grid; gap: 12px; }
-.contact-details a { overflow-wrap: anywhere; min-height: 44px; display: flex; align-items: center; }
+.contact-details a { overflow-wrap: anywhere; min-height: var(--tap-min); display: flex; align-items: center; }
 .contact-settings { padding-block: 12px; }
 .contact-form { padding-top: 16px; }
 @media (max-width: 480px) { .confirmation-panel { padding: 18px; } .confirmation-actions > button { width: 100%; } }
@@ -795,3 +795,68 @@ legend.label { padding: 0; margin-bottom: 8px; width: 100%; }
 .summary-edit { min-height: var(--tap-min); margin: -6px -12px -6px 0; font-size: 15px; }
 .choice-list.cols-2 .span-all { grid-column: 1 / -1; }
 .style-x { color: var(--color-muted); font-weight: 600; }
+
+/* ── 日常の画面（Phase 4）：ホーム・相談・依頼・マイページ ─────────────
+   ・状態は必ず文字で示す（返事待ち／対応できます／一部対応できません／今回は対応できません）。色は補助
+   ・一覧は罫線で区切った行。押せるカードは全体が1つのリンク（48px以上） */
+.home { gap: 26px; }
+.section-title { font-size: 18px; margin-bottom: 10px; }
+.todo { display: grid; gap: 6px; padding: 16px; border-radius: var(--r-input); background: var(--color-zone); }
+.todo .section-title { margin-bottom: 2px; font-size: 16px; color: var(--accent-ink); }
+.todo-text { font-size: 17px; font-weight: 700; line-height: 1.55; }
+.todo-link { justify-self: start; margin-left: -12px; }
+.empty-note { padding: 14px 16px; border-radius: var(--r-input); background: var(--color-sunken); color: var(--color-muted); font-weight: 700; }
+.new-requests { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: var(--r-input); background: var(--accent); color: #fff; font-size: 16px; }
+.new-requests b { font-size: 19px; }
+.new-requests svg { margin-top: 2px; flex-shrink: 0; }
+
+.state-tag { display: inline-flex; align-items: center; padding: 1px 9px; border-radius: var(--r-tag); font-size: 14px; font-weight: 800; line-height: 1.6; white-space: nowrap; border: 1.5px solid currentColor; }
+.state-waiting, .state-farm-pending { color: var(--color-amber); background: var(--color-amber-tint); }
+.state-accepted, .state-farm-approved { color: var(--color-restaurant-dark); background: var(--color-restaurant-tint); }
+.state-partial { color: var(--color-amber); background: #fff; border-style: dashed; }
+.state-declined, .state-farm-rejected, .state-stale, .state-farm-stale { color: var(--color-muted); background: var(--color-sunken); }
+
+.consult-list, .farm-list, .request-list, .listing-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.consult-card { display: grid; gap: 6px; padding: 14px 16px; border: 1.5px solid var(--color-line); border-radius: var(--r-input); color: inherit; text-decoration: none; min-height: var(--tap-min); }
+.consult-card:hover { border-color: var(--accent); }
+.consult-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.consult-title { font-size: 18px; }
+.consult-when { color: var(--color-muted); font-size: 15px; }
+.consult-farms { display: grid; gap: 2px; }
+.farm-line { font-weight: 700; }
+.farm-line.farm-approved { color: var(--color-restaurant-dark); }
+.farm-line.farm-rejected, .farm-line.farm-stale { color: var(--color-muted); }
+.consult-more { display: inline-flex; align-items: center; gap: 2px; justify-self: end; color: var(--accent-ink); font-weight: 700; font-size: 15px; }
+.back-link { justify-self: start; margin-left: -12px; }
+.farm-row { display: grid; gap: 6px; padding: 14px 0; border-bottom: 1px solid var(--color-line); }
+.farm-row:last-child { border-bottom: 0; }
+.farm-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.farm-head b { font-size: 17px; }
+.farm-detail { color: var(--color-muted); font-size: 15px; }
+.request-what { font-size: 18px; font-weight: 800; }
+.request-actions { display: grid; gap: 8px; margin-top: 4px; }
+.request-list.compact .farm-row { padding: 10px 0; }
+.listing-rows li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 12px 0; border-bottom: 1px solid var(--color-line); }
+.listing-rows li:last-child { border-bottom: 0; }
+.listing-name { font-weight: 700; }
+.listing-kg { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.listing-state { grid-column: 1 / -1; font-size: 14px; font-weight: 700; color: var(--color-muted); }
+.listing-state.on { color: var(--accent-ink); }
+.next-slot { padding: 14px 16px; border-radius: var(--r-input); background: var(--color-zone); }
+.closed-requests { margin-top: 4px; }
+
+.profile-section { display: grid; gap: 4px; padding-top: 4px; }
+.profile-section.editing { padding: 14px; margin: 0 -14px; border-radius: var(--r-input); background: var(--color-zone); }
+.profile-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.profile-head .section-title { margin: 0; }
+.profile-head .text-btn { margin-right: -12px; }
+.profile-form { gap: 22px; }
+.profile-actions { display: grid; gap: 10px; }
+.info-rows { margin: 0; display: grid; }
+.info-row { display: grid; grid-template-columns: 8em minmax(0, 1fr); gap: 4px 12px; padding: 11px 0; border-bottom: 1px solid var(--color-line); }
+.info-row:last-child { border-bottom: 0; }
+.info-row dt { color: var(--color-muted); font-size: 15px; }
+.info-row dd { margin: 0; font-weight: 700; min-width: 0; }
+@media (max-width: 400px) {
+  .info-row { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}

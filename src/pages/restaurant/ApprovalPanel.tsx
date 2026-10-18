@@ -59,8 +59,8 @@ export function ApprovalPanel({ shown, freshness }: { shown: Shown; freshness: F
 
   return <section className="confirmation-panel" aria-labelledby="confirm-producers-title">
     <h3 className="block-title" id="confirm-producers-title">生産者に確認する</h3>
-    <p className="hint">この条件で直接相談を進めてもよいか、農園ごとに確認します。承認は注文確定ではなく、在庫も確保されません。</p>
-    {!current ? <p role="status">最新の仕入れ案を計算してから確認してください。以前の承認は有効扱いしません。</p> : <>
+    <p className="hint">この条件で直接相談を進めてもよいか、農園ごとに確認します。「対応できます」の返事は注文確定ではなく、在庫も確保されません。</p>
+    {!current ? <p role="status">最新の仕入れ案を計算してから確認してください。以前の返事は使いません。</p> : <>
       <p className="confirmation-overall" role="status">{rows ? overallConfirmation(rows) : error ? "確認状態を取得できません" : "確認状態を読み込み中…"}</p>
       {rows && rows.length > 0 && <ul className="confirmation-list">{rows.map(row => <li key={row.id}>
         <div className="confirmation-heading"><strong>{row.producerName} {row.quantityKg}kg</strong><span className={`confirmation-status ${row.status}`}>{confirmationLabel[row.status]}</span></div>

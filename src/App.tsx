@@ -8,7 +8,9 @@ import Restaurant from "./pages/Restaurant";
 import { Demo, Login, Signup, Welcome } from "./pages/Guest";
 import ProducerOnboarding from "./pages/onboarding/ProducerOnboarding";
 import RestaurantOnboarding from "./pages/onboarding/RestaurantOnboarding";
-import { MyPage, ProducerHome, ProducerRequests, RestaurantConsultations, RestaurantHome } from "./pages/Shells";
+import MyPage from "./pages/daily/MyPage";
+import { ProducerHome, ProducerRequests } from "./pages/daily/Producer";
+import { RestaurantConsultationDetail, RestaurantConsultations, RestaurantHome } from "./pages/daily/Restaurant";
 import { FallbackRedirect, GuestGate, OnboardingGate, RoleGate } from "./routes/guards";
 
 // アプリの枠：URL ごとの画面とガード。
@@ -59,6 +61,7 @@ export function AppRoutes() {
           <Route path="home" element={<RestaurantHome />} />
           <Route path="buy" element={<RestaurantBuy />} />
           <Route path="consultations" element={<RestaurantConsultations />} />
+          <Route path="consultations/:id" element={<RestaurantConsultationDetail />} />
           <Route path="mypage" element={<MyPage />} />
           <Route path="*" element={<Navigate to={PATHS.restaurant.home} replace />} />
         </Route>
