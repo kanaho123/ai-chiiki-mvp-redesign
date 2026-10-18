@@ -47,8 +47,8 @@ const { createSessionToken } = await import("./auth");
 const { allocatePlan } = await import("../src/lib/allocate");
 const { planFingerprint } = await import("./plan-fingerprint");
 const { approvals, parseContact } = await import("./approvals");
-const api = await import("../api/approvals/index");
-const one = await import("../api/approvals/[id]");
+const api = await import("./routes/approvals/index");
+const one = await import("./routes/approvals/[id]");
 const { overallConfirmation } = await import("../src/lib/approvals");
 
 const request: PlanRequest = {

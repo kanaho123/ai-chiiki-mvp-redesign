@@ -1,12 +1,12 @@
-import { checkProducer, checkRestaurant } from "../src/lib/onboarding.js";
-import { appMode } from "../server/app-mode.js";
-import { requireOnboardedUser } from "../server/auth.js";
-import { prisma } from "../server/db.js";
-import { handle, json, readJson } from "../server/http.js";
-import { OnboardingProblem } from "../server/onboarding.js";
-import { loadProfile, updateProducerProfile, updateRestaurantProfile } from "../server/profile.js";
-import { repo } from "../server/repo.js";
-import { refillSlotsIfDue } from "../server/slot-refill.js";
+import { checkProducer, checkRestaurant } from "../../src/lib/onboarding.js";
+import { appMode } from "../app-mode.js";
+import { requireOnboardedUser } from "../auth.js";
+import { prisma } from "../db.js";
+import { handle, json, readJson } from "../http.js";
+import { OnboardingProblem } from "../onboarding.js";
+import { loadProfile, updateProducerProfile, updateRestaurantProfile } from "../profile.js";
+import { repo } from "../repo.js";
+import { refillSlotsIfDue } from "../slot-refill.js";
 
 // マイページ：本人のプロフィールの表示（GET）と更新（PATCH）。一般ユーザー向けの環境で、初回登録を終えた本人だけ。
 // ログイン用メールアドレス・パスワードの変更はここでは扱わない。

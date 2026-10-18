@@ -870,3 +870,5 @@ legend.label { padding: 0; margin-bottom: 8px; width: 100%; }
 .error-retry p { margin-bottom: 8px; }
 .guest-switch a { display: inline-flex; align-items: center; min-height: var(--tap-min); padding: 0 8px; font-weight: 700; }
 .trial-note { padding: 12px 14px; border-radius: var(--r-input); background: var(--color-info-tint); color: var(--color-info); font-weight: 700; }
+/* 文章の中のリンクも押しやすい高さに（行の高さは変えない） */
+a.inline-link { display: inline-flex; align-items: center; min-height: var(--tap-min); vertical-align: middle; font-weight: 700; overflow-wrap: anywhere; }

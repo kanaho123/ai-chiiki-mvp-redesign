@@ -1,9 +1,9 @@
-import { createAccount, parseSignup } from "../../server/accounts.js";
-import { appMode } from "../../server/app-mode.js";
-import { createSessionToken, crossSite, crossSiteResponse, sessionCookie } from "../../server/auth.js";
-import { handle, json, readJson } from "../../server/http.js";
-import { clientIp } from "../../server/rate-limit.js";
-import { repo } from "../../server/repo.js";
+import { createAccount, parseSignup } from "../../accounts.js";
+import { appMode } from "../../app-mode.js";
+import { createSessionToken, crossSite, crossSiteResponse, sessionCookie } from "../../auth.js";
+import { handle, json, readJson } from "../../http.js";
+import { clientIp } from "../../rate-limit.js";
+import { repo } from "../../repo.js";
 
 // 一般ユーザーの新規登録（一般ユーザー向けの環境 APP_MODE=general だけ）。登録後はそのままログイン状態にする。
 // ・メールアドレスはサーバーで trim＋小文字化してから重複判定・保存する

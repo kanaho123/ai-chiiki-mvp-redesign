@@ -1,7 +1,7 @@
-import { requireRole, requireOnboardedUser } from "../../server/auth.js";
-import { approvals, approvalHandle, parseContact } from "../../server/approvals.js";
-import { json, readJson } from "../../server/http.js";
-import { prisma } from "../../server/db.js";
+import { requireRole, requireOnboardedUser } from "../../auth.js";
+import { approvals, approvalHandle, parseContact } from "../../approvals.js";
+import { json, readJson } from "../../http.js";
+import { prisma } from "../../db.js";
 
 export const GET = approvalHandle(async request => {
   if (new URL(request.url).searchParams.get("view") === "contact") {

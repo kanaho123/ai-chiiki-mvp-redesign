@@ -127,11 +127,11 @@ vi.mock("./repo.js", () => ({
 
 process.env.SESSION_SECRET = "test-secret-0123456789-abcdefghijklmnop";
 const { createSessionToken } = await import("./auth.js");
-const restaurantApi = await import("../api/onboarding/restaurant.js");
-const producerApi = await import("../api/onboarding/producer.js");
-const masterApi = await import("../api/onboarding/master.js");
-const supplies = await import("../api/supplies/index.js");
-const approvals = await import("../api/approvals/index.js");
+const restaurantApi = await import("./routes/onboarding/restaurant.js");
+const producerApi = await import("./routes/onboarding/producer.js");
+const masterApi = await import("./routes/onboarding/master.js");
+const supplies = await import("./routes/supplies/index.js");
+const approvals = await import("./routes/approvals/index.js");
 
 const BASE = "http://localhost:5180";
 const NOW = new Date();

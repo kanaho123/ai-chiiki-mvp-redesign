@@ -1,5 +1,5 @@
-import { clearSessionCookie, crossSite, crossSiteResponse } from "../../server/auth.js";
-import { handle, json } from "../../server/http.js";
+import { clearSessionCookie, crossSite, crossSiteResponse } from "../../auth.js";
+import { handle, json } from "../../http.js";
 
 // Cookie を無効化する（署名付き Cookie のため、サーバー側に消すセッションは無い）
 export const POST = handle(async (request) => {

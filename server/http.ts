@@ -25,7 +25,9 @@ export function handle(fn: (request: Request) => Promise<Response>) {
     try {
       return await fn(request);
     } catch (e) {
-      console.error(e instanceof Error ? e.name : "UnknownError");
+      // エラーの種類とコード（例：P2028）だけを記録する。メッセージには接続情報が含まれうるので出さない
+      const code = typeof e === "object" && e !== null && "code" in e && typeof e.code === "string" && /^[A-Z0-9_]{1,16}$/.test(e.code) ? e.code : "";
+      console.error(e instanceof Error ? e.name : "UnknownError", code);
       return json({ error: "サーバーで問題が発生しました。時間をおいてもう一度お試しください" }, 500);
     }
   };

@@ -1,7 +1,7 @@
-import { parseSupplyPatch } from "../../src/lib/validate.js";
-import { requireOwnSupply, requireRole } from "../../server/auth.js";
-import { handle, json, readJson } from "../../server/http.js";
-import { repo } from "../../server/repo.js";
+import { parseSupplyPatch } from "../../../src/lib/validate.js";
+import { requireOwnSupply, requireRole } from "../../auth.js";
+import { handle, json, readJson } from "../../http.js";
+import { repo } from "../../repo.js";
 
 export const CONFLICT_MESSAGE = "情報が更新されています。最新情報を読み込み直してください";
 

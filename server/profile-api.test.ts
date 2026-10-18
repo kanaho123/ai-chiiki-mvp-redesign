@@ -101,8 +101,8 @@ vi.mock("./approvals.js", async (importOriginal) => {
 
 process.env.SESSION_SECRET = "test-secret-0123456789-abcdefghijklmnop";
 const { createSessionToken } = await import("./auth.js");
-const profileApi = await import("../api/profile.js");
-const inboxApi = await import("../api/inbox.js");
+const profileApi = await import("./routes/profile.js");
+const inboxApi = await import("./routes/inbox.js");
 
 const BASE = "http://localhost:5180";
 const NOW = Date.now();

@@ -1,9 +1,9 @@
-import { PREFECTURES } from "../../src/lib/constants.js";
-import { parseSupplyInput } from "../../src/lib/validate.js";
-import { requireRole } from "../../server/auth.js";
-import { handle, json, readJson } from "../../server/http.js";
-import { repo } from "../../server/repo.js";
-import { refillSlotsIfDue } from "../../server/slot-refill.js";
+import { PREFECTURES } from "../../../src/lib/constants.js";
+import { parseSupplyInput } from "../../../src/lib/validate.js";
+import { requireRole } from "../../auth.js";
+import { handle, json, readJson } from "../../http.js";
+import { repo } from "../../repo.js";
+import { refillSlotsIfDue } from "../../slot-refill.js";
 
 // 生産者本人の供給一覧（他の生産者の供給は返さない）と、登録に使う選択肢
 export const GET = handle(async (request) => {

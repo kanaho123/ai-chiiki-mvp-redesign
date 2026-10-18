@@ -1,7 +1,7 @@
-import { pendingCount } from "../src/lib/approvals.js";
-import { approvals, approvalHandle } from "../server/approvals.js";
-import { requireOnboardedUser } from "../server/auth.js";
-import { json } from "../server/http.js";
+import { pendingCount } from "../../src/lib/approvals.js";
+import { approvals, approvalHandle } from "../approvals.js";
+import { requireOnboardedUser } from "../auth.js";
+import { json } from "../http.js";
 
 // 下部ナビの件数（サーバーの実データから数える）。
 // ・生産者：まだ返事をしていない相談の数（在庫や条件が変わって使えなくなった相談は数えない）

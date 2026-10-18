@@ -1,7 +1,7 @@
-import { appMode } from "../server/app-mode.js";
-import { currentUser } from "../server/auth.js";
-import { isDemoClock, serverNow } from "../server/clock.js";
-import { handle, json } from "../server/http.js";
+import { appMode } from "../app-mode.js";
+import { currentUser } from "../auth.js";
+import { isDemoClock, serverNow } from "../clock.js";
+import { handle, json } from "../http.js";
 
 // ログイン中のユーザー（id・role・表示名・生産者情報）。未ログインなら 401。
 // demoNow はデモ専用環境（DEMO_NOW 設定時）の基準日時。通常の環境では null

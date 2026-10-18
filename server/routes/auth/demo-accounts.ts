@@ -1,7 +1,7 @@
-import { isDemoMode } from "../../server/app-mode.js";
-import { isDemoClock } from "../../server/clock.js";
-import { prisma } from "../../server/db.js";
-import { handle, json } from "../../server/http.js";
+import { isDemoMode } from "../../app-mode.js";
+import { isDemoClock } from "../../clock.js";
+import { prisma } from "../../db.js";
+import { handle, json } from "../../http.js";
 
 // デモ環境（APP_MODE=demo かつ DEMO_NOW 設定時）だけ、ログイン名の候補を返す。パスワードは返さない。
 export const GET = handle(async () => {

@@ -11,6 +11,16 @@
     }
   },
   "rewrites": [
+    { "source": "/api/auth/:route", "destination": "/api/auth?__path=/api/auth/:route" },
+    { "source": "/api/onboarding/:route", "destination": "/api/onboarding?__path=/api/onboarding/:route" },
+    { "source": "/api/approvals/:id", "destination": "/api/approvals?__path=/api/approvals/:id" },
+    { "source": "/api/supplies/:id", "destination": "/api/supplies?__path=/api/supplies/:id" },
+    { "source": "/api/me", "destination": "/api/account?__path=/api/me" },
+    { "source": "/api/inbox", "destination": "/api/account?__path=/api/inbox" },
+    { "source": "/api/profile", "destination": "/api/account?__path=/api/profile" },
+    { "source": "/api/catalog", "destination": "/api/purchase?__path=/api/catalog" },
+    { "source": "/api/inventory-version", "destination": "/api/purchase?__path=/api/inventory-version" },
+    { "source": "/api/plan", "destination": "/api/purchase?__path=/api/plan" },
     { "source": "/((?!api(?:/|$)|assets/).*)", "destination": "/index.html" }
   ],
   "headers": [

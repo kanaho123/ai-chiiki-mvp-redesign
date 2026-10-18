@@ -57,12 +57,12 @@ vi.mock("./plan-data.js", () => ({
 }));
 
 const { hashPassword, createSessionToken } = await import("./auth.js");
-const login = await import("../api/auth/login.js");
-const logout = await import("../api/auth/logout.js");
-const me = await import("../api/me.js");
-const supplies = await import("../api/supplies/index.js");
-const supplyById = await import("../api/supplies/[id].js");
-const plan = await import("../api/plan.js");
+const login = await import("./routes/auth/login.js");
+const logout = await import("./routes/auth/logout.js");
+const me = await import("./routes/me.js");
+const supplies = await import("./routes/supplies/index.js");
+const supplyById = await import("./routes/supplies/[id].js");
+const plan = await import("./routes/plan.js");
 
 const PASSWORD = "テスト用のパスワード";
 const BASE = "http://localhost:5180";

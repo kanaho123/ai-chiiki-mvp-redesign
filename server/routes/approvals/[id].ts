@@ -1,6 +1,6 @@
-import { requireRole } from "../../server/auth.js";
-import { approvals, approvalHandle } from "../../server/approvals.js";
-import { json, readJson } from "../../server/http.js";
+import { requireRole } from "../../auth.js";
+import { approvals, approvalHandle } from "../../approvals.js";
+import { json, readJson } from "../../http.js";
 
 export const GET = approvalHandle(async request => {
   const g = await requireRole(request, "restaurant");

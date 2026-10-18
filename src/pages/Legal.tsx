@@ -28,7 +28,7 @@ function TrialNotice() {
   );
 }
 
-const Contact = () => <a href={`mailto:${OPERATOR.contact}`}>{OPERATOR.contact}</a>;
+const Contact = () => <a className="inline-link" href={`mailto:${OPERATOR.contact}`}>{OPERATOR.contact}</a>;
 
 function BackLink() {
   const { me } = useSession();

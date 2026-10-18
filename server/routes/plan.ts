@@ -1,11 +1,11 @@
-import { allocatePlan } from "../src/lib/allocate.js";
-import { suggestConditionChanges } from "../src/lib/suggest.js";
-import { parsePlanRequest } from "../src/lib/validate.js";
-import { requireRole } from "../server/auth.js";
-import { isDemoClock, serverNow } from "../server/clock.js";
-import { handle, json, readJson } from "../server/http.js";
-import { loadPlanInputs } from "../server/plan-data.js";
-import { planFingerprint } from "../server/plan-fingerprint.js";
+import { allocatePlan } from "../../src/lib/allocate.js";
+import { suggestConditionChanges } from "../../src/lib/suggest.js";
+import { parsePlanRequest } from "../../src/lib/validate.js";
+import { requireRole } from "../auth.js";
+import { isDemoClock, serverNow } from "../clock.js";
+import { handle, json, readJson } from "../http.js";
+import { loadPlanInputs } from "../plan-data.js";
+import { planFingerprint } from "../plan-fingerprint.js";
 
 // 確定済みの条件と最新の供給から、通常ロジックだけで仕入れ案を計算して返す（AI は使わない）。
 // 案を作っても供給の数量は変更しない（在庫予約ではない）。

@@ -1,5 +1,17 @@
 {
+  // 型チェックの本体は references の3つ（app / node / api）。ここ自体はファイルを持たない。
+  // Vercel は API Functions の型チェックにこのルートの設定を使うため、API と同じ設定（tsconfig.api.json）を引き継ぐ。
+  // module・moduleResolution・strict はここにも直接書く（Vercel は、ここに module が書かれていないと
+  // module=NodeNext・strict=false に置き換えるため。値は tsconfig.api.json と同じ）
+  "extends": "./tsconfig.api.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.root.tsbuildinfo"
+  },
   "files": [],
+  "include": [],
   "references": [
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.node.json" },

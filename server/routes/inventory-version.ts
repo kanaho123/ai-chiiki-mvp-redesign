@@ -1,6 +1,6 @@
-import { requireRole } from "../server/auth.js";
-import { handle, json } from "../server/http.js";
-import { loadPlanInputs } from "../server/plan-data.js";
+import { requireRole } from "../auth.js";
+import { handle, json } from "../http.js";
+import { loadPlanInputs } from "../plan-data.js";
 
 // 表示中の案の計算に使ったデータ（供給の id・version・公開状態、枠、参加確認、取引経験）の現在の版を返す。
 // 使い方: GET /api/inventory-version?itemId=...&slotId=...

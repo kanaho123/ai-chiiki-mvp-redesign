@@ -1,10 +1,10 @@
-import { parseLogin } from "../../src/lib/validate.js";
-import { normalizeEmail } from "../../server/accounts.js";
-import { appMode } from "../../server/app-mode.js";
-import { createSessionToken, crossSite, crossSiteResponse, sessionCookie, verifyPassword } from "../../server/auth.js";
-import { handle, json, readJson } from "../../server/http.js";
-import { clientIp } from "../../server/rate-limit.js";
-import { repo } from "../../server/repo.js";
+import { parseLogin } from "../../../src/lib/validate.js";
+import { normalizeEmail } from "../../accounts.js";
+import { appMode } from "../../app-mode.js";
+import { createSessionToken, crossSite, crossSiteResponse, sessionCookie, verifyPassword } from "../../auth.js";
+import { handle, json, readJson } from "../../http.js";
+import { clientIp } from "../../rate-limit.js";
+import { repo } from "../../repo.js";
 
 const FAILED = "ログイン情報を確認してください";
 const LOCKED = "ログインの失敗が続いたため、しばらく時間をおいてからお試しください";

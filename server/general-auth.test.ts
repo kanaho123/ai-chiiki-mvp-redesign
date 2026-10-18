@@ -61,11 +61,11 @@ vi.mock("./repo.js", () => {
 const { hashPassword } = await import("./auth.js");
 const { TERMS_VERSION, PRIVACY_VERSION } = await import("./legal.js");
 const { generateLoginId, normalizeEmail, parseSignup } = await import("./accounts.js");
-const signup = await import("../api/auth/signup.js");
-const login = await import("../api/auth/login.js");
-const me = await import("../api/me.js");
-const supplies = await import("../api/supplies/index.js");
-const approvals = await import("../api/approvals/index.js");
+const signup = await import("./routes/auth/signup.js");
+const login = await import("./routes/auth/login.js");
+const me = await import("./routes/me.js");
+const supplies = await import("./routes/supplies/index.js");
+const approvals = await import("./routes/approvals/index.js");
 
 const BASE = "http://localhost:5180";
 const PASSWORD = "general-pass-1234";

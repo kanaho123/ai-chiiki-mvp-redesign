@@ -1,9 +1,9 @@
-import { requireRole } from "../server/auth.js";
-import { loadCatalog } from "../server/catalog.js";
-import { isDemoClock, serverNow } from "../server/clock.js";
-import { openAiConfig } from "../server/ai/openai.js";
-import { handle, json } from "../server/http.js";
-import { refillSlotsIfDue } from "../server/slot-refill.js";
+import { requireRole } from "../auth.js";
+import { loadCatalog } from "../catalog.js";
+import { isDemoClock, serverNow } from "../clock.js";
+import { openAiConfig } from "../ai/openai.js";
+import { handle, json } from "../http.js";
+import { refillSlotsIfDue } from "../slot-refill.js";
 
 // 条件確認画面で使う登録データ。飲食店ユーザーだけ。aiAvailable は AI 抽出を使えるか（キーの値は返さない）
 export const GET = handle(async (request) => {

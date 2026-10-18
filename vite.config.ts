@@ -2,26 +2,22 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import react from "@vitejs/plugin-react";
+import { functionFor } from "./server/api-map.js";
 import { loadLocalEnvironment } from "./server/local-env.js";
 
 /**
  * 開発時だけ、/api/* へのリクエストを api/ フォルダの関数（Vercel Functions と同じファイル）で処理する。
+ * どの URL をどの Function が受け持つかは、vercel.json の rewrites と同じ表（server/api-map.ts）で決める。
  * 本番（Vercel）では Vercel Functions がそのまま使われる。
  */
 function localApi(): Plugin {
   const apiDir = path.resolve(import.meta.dirname, "api");
 
-  // /api/plan → api/plan.ts、/api/listings → api/listings/index.ts、/api/listings/xxx → api/listings/[id].ts
+  // /api/auth/login → api/auth.ts、/api/me → api/account.ts など（各 Function の中で元の URL ごとに振り分ける）
   function resolve(pathname: string): string | null {
-    const rel = pathname.replace(/^\/api\/?/, "").replace(/\/$/, "");
-    for (const f of [`${rel}.ts`, `${rel}/index.ts`]) {
-      const p = path.join(apiDir, f);
-      if (rel && existsSync(p)) return p;
-    }
-    if (!rel) return existsSync(path.join(apiDir, "index.ts")) ? path.join(apiDir, "index.ts") : null;
-    const parent = path.join(apiDir, path.dirname(rel));
-    for (const f of ["[id].ts"]) if (existsSync(path.join(parent, f))) return path.join(parent, f);
-    return null;
+    const fn = functionFor(pathname);
+    const p = fn ? path.join(apiDir, `${fn}.ts`) : null;
+    return p && existsSync(p) ? p : null;
   }
 
   async function readBody(req: NodeJS.ReadableStream): Promise<Buffer> {

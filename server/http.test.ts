@@ -14,7 +14,19 @@ describe("API の共通エラー処理", () => {
     expect(body).not.toMatch(/ep-secret-host|hunter2|database/);
     expect(r.headers.get("cache-control")).toBe("no-store");
     // ログにもエラーの種類名だけを残す（メッセージ本文は出さない）
-    expect(spy).toHaveBeenCalledWith("Error");
+    expect(spy).toHaveBeenCalledWith("Error", "");
+    spy.mockRestore();
+  });
+  it("Prisma 等のエラーコード（例：P2028）はログに残す。メッセージ・不正な形のコードは出さない", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fail = (code: unknown) => handle(async () => {
+      throw Object.assign(new Error("Transaction already closed: postgresql://u:hunter2@ep-secret-host/neondb"), { name: "PrismaClientKnownRequestError", code });
+    })(new Request("http://localhost/api/x"));
+    expect((await fail("P2028")).status).toBe(500);
+    expect(spy).toHaveBeenLastCalledWith("PrismaClientKnownRequestError", "P2028");
+    await fail("postgresql://u:hunter2@host");
+    expect(spy).toHaveBeenLastCalledWith("PrismaClientKnownRequestError", "");
+    expect(JSON.stringify(spy.mock.calls)).not.toMatch(/hunter2|ep-secret-host|Transaction already closed/);
     spy.mockRestore();
   });
 });
