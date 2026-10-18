@@ -186,6 +186,9 @@ describe("飲食店の相談一覧・詳細", () => {
     expect([...el.querySelectorAll(".progress-step")].map((s) => `${s.querySelector(".progress-label")?.textContent}:${s.className.replace("progress-step ", "")}`))
       .toEqual(["相談送信済み:done", "生産者回答待ち:done", "マッチ成立:done", "受け渡し待ち:current"]);
     expect($(".progress-current")?.textContent).toBe("いま：受け渡し待ち");
+    // 狭い画面でも単語の途中で折り返さない区切り
+    expect([...el.querySelectorAll(".progress-step .progress-label")].map((l) => [...l.querySelectorAll(".progress-label-part")].map((p) => p.textContent)))
+      .toEqual([["相談", "送信済み"], ["生産者", "回答待ち"], ["マッチ", "成立"], ["受け渡し", "待ち"]]);
     // 成立の内訳（農家・品目・数量・価格）と受け渡し
     expect([...el.querySelectorAll(".match-farms li")].map((li) => li.textContent)).toEqual(["A農園トマト 5kg・¥600/kg・小計 ¥3,000", "B農園トマト 5kg・¥600/kg・小計 ¥3,000"]);
     expect($(".match-facts")?.textContent).toContain("梅田エリア受渡所（仮）");

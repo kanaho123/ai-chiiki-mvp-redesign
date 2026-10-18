@@ -699,7 +699,7 @@ h1, h2, h3 { letter-spacing: -0.02em; }
 .contact-settings { padding-block: 12px; }
 .contact-form { padding-top: 16px; }
 /* マッチ成立：仕入れ案の全農家が「対応できます」のときだけ。演出（アニメーション）は付けない */
-.match-banner { display: grid; gap: 12px; padding: 20px; border-radius: 16px; background: var(--color-restaurant-tint); border: 2px solid var(--color-restaurant-dark); color: var(--color-restaurant-dark); min-width: 0; }
+.match-banner { scroll-margin-top: 88px; display: grid; gap: 12px; padding: 20px; border-radius: 16px; background: var(--color-restaurant-tint); border: 2px solid var(--color-restaurant-dark); color: var(--color-restaurant-dark); min-width: 0; }
 .match-banner p { margin: 0; line-height: 1.6; }
 .match-title { font-size: 26px; font-weight: 800; line-height: 1.3; }
 .match-text { font-size: 17px; font-weight: 700; color: var(--color-text, #1f1f1f); overflow-wrap: anywhere; }
@@ -894,7 +894,8 @@ a.inline-link { display: inline-flex; align-items: center; min-height: var(--tap
 .progress-step.current .progress-dot { border-color: var(--color-restaurant-dark); box-shadow: inset 0 0 0 5px var(--color-restaurant-tint); }
 .progress-step.done, .progress-step.current { color: var(--color-text, #1f1f1f); }
 .progress-step.current .progress-label { font-weight: 800; }
-.progress-label { overflow-wrap: anywhere; }
+.progress-label { display: block; }
+.progress-label-part { display: inline-block; white-space: nowrap; }
 .progress-current { margin: 0; font-size: 15px; font-weight: 700; }
 .consult-next { font-size: 14px; font-weight: 700; color: var(--color-restaurant-dark); }
 
@@ -930,3 +931,7 @@ a.inline-link { display: inline-flex; align-items: center; min-height: var(--tap
 .price-tool { display: grid; gap: 10px; }
 .price-tool .bar-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .price-edit { min-height: var(--tap-min); margin-left: 4px; }
+
+/* 仕入れ案の上部：マッチ成立の短い表示（押すと下の「マッチ成立」の欄へ移る）。演出なし */
+.match-jump { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: var(--tap-min); margin: 4px 0 2px; padding: 10px 14px; border: 0; border-radius: var(--r-input); background: var(--color-restaurant-dark); color: #fff; font-size: 18px; font-weight: 800; text-align: left; cursor: pointer; }
+.match-jump-go { display: inline-flex; align-items: center; gap: 4px; font-size: 15px; font-weight: 700; white-space: nowrap; }

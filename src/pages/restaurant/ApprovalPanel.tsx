@@ -6,7 +6,8 @@ import { MatchBanner } from "./MatchBanner";
 import { ProgressSteps } from "./ProgressSteps";
 import type { Freshness, Shown } from "./types";
 
-export function ApprovalPanel({ shown, freshness }: { shown: Shown; freshness: Freshness }) {
+/** onMatchedChange：マッチ成立（全農家が「対応できます」・条件が最新）かどうかを仕入れ案の画面へ知らせる（上部の短い表示に使う） */
+export function ApprovalPanel({ shown, freshness, onMatchedChange }: { shown: Shown; freshness: Freshness; onMatchedChange?: (matched: boolean) => void }) {
   const [rows, setRows] = useState<Confirmation[] | null>(null);
   const [contacts, setContacts] = useState<Record<string, Contact>>({});
   const [busy, setBusy] = useState(false);
@@ -60,7 +61,9 @@ export function ApprovalPanel({ shown, freshness }: { shown: Shown; freshness: F
   }
 
   const names = farmNames(shown.plan.allocations);
-  const matched = !!rows && isMatched(rows);
+  const matched = current && !!rows && isMatched(rows);
+  useEffect(() => { onMatchedChange?.(matched); }, [matched, onMatchedChange]);
+  useEffect(() => () => onMatchedChange?.(false), [onMatchedChange]);
   return <section className="confirmation-panel" aria-labelledby="confirm-producers-title">
     <h3 className="block-title" id="confirm-producers-title">生産者に仕入れ相談する</h3>
     <p className="hint">この仕入れ案の農家（{names}）に、この条件で相談できるか確認します。「対応できます」の返事は注文確定ではなく、在庫も確保されません。</p>

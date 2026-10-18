@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { formatDateJa, formatJstDateTime, jstDateOf, jstTimeOf } from "../../lib/dates.js";
 import type { PlanResult } from "../../lib/allocate.js";
 import { rankingText } from "../../lib/reasons.js";
@@ -80,6 +81,8 @@ export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, o
   onRecalc: () => void; onEdit: () => void; onSuggestion: (s: Suggestion) => void;
 }) {
   const { plan, request } = shown;
+  // 相談の欄が知らせる「マッチ成立」（全農家が「対応できます」・条件が最新）。上部の短い表示だけに使う
+  const [matched, setMatched] = useState(false);
   // 古い案・確認中の案は、再計算するまで適合状態（MATCHED）を有効扱いしない
   const stale = freshness !== "fresh";
   const ok = plan.status === "MATCHED" && !stale;
@@ -146,6 +149,12 @@ export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, o
         <section className={`answer ${tone}`} aria-labelledby="answer-title">
           <p className="answer-head" id="answer-title"><Icon name={statusIcon} size={26} strokeWidth={2.6} />{prefix}{headline}</p>
           {sub && <p className="answer-sub">{sub}</p>}
+          {/* マッチ成立（全農家が「対応できます」）のときだけ、スクロールしなくても分かるように上部にも短く出す。詳しい表示は下の「マッチ成立」の欄 */}
+          {matched && ok && (
+            <button type="button" className="match-jump" onClick={() => document.getElementById("match-title")?.closest(".match-banner")?.scrollIntoView({ block: "start" })}>
+              <span>🎉 マッチ成立</span><span className="match-jump-go">取引相談へ<Icon name="arrowRight" size={18} /></span>
+            </button>
+          )}
           {hasPlan && (
             <p className="answer-yen">
               <span className="sr-only">合計（税込）</span>
@@ -163,7 +172,7 @@ export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, o
           {hasPlan && <p className="answer-tag"><Icon name="info" size={16} />注文前の案・在庫は未確保</p>}
         </section>
 
-        {plan.status === "MATCHED" && hasPlan && <ApprovalPanel key={`${shown.fingerprint ?? "legacy"}:${shown.version}`} shown={shown} freshness={freshness} />}
+        {plan.status === "MATCHED" && hasPlan && <ApprovalPanel key={`${shown.fingerprint ?? "legacy"}:${shown.version}`} shown={shown} freshness={freshness} onMatchedChange={setMatched} />}
 
         {!ok && suggestions}
 

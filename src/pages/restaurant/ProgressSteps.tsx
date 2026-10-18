@@ -6,6 +6,11 @@ import { useSession } from "../../routes/session";
 // 条件が変わった・対応できない農家がいる相談では出さない（従来どおりの状態のタグと案内を使う）。
 // 表示するのは、すでに進んだ段階と今の段階だけ（全農家が「対応できます」になるまで「マッチ成立」の言葉は出さない）。
 
+/** 狭い画面で単語の途中で折り返さないよう、意味のまとまりで区切る（各まとまりの中では改行しない。幅があれば1行に並ぶ） */
+const LABEL_PARTS: Record<string, string[]> = {
+  sent: ["相談", "送信済み"], answer: ["生産者", "回答待ち"], matched: ["マッチ", "成立"], handover: ["受け渡し", "待ち"],
+};
+
 /** 画面の「いま」：デモ用の環境では固定の日時、一般向けでは現在時刻 */
 export function useNow(): Date {
   const { demoNow } = useSession();
@@ -30,7 +35,7 @@ export function ProgressSteps({ farms, compact = false }: { farms: Confirmation[
         {shown.map((s) => (
           <li key={s.key} className={`progress-step ${s.state}`} aria-current={s.state === "current" ? "step" : undefined}>
             <span className="progress-dot" aria-hidden="true">{s.state === "done" ? <Icon name="check" size={16} strokeWidth={3} /> : null}</span>
-            <span className="progress-label">{s.label}</span>
+            <span className="progress-label">{(LABEL_PARTS[s.key] ?? [s.label]).map((part) => <span key={part} className="progress-label-part">{part}</span>)}</span>
           </li>
         ))}
       </ol>

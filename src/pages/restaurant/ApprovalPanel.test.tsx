@@ -50,11 +50,14 @@ let root: Root | null = null;
 let el: HTMLDivElement;
 afterEach(() => { act(() => root?.unmount()); el?.remove(); root = null; vi.unstubAllGlobals(); });
 const flush = async (n = 6) => { for (let i = 0; i < n; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
+let matchedCalls: boolean[] = [];
+const onMatchedChange = (m: boolean) => { matchedCalls.push(m); };
 async function open(freshness: Freshness = "fresh") {
+  matchedCalls = [];
   el = document.createElement("div");
   document.body.append(el);
   root = createRoot(el);
-  await act(async () => { root!.render(<SessionProvider><ApprovalPanel shown={shown} freshness={freshness} /></SessionProvider>); });
+  await act(async () => { root!.render(<SessionProvider><ApprovalPanel shown={shown} freshness={freshness} onMatchedChange={onMatchedChange} /></SessionProvider>); });
   await flush();
 }
 const $ = (sel: string) => el.querySelector<HTMLElement>(sel);
@@ -62,6 +65,29 @@ const text = () => el.textContent ?? "";
 const button = (label: string) => [...el.querySelectorAll("button, a")].find((b) => b.textContent?.trim().includes(label)) as HTMLElement | undefined;
 const click = async (node: HTMLElement | undefined) => { expect(node).toBeTruthy(); await act(async () => { node!.click(); }); await flush(); };
 const statuses = () => [...el.querySelectorAll(".confirmation-list li")].map((li) => `${li.querySelector("strong")?.textContent}：${li.querySelector(".confirmation-status")?.textContent}`);
+
+describe("仕入れ案の上部へのマッチ成立の知らせ（onMatchedChange）", () => {
+  it("1/2 の回答では知らせない", async () => {
+    rows = [row("a", "A農園", "approved"), row("b", "B農園", "pending")];
+    await open();
+    expect(matchedCalls.at(-1)).toBe(false);
+    expect(matchedCalls).not.toContain(true);
+  });
+  it("2/2 で「対応できます」になったときだけ知らせる", async () => {
+    rows = [row("a", "A農園", "approved"), row("b", "B農園", "approved")];
+    await open();
+    expect(matchedCalls.at(-1)).toBe(true);
+  });
+  it("案が古い（在庫が変わった）・農家の相談が stale なら知らせない", async () => {
+    rows = [row("a", "A農園", "approved"), row("b", "B農園", "approved")];
+    await open("stale");
+    expect(matchedCalls).not.toContain(true);
+    act(() => root?.unmount()); root = null; el.remove();
+    rows = [row("a", "A農園", "approved"), row("b", "B農園", "stale")];
+    await open();
+    expect(matchedCalls).not.toContain(true);
+  });
+});
 
 describe("生産者に仕入れ相談する", () => {
   it("送る前：見出し・送り先の農家・「A農園・B農園に仕入れ相談する（2件）」で、まとめて1回送る", async () => {
