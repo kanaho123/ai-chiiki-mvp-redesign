@@ -14,7 +14,7 @@ export type RequestForm = {
   budgetMode: "" | "limit" | "none";
   budgetYen: string;
   originPrefectures: string[];
-  slotId: string;
+  slotId: string; // 一般向けの環境では "" ＝おまかせ（希望日に受け取れる場所から、おすすめを探す）
   allowFirstTime: YesNo;
   allowIrregular: YesNo;
   allowMixedVarieties: YesNo;
@@ -69,15 +69,18 @@ export function formFromDraft(d: Draft): RequestForm {
   };
 }
 
-/** まだ選択・入力されていない必須項目（画面で「要確認」を示す） */
-export function missingFields(f: RequestForm): DraftField[] {
+/**
+ * まだ選択・入力されていない必須項目（画面で「要確認」を示す）。
+ * autoSlot（一般向けの環境）では受け取り場所を選ばなくてもよい（おまかせ）。デモ用の環境では従来どおり必須
+ */
+export function missingFields(f: RequestForm, opts: { autoSlot?: boolean } = {}): DraftField[] {
   const out: DraftField[] = [];
   if (!f.itemId) out.push("itemId");
   if (!f.quantityKg) out.push("quantityKg");
   if (!f.desiredDate) out.push("desiredDate");
   if (!f.budgetMode || (f.budgetMode === "limit" && !f.budgetYen)) out.push("budget");
   if (f.originPrefectures.length === 0) out.push("originPrefectures");
-  if (!f.slotId) out.push("slotId");
+  if (!f.slotId && !opts.autoSlot) out.push("slotId");
   for (const k of ["allowFirstTime", "allowIrregular", "allowMixedVarieties", "allowMixedGrades"] as const) if (!f[k]) out.push(k);
   return out;
 }

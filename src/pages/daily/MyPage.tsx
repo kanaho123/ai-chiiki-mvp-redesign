@@ -13,13 +13,15 @@ import { useMe, useSession } from "../../routes/session";
 import { ChoiceGroup, focusFirstError, MultiChoiceGroup, PrefectureField, StyleText, TextField } from "../onboarding/parts";
 import { ErrorRetry } from "./ErrorRetry";
 import { ListingsSummary } from "./ListingsSummary";
+import { PickupPointsSection } from "./PickupPoints";
+import { placeKindLabel, seriesSub } from "../../lib/pickup";
 
 // マイページ：閲覧ではまとめて読みやすく表示し、「編集」を押した区切りだけを変更する（一度に1つの区切りだけ）。
 // 保存はサーバーで初回登録と同じ確認をする。ログイン用メールアドレス・パスワードの変更は扱わない。
 // デモ用の環境では簡単な表示に加え、生産者だけ「飲食店に伝える連絡先」を編集できる（Producer.contactPhone / contactEmail が正。
 // 更新は既存の /api/approvals（本人の農園だけを更新するサーバーの確認つき）を使う。ログイン用の情報とは別）。
 
-type SeriesOption = { id: string; placeName: string; placeAddress: string; weekday: number; startTime: string; endTime: string; feeYen: number; active: boolean };
+type SeriesOption = { id: string; placeName: string; placeAddress: string; placeKind?: string | null; weekday: number; startTime: string; endTime: string; feeYen: number; active: boolean };
 type View =
   | { role: "restaurant"; profile: RestaurantForm }
   | { role: "producer"; profile: ProducerForm; items: { id: string; name: string }[]; series: SeriesOption[] };
@@ -210,7 +212,7 @@ export default function MyPage() {
   const p = view.profile;
   const f = form as ProducerForm;
   const itemName = (id: string) => view.items.find((i) => i.id === id)?.name ?? "";
-  const seriesText = (id: string) => { const s = view.series.find((x) => x.id === id); return s ? `${s.placeName}（${seriesWhen(s)}）${s.active ? "" : "・受付終了"}` : ""; };
+  const seriesText = (id: string) => { const s = view.series.find((x) => x.id === id); return s ? `${s.placeName}${placeKindLabel(s.placeKind) ? `［${placeKindLabel(s.placeKind)}］` : ""}（${seriesWhen(s)}）${s.active ? "" : "・受付終了"}` : ""; };
   return (
     <main className="screen">
       <h1 className="display">マイページ</h1>
@@ -247,12 +249,13 @@ export default function MyPage() {
       <Section {...sectionProps("ability")} form={<>
         <MultiChoiceGroup name="capabilities" legend="対応できること" optional options={PRODUCER_CAPABILITIES} value={f.capabilities} note="選ばなくても保存できます" onChange={(v) => set({ capabilities: v })} error={errors.capabilities} />
         <MultiChoiceGroup name="seriesIds" legend="参加する受渡枠"
-          options={view.series.map((s) => ({ value: s.id, label: s.placeName, sub: `${seriesWhen(s)}・受渡料金 ${s.feeYen.toLocaleString("ja-JP")}円${s.active ? "" : "・受付終了（参加中のまま残せます）"}` }))}
+          options={view.series.map((s) => ({ value: s.id, label: s.placeName, sub: `${seriesSub(s, seriesWhen(s))}${s.active ? "" : "・受付終了（参加中のまま残せます）"}` }))}
           value={f.seriesIds} note="1つ以上選んでください。外した受渡枠でも、すでに予定に入っている回への参加はそのまま残ります" onChange={(v) => set({ seriesIds: v })} error={errors.seriesIds} />
       </>}>
         <Row label="対応できること">{list(p.capabilities.map((v) => labelOf(PRODUCER_CAPABILITIES, v)))}</Row>
         <Row label="受渡枠">{p.seriesIds.map((id) => <span key={id} className="summary-line">{seriesText(id)}</span>)}</Row>
       </Section>
+      <PickupPointsSection onChanged={() => setLoadTick((t) => t + 1)} />
       <Section {...sectionProps("contact")} form={<>
         <p className="contact-note"><Icon name="info" size={18} />この連絡先は、あなたが「対応できます」と返事をした飲食店だけに表示されます。電話番号かメールアドレスの、どちらか1つは必要です。</p>
         <TextField name="contactPhone" label="電話番号" optional noTag type="tel" inputMode="tel" value={f.contactPhone} onChange={(v) => set({ contactPhone: v })} error={errors.contactPhone} maxLength={LIMITS.phone} />

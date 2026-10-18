@@ -169,6 +169,9 @@ describe("確認画面 → /api/plan", () => {
   it("O: AI 抽出後に利用者が変更した値が /api/plan に送られる", () => {
     const form = formFromDraft(resolveExtraction(demo, catalog, NOW).draft);
     expect(missingFields(form)).toEqual(["slotId", "allowIrregular", "allowMixedVarieties", "allowMixedGrades"]);
+    // 一般向けの環境：受け取り場所は選ばなくてもよい（おまかせ：希望日に受け取れる場所からおすすめを探す）
+    expect(missingFields(form, { autoSlot: true })).toEqual(["allowIrregular", "allowMixedVarieties", "allowMixedGrades"]);
+    expect(form.slotId).toBe("");
     // 利用者が数量を 8kg に、予算を上限なしに変え、未確定の項目を選ぶ
     const edited = { ...form, quantityKg: "8", budgetMode: "none" as const, slotId: "demo-slot-gp", allowIrregular: "no" as const, allowMixedVarieties: "no" as const, allowMixedGrades: "no" as const };
     expect(missingFields(edited)).toEqual([]);

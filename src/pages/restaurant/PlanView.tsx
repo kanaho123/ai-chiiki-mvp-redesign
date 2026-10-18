@@ -6,7 +6,8 @@ import type { Suggestion } from "../../lib/suggest.js";
 import { BottomBar } from "../../components/BottomBar";
 import { Icon } from "../../components/Icon";
 import { exclusionSentence, PLAIN_NOTICE, PLAIN_REASON, rankingSummary } from "./plain-text";
-import type { Freshness, Shown } from "./types";
+import { placeKindLabel } from "../../lib/pickup.js";
+import type { Freshness, PlanOption, Shown } from "./types";
 import { ApprovalPanel } from "./ApprovalPanel";
 
 // STEP 3：仕入れ案（このアプリの主役）。最初に答え（何kg・いくら）と束ね図（どの農家から何kgを束ねたか）と受け取りだけを見せ、
@@ -76,11 +77,25 @@ function Bundle({ plan, stale }: { plan: PlanResult; stale: boolean }) {
   );
 }
 
-export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, onEdit, onSuggestion }: {
+/** 受け取りの見通しの説明（受け渡しの回は1つ＝受け取り1か所。数量・農家数は計算結果から） */
+function pickupReason(plan: PlanResult): string | null {
+  if (plan.allocations.length === 0) return null;
+  if (plan.status !== "MATCHED") return null;
+  return plan.producerCount <= 1 ? "1農家で必要な量を確保できます" : `${plan.producerCount}農家から仕入れますが、同じ場所でまとめて受け取れます`;
+}
+const optionAmount = (o: PlanOption) => (o.status === "MATCHED" ? `${o.fulfilledKg}kg確保` : `${o.fulfilledKg}kgまで（${o.shortageKg}kg不足）`);
+
+export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, onEdit, onSuggestion, options = null, onPickOption }: {
   shown: Shown; freshness: Freshness; busy: boolean; busyLabel: React.ReactNode; error: string | null;
   onRecalc: () => void; onEdit: () => void; onSuggestion: (s: Suggestion) => void;
+  /** 受け取り場所を「おまかせ」にしたときの、場所ごとの案（おすすめ順）。null なら出さない */
+  options?: PlanOption[] | null; onPickOption?: (slotId: string) => void;
 }) {
   const { plan, request } = shown;
+  const currentOption = options?.find((o) => o.slotId === request.slotId) ?? null;
+  const otherOptions = (options ?? []).filter((o) => o.slotId !== request.slotId && o.fulfilledKg > 0).slice(0, 3);
+  const kindLabel = placeKindLabel(currentOption?.placeKind);
+  const reason = pickupReason(plan);
   // 相談の欄が知らせる「マッチ成立」（全農家が「対応できます」・条件が最新）。上部の短い表示だけに使う
   const [matched, setMatched] = useState(false);
   // 古い案・確認中の案は、再計算するまで適合状態（MATCHED）を有効扱いしない
@@ -166,13 +181,38 @@ export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, o
           {hasPlan && plan.slot && (
             <p className="answer-meta">
               <span><Icon name="calendar" size={20} />{formatDateJa(jstDateOf(plan.slot.startAt))} {jstTimeOf(plan.slot.startAt)}〜{jstTimeOf(plan.slot.endAt)}</span>
-              <span><Icon name="pin" size={20} />{plan.slot.placeName}</span>
+              <span><Icon name="pin" size={20} />{plan.slot.placeName}{kindLabel && <span className="place-kind">{kindLabel}</span>}</span>
             </p>
           )}
+          {/* 受け取りの見通し：何か所で受け取るか（今回の案は1つの受渡の回＝1か所）と、その理由 */}
+          {hasPlan && plan.slot && (
+            <p className="pickup-summary">
+              <b>受け取りは1か所です</b>
+              {reason && <span className="pickup-reason">{reason}</span>}
+            </p>
+          )}
+          {currentOption && options && options.length > 1 && <p className="pickup-picked">受け取れる場所 {options.length}か所の中から、おすすめの案を選びました</p>}
           {hasPlan && <p className="answer-tag"><Icon name="info" size={16} />注文前の案・在庫は未確保</p>}
         </section>
 
         {plan.status === "MATCHED" && hasPlan && <ApprovalPanel key={`${shown.fingerprint ?? "legacy"}:${shown.version}`} shown={shown} freshness={freshness} onMatchedChange={setMatched} />}
+
+        {otherOptions.length > 0 && onPickOption && (
+          <section className="alt-options" aria-labelledby="alt-title">
+            <h3 className="block-title" id="alt-title">ほかの受け取り方</h3>
+            <ul>
+              {otherOptions.map((o) => (
+                <li key={o.slotId} className="alt-option">
+                  <span className="alt-place"><b>{o.placeName}</b>{placeKindLabel(o.placeKind) && <span className="place-kind">{placeKindLabel(o.placeKind)}</span>}</span>
+                  <span className="alt-when">{formatDateJa(jstDateOf(o.startAt))} {jstTimeOf(o.startAt)}〜{jstTimeOf(o.endAt)}</span>
+                  <span className="alt-farms">{o.farms.map((x) => `${x.producerName} ${x.kg}kg`).join("＋")}</span>
+                  <span className="alt-sum">{optionAmount(o)}・{o.producerCount}農家・受け取り1か所{o.totalYen !== null && `・${yen(o.totalYen)}`}</span>
+                  <button type="button" className="btn-secondary" disabled={busy} onClick={() => onPickOption(o.slotId)}>この案を見る</button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {!ok && suggestions}
 

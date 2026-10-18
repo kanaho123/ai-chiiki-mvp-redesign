@@ -4,7 +4,7 @@ import { prisma } from "./db.js";
 
 export type CatalogResponse = Catalog & {
   nearbyPrefectures: readonly string[];
-  slots: (Catalog["slots"][number] & { confirmDeadlineAt: string; feeYen: number; feeConfirmed: boolean; maxKg: number })[];
+  slots: (Catalog["slots"][number] & { placeKind: string | null; confirmDeadlineAt: string; feeYen: number; feeConfirmed: boolean; maxKg: number })[];
 };
 
 /** 条件確認に使う登録データ（品目・品種・産地・受渡枠・この店の取引済み農家）。AI には作らせない */
@@ -18,7 +18,7 @@ export async function loadCatalog(restaurantUserId: string): Promise<CatalogResp
   return {
     items: items.map((i) => ({ id: i.id, name: i.name, varieties: i.varieties.map((v) => ({ id: v.id, name: v.name })) })),
     slots: slots.map((s) => ({
-      id: s.id, label: s.label, placeName: s.place.name, placeAddress: s.place.address, startAt: s.startAt.toISOString(), endAt: s.endAt.toISOString(),
+      id: s.id, label: s.label, placeName: s.place.name, placeAddress: s.place.address, placeKind: s.place.kind, startAt: s.startAt.toISOString(), endAt: s.endAt.toISOString(),
       confirmDeadlineAt: s.confirmDeadlineAt.toISOString(), feeYen: s.feeYen, feeConfirmed: s.feeConfirmed, maxKg: s.maxKg,
     })),
     prefectures: PREFECTURES,

@@ -935,3 +935,25 @@ a.inline-link { display: inline-flex; align-items: center; min-height: var(--tap
 /* 仕入れ案の上部：マッチ成立の短い表示（押すと下の「マッチ成立」の欄へ移る）。演出なし */
 .match-jump { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: var(--tap-min); margin: 4px 0 2px; padding: 10px 14px; border: 0; border-radius: var(--r-input); background: var(--color-restaurant-dark); color: #fff; font-size: 18px; font-weight: 800; text-align: left; cursor: pointer; }
 .match-jump-go { display: inline-flex; align-items: center; gap: 4px; font-size: 15px; font-weight: 700; white-space: nowrap; }
+
+/* 受け渡し地点：種類の札（直売所・集荷場など） */
+.place-kind { display: inline-block; margin-left: 6px; padding: 0 8px; border-radius: var(--r-tag); background: var(--color-sunken); color: var(--color-text, #1f1f1f); font-size: 14px; font-weight: 700; line-height: 1.6; vertical-align: middle; }
+/* 仕入れ案：受け取りの見通し（何か所で受け取るか・その理由） */
+.pickup-summary { display: grid; gap: 2px; margin: 4px 0 0; padding: 10px 12px; border-radius: var(--r-input); background: var(--color-restaurant-tint); color: var(--color-restaurant-dark); font-size: 15px; }
+.pickup-summary b { font-size: 17px; }
+.pickup-reason { color: var(--color-text, #1f1f1f); }
+.pickup-picked { margin: 2px 0 0; font-size: 14px; color: var(--color-muted); }
+/* 仕入れ案：ほかの受け取り方（おまかせのときだけ） */
+.alt-options ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.alt-option { display: grid; gap: 4px; padding: 12px 14px; border: 1.5px solid var(--color-line); border-radius: var(--r-input); min-width: 0; font-size: 15px; }
+.alt-place b { font-size: 16px; }
+.alt-when, .alt-farms { color: var(--color-muted); overflow-wrap: anywhere; }
+.alt-sum { font-weight: 700; }
+/* 生産者のマイページ：受け渡し可能地点 */
+.pickup-points { display: grid; gap: 12px; }
+.pickup-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.pickup-item { display: grid; gap: 2px; padding: 12px 0; border-bottom: 1px solid var(--color-line); font-size: 15px; min-width: 0; }
+.pickup-item:last-child { border-bottom: 0; }
+.pickup-name b { font-size: 17px; }
+.pickup-address, .pickup-note { color: var(--color-muted); overflow-wrap: anywhere; }
+.pickup-when { font-weight: 700; }

@@ -1,12 +1,12 @@
 generator client {
-  provider     = "prisma-client"
-  output       = "../server/generated/prisma"
-  moduleFormat = "esm"
+  provider            = "prisma-client"
+  output              = "../server/generated/prisma"
+  moduleFormat        = "esm"
   // 生成する import を必ず ./internal/class.js のように .js 付きにする（Vercel の Node.js（ESM）で読み込めるように。
   // 指定しないと tsconfig の moduleResolution によって拡張子なしになり、本番で ERR_MODULE_NOT_FOUND になる）
   importFileExtension = "js"
   // native: 手元の Windows、rhel-openssl-3.0.x: Vercel Functions（Node.js 22）
-  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+  binaryTargets       = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
@@ -33,48 +33,49 @@ enum SupplyGrade {
 }
 
 model User {
-  id            String         @id @default(cuid())
-  role          UserRole
-  displayName   String
-  loginId       String?        @unique // ログイン用の内部ID。デモは demo-r 等、一般ユーザーは登録時に自動生成（u- で始まる・画面に出さない）
-  passwordHash  String? // scrypt のハッシュ（平文は保存しない）。null ならログイン不可
-  email           String?   @unique // 一般ユーザーのログイン用（小文字に正規化して保存）。デモは null
-  legalAcceptedAt DateTime? // 利用規約・プライバシーポリシーに同意した日時（1つのチェックで両方に同意）
-  termsVersion    String?   // 同意した利用規約の版
-  privacyVersion  String?   // 同意したプライバシーポリシーの版
-  onboardedAt     DateTime? // オンボーディング完了。null ならオンボーディングへ誘導
-  createdAt       DateTime  @default(now())
-  producer      Producer?
-  restaurant    Restaurant?
-  relationships Relationship[]
+  id               String            @id @default(cuid())
+  role             UserRole
+  displayName      String
+  loginId          String?           @unique // ログイン用の内部ID。デモは demo-r 等、一般ユーザーは登録時に自動生成（u- で始まる・画面に出さない）
+  passwordHash     String? // scrypt のハッシュ（平文は保存しない）。null ならログイン不可
+  email            String?           @unique // 一般ユーザーのログイン用（小文字に正規化して保存）。デモは null
+  legalAcceptedAt  DateTime? // 利用規約・プライバシーポリシーに同意した日時（1つのチェックで両方に同意）
+  termsVersion     String? // 同意した利用規約の版
+  privacyVersion   String? // 同意したプライバシーポリシーの版
+  onboardedAt      DateTime? // オンボーディング完了。null ならオンボーディングへ誘導
+  createdAt        DateTime          @default(now())
+  producer         Producer?
+  restaurant       Restaurant?
+  relationships    Relationship[]
   approvalRequests ApprovalRequest[]
 
   @@map("users")
 }
 
 model Producer {
-  id               String            @id @default(cuid())
-  ownerUserId      String            @unique // 1ユーザー1農園（適用前に各DBで重複0件を確認する）
-  owner            User              @relation(fields: [ownerUserId], references: [id])
-  farmName         String
-  originPrefecture String // 産地（都道府県）
-  relationships    Relationship[]
-  slots            SlotParticipant[]
-  supplies         Supply[]
-  contactPhone     String?
-  contactEmail     String?
-  approvalRequests ApprovalRequest[]
+  id                    String                  @id @default(cuid())
+  ownerUserId           String                  @unique // 1ユーザー1農園（適用前に各DBで重複0件を確認する）
+  owner                 User                    @relation(fields: [ownerUserId], references: [id])
+  farmName              String
+  originPrefecture      String // 産地（都道府県）
+  relationships         Relationship[]
+  slots                 SlotParticipant[]
+  supplies              Supply[]
+  contactPhone          String?
+  contactEmail          String?
+  approvalRequests      ApprovalRequest[]
   producerName          String?
   city                  String?
   otherCrops            String? // プロフィール用の自由記入。出品できるのは品目マスタにある品目だけ
   productionStyle       ProductionStyle?
-  salesChannels         SalesChannel[]       @default([])
+  salesChannels         SalesChannel[]          @default([])
   directTradeExperience DirectTradeExperience?
-  capabilities          ProducerCapability[] @default([])
+  capabilities          ProducerCapability[]    @default([])
   mainItems             ProducerItem[]
   seriesMemberships     SlotSeriesParticipant[]
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @default(now()) @updatedAt
+  ownedPlaces           Place[]
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @default(now()) @updatedAt
 
   @@index([ownerUserId]) // 既存の索引は残す（unique と重複するが、削除しないことで追加のみの変更にする）
   @@map("producers")
@@ -216,10 +217,10 @@ model Relationship {
 }
 
 model Item {
-  id        String    @id @default(cuid())
-  name      String    @unique
-  varieties Variety[]
-  supplies  Supply[]
+  id            String         @id @default(cuid())
+  name          String         @unique
+  varieties     Variety[]
+  supplies      Supply[]
   producerItems ProducerItem[]
 
   @@map("items")
@@ -237,13 +238,28 @@ model Variety {
 }
 
 model Place {
-  id      String         @id @default(cuid())
-  name    String
-  address String
-  slots   HandoverSlot[]
-  series  SlotSeries[]
+  id              String         @id @default(cuid())
+  name            String
+  address         String
+  slots           HandoverSlot[]
+  series          SlotSeries[]
+  // 生産者が登録した受け渡し地点（普段の出荷・移動のついでに受け渡せる場所）。運営が用意した拠点はすべて null のまま
+  kind            PlaceKind?
+  note            String?
+  ownerProducerId String?
+  owner           Producer?      @relation(fields: [ownerProducerId], references: [id], onDelete: Restrict)
 
+  @@index([ownerProducerId])
   @@map("places")
+}
+
+/// 生産者が登録した受け渡し地点の種類
+enum PlaceKind {
+  direct_store // 直売所
+  collection_point // 集荷場
+  shipping_destination // 出荷先
+  farm // 農園
+  other // その他
 }
 
 // 共通受渡枠。費用は「同じ枠を使う1案に一回」の税込固定費のみ。
@@ -344,11 +360,11 @@ model Supply {
 // ログイン失敗の記録（総当たり対策）。サーバーレスでもインスタンス間で共有するため DB に置く。
 // key は「ログイン名|接続元」または「ip:接続元」。パスワード等は保存しない
 model AuthThrottle {
-  key         String   @id
+  key         String    @id
   failures    Int
   firstAt     DateTime
   lockedUntil DateTime?
-  updatedAt   DateTime @updatedAt
+  updatedAt   DateTime  @updatedAt
 
   @@map("auth_throttles")
 }
@@ -361,11 +377,11 @@ enum ApprovalStatus {
 
 // A confirmation to discuss directly, never an order or inventory reservation.
 model ApprovalRequest {
-  id              String @id @default(cuid())
+  id              String         @id @default(cuid())
   restaurantId    String
-  restaurant      User @relation(fields: [restaurantId], references: [id])
+  restaurant      User           @relation(fields: [restaurantId], references: [id])
   producerId      String
-  producer        Producer @relation(fields: [producerId], references: [id])
+  producer        Producer       @relation(fields: [producerId], references: [id])
   supplyId        String
   planFingerprint String
   planVersion     String
@@ -378,7 +394,7 @@ model ApprovalRequest {
   pickupEndAt     DateTime
   pickupPlace     String
   status          ApprovalStatus @default(pending)
-  createdAt       DateTime @default(now())
+  createdAt       DateTime       @default(now())
   respondedAt     DateTime?
 
   @@unique([restaurantId, supplyId, planFingerprint])

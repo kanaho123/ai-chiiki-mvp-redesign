@@ -18,9 +18,11 @@
     { "source": "/api/me", "destination": "/api/account?__path=/api/me" },
     { "source": "/api/inbox", "destination": "/api/account?__path=/api/inbox" },
     { "source": "/api/profile", "destination": "/api/account?__path=/api/profile" },
+    { "source": "/api/pickup-points", "destination": "/api/account?__path=/api/pickup-points" },
     { "source": "/api/catalog", "destination": "/api/purchase?__path=/api/catalog" },
     { "source": "/api/inventory-version", "destination": "/api/purchase?__path=/api/inventory-version" },
     { "source": "/api/plan", "destination": "/api/purchase?__path=/api/plan" },
+    { "source": "/api/plan-options", "destination": "/api/purchase?__path=/api/plan-options" },
     { "source": "/((?!api(?:/|$)|assets/).*)", "destination": "/index.html" }
   ],
   "headers": [

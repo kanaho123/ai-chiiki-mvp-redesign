@@ -13,7 +13,7 @@ type Db = Pick<PrismaClient, "$transaction" | "restaurant" | "producer" | "item"
 type Tx = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
 const s = (v: string | null | undefined) => v ?? "";
 
-export type SeriesOption = { id: string; placeName: string; placeAddress: string; weekday: number; startTime: string; endTime: string; feeYen: number; active: boolean };
+export type SeriesOption = { id: string; placeName: string; placeAddress: string; placeKind: string | null; weekday: number; startTime: string; endTime: string; feeYen: number; active: boolean };
 export type ProfileView =
   | { role: "restaurant"; profile: RestaurantForm }
   | { role: "producer"; profile: ProducerForm; items: { id: string; name: string }[]; series: SeriesOption[] };
@@ -41,7 +41,7 @@ export async function loadProfile(db: Db, user: { id: string; role: "restaurant"
     db.item.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
     db.slotSeries.findMany({
       where: { OR: [{ active: true }, { id: { in: joined } }] },
-      select: { id: true, weekday: true, startTime: true, endTime: true, feeYen: true, active: true, place: { select: { name: true, address: true } } },
+      select: { id: true, weekday: true, startTime: true, endTime: true, feeYen: true, active: true, place: { select: { name: true, address: true, kind: true } } },
       orderBy: [{ weekday: "asc" }, { startTime: "asc" }],
     }),
   ]);
@@ -54,7 +54,7 @@ export async function loadProfile(db: Db, user: { id: string; role: "restaurant"
       seriesIds: joined, contactPhone: s(p.contactPhone), contactEmail: s(p.contactEmail),
     },
     items,
-    series: series.map((x) => ({ id: x.id, placeName: x.place.name, placeAddress: x.place.address, weekday: x.weekday, startTime: x.startTime, endTime: x.endTime, feeYen: x.feeYen, active: x.active })),
+    series: series.map((x) => ({ id: x.id, placeName: x.place.name, placeAddress: x.place.address, placeKind: x.place.kind, weekday: x.weekday, startTime: x.startTime, endTime: x.endTime, feeYen: x.feeYen, active: x.active })),
   };
 }
 

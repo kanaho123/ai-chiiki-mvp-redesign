@@ -7,7 +7,8 @@ import type { Suggestion } from "../lib/suggest.js";
 import { PlanView } from "./restaurant/PlanView";
 import { StepConfirm } from "./restaurant/StepConfirm";
 import { StepInput } from "./restaurant/StepInput";
-import type { CatalogData, ExtractResult, Freshness, Shown, Step } from "./restaurant/types";
+import type { CatalogData, ExtractResult, Freshness, PlanOption, Shown, Step } from "./restaurant/types";
+import { useSession } from "../routes/session";
 
 // 飲食店の仕入れ案：STEP 1 希望を入力 → STEP 2 条件を確認 → STEP 3 仕入れ案を見る。
 // AI は STEP 1→2 で条件の候補を読み取るだけ。計算は確定した条件で /api/plan（通常ロジック）が行う。
@@ -64,6 +65,9 @@ export default function RestaurantPage({ me }: { me: Me }) {
   const [restored, setRestored] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const extractAbort = useRef<AbortController | null>(null);
+  // 受け取り場所を「おまかせ」にしたときの、希望日に受け取れる場所ごとの案（おすすめ順）。表示中の案はその中の1つ
+  const [planOptions, setPlanOptions] = useState<PlanOption[] | null>(null);
+  const autoSlot = useSession().appMode === "general"; // 「おまかせ」は一般向けの環境だけ
 
   useEffect(() => {
     const saved = load(me.id);
@@ -182,10 +186,53 @@ export default function RestaurantPage({ me }: { me: Me }) {
     }
   }
 
+  /**
+   * STEP 2 → 3：受け取り場所を選んでいれば、そのまま /api/plan。
+   * 「おまかせ」なら、まず希望日に受け取れる場所ごとの案を /api/plan-options で並べ、いちばん上の場所で既存の /api/plan を計算する
+   */
+  async function submitConditions() {
+    const body = toPlanBody(form);
+    if (form.slotId || !autoSlot) {
+      setPlanOptions(null);
+      return requestPlan(body);
+    }
+    setBusy(true);
+    setError(null);
+    let options: PlanOption[] = [];
+    try {
+      const r = await fetch("/api/plan-options", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const d = await r.json();
+      if (!r.ok) {
+        setError(d.error ?? "条件を読み取れません");
+        setBusy(false);
+        return;
+      }
+      options = d.options ?? [];
+    } catch {
+      setError("通信に失敗しました。もう一度お試しください");
+      setBusy(false);
+      return;
+    }
+    if (options.length === 0) {
+      setError("この日に受け取れる出品が見つかりませんでした。日付や品目を変えてお試しください");
+      setBusy(false);
+      return;
+    }
+    setPlanOptions(options);
+    await requestPlan({ ...body, slotId: options[0].slotId });
+  }
+
+  /** 結果画面の「ほかの受け取り方」から、別の場所の案を既存の /api/plan で計算する */
+  function pickOption(slotId: string) {
+    if (!shown) return;
+    void requestPlan({ ...shown.request, slotId });
+  }
+
   /** 結果 → 条件確認（自動で条件を変えない。候補を選んだ場合もフォームに反映するだけ） */
   function editConditions(s?: Suggestion) {
     if (!shown) return setStep("confirm");
-    const base = formFromRequest(shown.request);
+    // 「おまかせ」で選んだ場所なら、条件を変えたあとも「おまかせ」のまま探し直す
+    const base = { ...formFromRequest(shown.request), ...(planOptions && { slotId: "" }) };
     const c = s?.change ?? {};
     setForm({
       ...base,
@@ -228,12 +275,13 @@ export default function RestaurantPage({ me }: { me: Me }) {
 
       {step === "confirm" && catalog && (
         <StepConfirm form={form} setForm={setForm} catalog={catalog} extraction={extraction} sourceText={text} aiFields={aiFields}
-          busy={busy} error={error} notice={notice} onSubmit={() => requestPlan(toPlanBody(form))} onBack={() => { setError(null); setStep("input"); top(); }} />
+          busy={busy} error={error} notice={notice} onSubmit={submitConditions} onBack={() => { setError(null); setStep("input"); top(); }} />
       )}
 
       {step === "result" && shown && (
         <PlanView shown={shown} freshness={freshness} busy={busy} busyLabel={busyLabel} error={error}
-          onRecalc={() => requestPlan(shown.request)} onEdit={() => editConditions()} onSuggestion={editConditions} />
+          onRecalc={() => requestPlan(shown.request)} onEdit={() => editConditions()} onSuggestion={editConditions}
+          options={planOptions} onPickOption={pickOption} />
       )}
     </main>
   );

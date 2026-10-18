@@ -7,6 +7,7 @@ import {
 } from "../../lib/onboarding";
 import { homeOf, PATHS } from "../../routes/paths";
 import { useMe, useSession } from "../../routes/session";
+import { seriesSub } from "../../lib/pickup";
 import { ChoiceGroup, FieldError, focusFirstError, MultiChoiceGroup, PrefectureField, StepFrame, StyleText, SummaryRow, TextField, useDraft, WELCOME_KEY } from "./parts";
 
 // 生産者の初回登録：1 農園について → 2 作っているもの・販売 → 3 できること・受渡 → 4 連絡先と確認（あなたの販売スタイル）。
@@ -15,7 +16,7 @@ import { ChoiceGroup, FieldError, focusFirstError, MultiChoiceGroup, PrefectureF
 const BASE = PATHS.onboarding.producer;
 const TOTAL = PRODUCER_STEPS.length;
 type Errors = Partial<Record<ProducerField, string>>;
-type Master = { items: { id: string; name: string }[]; series: { id: string; placeName: string; placeAddress: string; weekday: number; startTime: string; endTime: string; feeYen: number }[] };
+type Master = { items: { id: string; name: string }[]; series: { id: string; placeName: string; placeAddress: string; placeKind?: string | null; weekday: number; startTime: string; endTime: string; feeYen: number }[] };
 
 export default function ProducerOnboarding() {
   const me = useMe();
@@ -140,7 +141,7 @@ export default function ProducerOnboarding() {
       {masterNote}
       {master && (
         <MultiChoiceGroup name="seriesIds" legend="参加する受渡枠"
-          options={master.series.map((s) => ({ value: s.id, label: s.placeName, sub: `${seriesWhen(s)}・受渡料金 ${s.feeYen.toLocaleString("ja-JP")}円` }))}
+          options={master.series.map((s) => ({ value: s.id, label: s.placeName, sub: seriesSub(s, seriesWhen(s)) }))}
           value={form.seriesIds} note="飲食店への受け渡しは、運営が用意した受渡枠で行います。1つ以上選んでください"
           onChange={(v) => update({ seriesIds: v })} error={errors.seriesIds} />
       )}

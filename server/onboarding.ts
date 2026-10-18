@@ -107,12 +107,13 @@ export async function producerOnboardingMaster(db: Pick<PrismaClient, "item" | "
     db.item.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
     db.slotSeries.findMany({
       where: { active: true },
-      select: { id: true, weekday: true, startTime: true, endTime: true, feeYen: true, place: { select: { name: true, address: true } } },
+      select: { id: true, weekday: true, startTime: true, endTime: true, feeYen: true, place: { select: { name: true, address: true, kind: true } } },
       orderBy: [{ weekday: "asc" }, { startTime: "asc" }],
     }),
   ]);
   return {
     items,
-    series: series.map((s) => ({ id: s.id, placeName: s.place.name, placeAddress: s.place.address, weekday: s.weekday, startTime: s.startTime, endTime: s.endTime, feeYen: s.feeYen })),
+    // placeKind：生産者が登録した受け渡し地点なら種類（直売所など）。運営が用意した拠点は null
+    series: series.map((s) => ({ id: s.id, placeName: s.place.name, placeAddress: s.place.address, placeKind: s.place.kind, weekday: s.weekday, startTime: s.startTime, endTime: s.endTime, feeYen: s.feeYen })),
   };
 }

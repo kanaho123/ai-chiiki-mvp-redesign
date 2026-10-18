@@ -4,6 +4,7 @@ import { missingFields, type RequestForm, type YesNo } from "../../lib/request-f
 import type { DraftField } from "../../lib/resolve.js";
 import { BottomBar } from "../../components/BottomBar";
 import { Icon, type IconName } from "../../components/Icon";
+import { useSession } from "../../routes/session";
 import { plainResolveNotice } from "./plain-text";
 import type { CatalogData, ExtractResult } from "./types";
 
@@ -36,7 +37,9 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, ai
   const set = <K extends keyof RequestForm>(k: K, v: RequestForm[K]) => setForm({ ...form, [k]: v });
   const item = catalog.items.find((i) => i.id === form.itemId);
   const today = jstDate(0, new Date(catalog.now));
-  const missing = missingFields(form);
+  // 一般向けの環境だけ、受け取り場所は「おまかせ」にできる（デモ用の環境は従来どおり選ぶ）
+  const autoSlot = useSession().appMode === "general";
+  const missing = missingFields(form, { autoSlot });
   const prefs = [...new Set([...catalog.nearbyPrefectures, ...form.originPrefectures])];
   const dateCands = extraction?.candidateMatches.desiredDate ?? [];
   const slotCands = new Set((extraction?.candidateMatches.slotId ?? []).map((c) => c.id));
@@ -123,11 +126,20 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, ai
     },
     {
       key: "slot", label: "受け取り時間と場所", icon: "truck", f: ["slotId"], wide: true,
-      value: slot ? `${jstTimeOf(slot.startAt)}〜${jstTimeOf(slot.endAt)}・${slot.placeName}` : "",
+      // 選ばなければ「おまかせ」：希望日に受け取れる場所から、必要量を確保できて受け取りがまとまる案を探す
+      value: slot ? `${jstTimeOf(slot.startAt)}〜${jstTimeOf(slot.endAt)}・${slot.placeName}` : autoSlot ? "おまかせ（おすすめを探します）" : "",
       editor: () => slots.length === 0 ? (
         <p className="item-help">{form.desiredDate ? "この日に受け取れる時間と場所はありません。日付を確認してください。" : "先に受け取り日を選んでください。"}</p>
       ) : (
         <div className="option-cards" role="radiogroup" aria-label="受け取り時間と場所">
+          {autoSlot && <label className="option-card">
+            <input type="radio" name="slot" checked={form.slotId === ""} onChange={() => set("slotId", "")} />
+            <span className="tick" aria-hidden="true"><Icon name="check" size={16} /></span>
+            <span>
+              <b>おまかせ</b>
+              <small>この日に受け取れる場所から、必要な量を確保でき、受け取りがまとまる案を探します</small>
+            </span>
+          </label>}
           {slots.map((s) => (
             <label key={s.id} className="option-card">
               <input type="radio" name="slot" checked={form.slotId === s.id} onChange={() => set("slotId", s.id)} />
