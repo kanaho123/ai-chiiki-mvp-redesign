@@ -5,7 +5,8 @@ import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppRoutes } from "../App";
 import { ApiError, confirmationApi, ERROR_TEXT, friendlyError } from "../lib/confirmation-api";
-import { hasUndecidedOperatorInfo, OPERATOR, PRIVACY_VERSION, TERMS_VERSION } from "../lib/legal";
+import { hasUndecidedOperatorInfo, isDraftVersion, OPERATOR, PRIVACY_VERSION, TERMS_VERSION } from "../lib/legal";
+import * as serverLegal from "../../server/legal";
 import { appUrl, demoEntryUrl, generalHomeUrl } from "../routes/paths";
 import { SessionProvider, type Me } from "../routes/session";
 
@@ -70,7 +71,9 @@ describe("利用規約・プライバシーポリシー", () => {
     expect(path).toBe(at);
     expect(el.querySelector("main h1")?.textContent).toBe(title);
     expect(text()).toContain(version);
-    expect(text()).toContain("公開前の案"); // 版が -draft の間
+    expect(text()).not.toContain("公開前の案"); // 公開用の版（-draft ではない）
+    expect(text()).toContain("AI BOOTCAMP の最終課題として開発した、実証・試験運用の段階の Web サービス");
+    expect(text()).toContain(`施行日：${OPERATOR.effectiveDate}`);
     expect(el.querySelector(".bottom-nav")).toBeNull();
   });
   it("ログイン中でも読める（ホームへ戻されない）", async () => {
@@ -89,13 +92,43 @@ describe("利用規約・プライバシーポリシー", () => {
     expect(t).toContain("AI が取引や注文を決めることはありません");
     expect(t).toContain("ハッシュ");
     expect(t).toContain("仕入れ案の計算やおすすめには使っていません");
+    expect(t).toContain("本サービスの提供・運営に必要な期間保存します");
+    expect(t).toContain("アプリ内から利用者自身で退会・削除する機能はありません");
+    expect(t).not.toContain("アカウントを削除するまで保存します");
     expect(t).not.toMatch(/AIが(注文|取引)を(確定|決定)します/);
   });
-  it("運営者の情報は推測で埋めず【未定：…】のまま表示する", async () => {
+  it("利用規約の料金：現在無料・決済機能なし・受渡料金は受渡条件として表示し請求しない", async () => {
     await open("/terms");
-    expect(text()).toContain(OPERATOR.name);
-    expect(text()).toContain(OPERATOR.contact);
-    expect(hasUndecidedOperatorInfo()).toBe(true); // 公開前に運営者が記入する（まだ決まっていない）
+    const t = text();
+    expect(t).toContain("本サービスの利用料金は現在無料です");
+    expect(t).toContain("本サービス上に決済機能はありません");
+    expect(t).toContain("受渡枠に表示される料金は受渡条件として表示するもので、本サービスから利用者へ請求・決済を行うものではありません");
+    expect(t).toContain("実際の取引に伴う費用については、当事者間でご確認ください");
+    expect(t).not.toContain("管轄");
+  });
+  it("運営者の情報は確定したものを表示し、【未定】の表記は公開画面に残さない", async () => {
+    expect(OPERATOR).toEqual({ name: "beyond the past", contact: "ka77o@icloud.com", effectiveDate: "2026年10月18日" });
+    expect(hasUndecidedOperatorInfo()).toBe(false);
+    for (const at of ["/terms", "/privacy", "/login", "/signup"]) {
+      await open(at);
+      expect(text(), at).not.toMatch(/未定|【/);
+      expect(text(), at).not.toMatch(/専門家(の|による)?確認(済み|を受けた)|法的に(完全|問題ない)/);
+      if (at !== "/signup") {
+        expect(text(), at).toContain(OPERATOR.contact);
+        expect(el.querySelector(`a[href="mailto:${OPERATOR.contact}"]`), at).not.toBeNull();
+      }
+      if (at === "/terms" || at === "/privacy") expect(text()).toContain(OPERATOR.name);
+      act(() => root?.unmount());
+      root = null;
+      el.remove();
+    }
+  });
+  it("規約の版：公開用の版で、新規登録の同意として記録する版（サーバー）と同じ", () => {
+    expect(TERMS_VERSION).toBe("2026-10-18");
+    expect(PRIVACY_VERSION).toBe("2026-10-18");
+    expect(isDraftVersion(TERMS_VERSION) || isDraftVersion(PRIVACY_VERSION)).toBe(false);
+    expect(serverLegal.TERMS_VERSION).toBe(TERMS_VERSION);
+    expect(serverLegal.PRIVACY_VERSION).toBe(PRIVACY_VERSION);
   });
   it("パスワードを忘れたとき：送信していないメールを送ったとは書かない", async () => {
     await open("/login");

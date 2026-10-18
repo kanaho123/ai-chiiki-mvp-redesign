@@ -105,7 +105,7 @@ export function Login() {
       </form>
       <details className="more-info">
         <summary>パスワードを忘れた方</summary>
-        <p className="hint">いまは、画面やメールでパスワードを設定し直す機能はありません。お手数ですが、{OPERATOR.contact} までご連絡ください。</p>
+        <p className="hint">いまは、画面やメールでパスワードを設定し直す機能はありません。お手数ですが、<a href={`mailto:${OPERATOR.contact}`}>{OPERATOR.contact}</a> までご連絡ください。</p>
       </details>
       <p className="guest-switch">はじめての方は <Link to={PATHS.signup}>新規登録</Link></p>
     </main>
