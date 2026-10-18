@@ -12,6 +12,7 @@ import {
 import { useMe, useSession } from "../../routes/session";
 import { ChoiceGroup, focusFirstError, MultiChoiceGroup, PrefectureField, StyleText, TextField } from "../onboarding/parts";
 import { ErrorRetry } from "./ErrorRetry";
+import { ListingsSummary } from "./ListingsSummary";
 
 // マイページ：閲覧ではまとめて読みやすく表示し、「編集」を押した区切りだけを変更する（一度に1つの区切りだけ）。
 // 保存はサーバーで初回登録と同じ確認をする。ログイン用メールアドレス・パスワードの変更は扱わない。
@@ -102,6 +103,7 @@ export default function MyPage() {
           <div><dt>使い方</dt><dd>{ROLE_TEXT[me.role]}</dd></div>
           <div><dt>{me.role === "producer" ? "農園名" : "店舗名"}</dt><dd>{nameOf(me)}</dd></div>
         </dl>
+        {me.role === "producer" && <ListingsSummary />}
         {!general && me.role === "producer" && <DemoContactSection />}
         {logoutButton}
       </main>
@@ -213,6 +215,7 @@ export default function MyPage() {
     <main className="screen">
       <h1 className="display">マイページ</h1>
       {message && <div className={`alert ${message.tone}`} role={message.tone === "bad" ? "alert" : "status"}><Icon name={message.tone === "ok" ? "check" : "alert"} />{message.text}</div>}
+      <ListingsSummary />
       <section className="style-card" aria-label="あなたの販売スタイル">
         <span className="eyebrow">あなたの販売スタイル</span>
         <StyleText text={producerStyle(p)} />

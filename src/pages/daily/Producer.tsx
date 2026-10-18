@@ -2,7 +2,8 @@ import { useRef, useState } from "react";
 import { Link } from "react-router";
 import { nameOf } from "../../components/AppShell";
 import { Icon } from "../../components/Icon";
-import { classifyRequests, confirmationLabel, type Confirmation } from "../../lib/approvals";
+import { classifyRequests, conditionChips, confirmationLabel, type Confirmation } from "../../lib/approvals";
+import { formatDateJa } from "../../lib/dates";
 import { confirmationApi, friendlyError } from "../../lib/confirmation-api";
 import { useInbox } from "../../routes/inbox";
 import { PATHS } from "../../routes/paths";
@@ -14,14 +15,22 @@ import { useConfirmations, useSupplies, whenText, yen } from "./data";
 // 生産者のホームと「依頼」。新しい相談は、ベルではなくホームの最上部と下部ナビの数で知らせる。
 // ボタンは「対応できます」「今回は対応できません」（「承認」「NG」などの言葉は使わない）。
 
-/** 相談1件の内容（飲食店・品目・数量・金額・受け渡し） */
+/** 相談1件の内容（飲食店・品目・数量・希望日・金額・受け渡し・飲食店の仕入れ条件）。条件は依頼のときに保存したものだけを出す */
 function RequestBody({ r }: { r: Confirmation }) {
+  const c = r.conditions;
   return (
     <>
       <div className="farm-head"><b>{r.restaurantName}</b><span className={`state-tag state-farm-${r.status}`}>{confirmationLabel[r.status]}</span></div>
       <p className="request-what">{r.itemName} {r.quantityKg}kg</p>
+      {c && c.requestedKg !== r.quantityKg && <p className="farm-detail">飲食店が必要な量 {c.requestedKg}kg のうち、あなたへの相談は {r.quantityKg}kg</p>}
+      {c && <p className="farm-detail">希望日：{formatDateJa(c.desiredDate)}</p>}
       <p className="farm-detail">{yen(r.priceYenPerKg)}/kg・商品代 {yen(r.subtotalYen)}（税込・受渡費別）</p>
       <p className="farm-detail">{whenText(r.pickupStartAt, r.pickupEndAt)}・{r.pickupPlace}</p>
+      {c && conditionChips(c).length > 0 && (
+        <ul className="request-conds" aria-label="飲食店の仕入れ条件">
+          {conditionChips(c).map((x) => <li key={x.label}><span>{x.label}</span><b>{x.value}</b></li>)}
+        </ul>
+      )}
     </>
   );
 }

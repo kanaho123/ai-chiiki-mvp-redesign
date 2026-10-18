@@ -7,7 +7,7 @@ import { loadPlanInputs } from "./plan-data.js";
 import { planFingerprint } from "./plan-fingerprint.js";
 import { serverNow } from "./clock.js";
 import { handle, json } from "./http.js";
-import type { Confirmation, Contact } from "../src/lib/approvals.js";
+import type { Confirmation, Contact, RequestConditions } from "../src/lib/approvals.js";
 
 export class ApprovalProblem extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -57,6 +57,24 @@ async function isCurrent(tx: Tx, row: ApprovalRequest, snapshots?: Snapshots) {
 
 const listInclude = { restaurant: { select: { displayName: true } }, producer: { select: { farmName: true } } } as const;
 type Listed = ApprovalRequest & { restaurant: { displayName: string }; producer: { farmName: string } };
+
+/**
+ * 依頼のときに保存した仕入れ条件（planRequest）のうち、相手に見せてよいものだけを取り出す。
+ * 予算・優先したい農家は飲食店の内部の条件なので出さない。形が想定と違えば null（画面は条件を出さないだけ）。
+ */
+function requestConditions(raw: Prisma.JsonValue): RequestConditions | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  const bool = (v: unknown) => (typeof v === "boolean" ? v : null);
+  if (typeof r.quantityKg !== "number" || typeof r.desiredDate !== "string") return null;
+  return {
+    requestedKg: r.quantityKg, desiredDate: r.desiredDate,
+    originPrefectures: Array.isArray(r.originPrefectures) ? r.originPrefectures.filter((p): p is string => typeof p === "string") : [],
+    allowIrregular: bool(r.allowIrregular), allowFirstTime: bool(r.allowFirstTime),
+    allowMixedVarieties: bool(r.allowMixedVarieties), allowMixedGrades: bool(r.allowMixedGrades),
+  };
+}
+
 function view(row: Listed, current: boolean): Confirmation {
   return {
     id: row.id, supplyId: row.supplyId, producerName: row.producer.farmName, restaurantName: row.restaurant.displayName,
@@ -64,6 +82,7 @@ function view(row: Listed, current: boolean): Confirmation {
     priceYenPerKg: row.priceYenPerKg, subtotalYen: row.subtotalYen,
     pickupStartAt: row.pickupStartAt.toISOString(), pickupEndAt: row.pickupEndAt.toISOString(), pickupPlace: row.pickupPlace,
     status: current ? row.status : "stale", createdAt: row.createdAt.toISOString(),
+    conditions: requestConditions(row.planRequest),
   };
 }
 

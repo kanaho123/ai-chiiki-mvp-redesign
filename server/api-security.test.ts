@@ -10,9 +10,9 @@ const db = vi.hoisted(() => ({
 }));
 
 vi.mock("./repo.js", () => {
-  const view = (s: { id: string; producerId: string; availableKg: number; published: boolean; version: number }): SupplyView => ({
+  const view = (s: { id: string; producerId: string; availableKg: number; priceYenPerKg?: number; published: boolean; version: number }): SupplyView => ({
     id: s.id, producerId: s.producerId, item: { id: "tomato", name: "トマト" }, variety: { id: "v1", name: "品種T" }, grade: "regular",
-    irregularReason: null, originPrefecture: "大阪府", availableKg: s.availableKg, priceYenPerKg: 600, minKg: 1,
+    irregularReason: null, originPrefecture: "大阪府", availableKg: s.availableKg, priceYenPerKg: s.priceYenPerKg ?? 600, minKg: 1,
     slot: { id: "gp", label: "G-P", placeName: "P", startAt: "2026-10-23T01:00:00.000Z", endAt: "2026-10-23T02:00:00.000Z" },
     published: s.published, version: s.version, updatedAt: "2026-10-22T00:00:00.000Z",
   });
@@ -28,7 +28,7 @@ vi.mock("./repo.js", () => {
       listOwnSupplies: async (producerId: string) => [...db.supplies.values()].filter((s) => s.producerId === producerId).map(view),
       findSupplyOwner: async (id: string) => db.supplies.get(id) ?? null,
       getSupply: async (id: string) => (db.supplies.has(id) ? view(db.supplies.get(id)!) : null),
-      updateSupplyIfVersion: async (id: string, version: number, data: { availableKg?: number; published?: boolean }) => {
+      updateSupplyIfVersion: async (id: string, version: number, data: { availableKg?: number; priceYenPerKg?: number; published?: boolean }) => {
         const s = db.supplies.get(id);
         if (!s || s.version !== version) return null;
         Object.assign(s, data, { version: s.version + 1 });
@@ -113,11 +113,21 @@ describe("ログイン・権限（Phase 3 セキュリティテスト）", () =>
     expect(r.status).toBe(200);
     const d = await r.json();
     expect(d.supply).toMatchObject({ availableKg: 5, version: 4 });
-    expect(d.before).toEqual({ availableKg: 10, published: true });
+    expect(d.before).toEqual({ availableKg: 10, priceYenPerKg: expect.any(Number), published: true });
     // 公開停止は削除ではなく published=false。数量0とは別状態
     const p = await patchSupply("s-a", { version: 4, published: false }, cookieOf("u-a"));
     expect((await p.json()).supply).toMatchObject({ availableKg: 5, published: false, version: 5 });
     expect(db.supplies.has("s-a")).toBe(true);
+  });
+
+  it("C'': 価格も変更でき、version が +1 される（その在庫を使った案・相談は古くなる）", async () => {
+    const r = await patchSupply("s-a", { version: 3, priceYenPerKg: 650 }, cookieOf("u-a"));
+    expect(r.status).toBe(200);
+    const d = await r.json();
+    expect(d.supply).toMatchObject({ priceYenPerKg: 650, version: 4 });
+    expect((await patchSupply("s-a", { version: 3, priceYenPerKg: 700 }, cookieOf("u-a"))).status).toBe(409); // 古い version では上書きしない
+    expect((await patchSupply("s-a", { version: 4, priceYenPerKg: 0 }, cookieOf("u-a"))).status).toBe(400);
+    expect((await patchSupply("s-a", { version: 4, priceYenPerKg: 700 }, cookieOf("u-r"))).status).toBe(403);
   });
 
   it("C': 一覧は本人の供給だけを返す", async () => {

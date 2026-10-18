@@ -3,6 +3,7 @@ import type { Confirmation, Contact } from "../../lib/approvals";
 import { STALE_RECHECK, confirmationLabel, farmNames, isMatched, overallConfirmation } from "../../lib/approvals";
 import { confirmationApi, friendlyError } from "../../lib/confirmation-api";
 import { MatchBanner } from "./MatchBanner";
+import { ProgressSteps } from "./ProgressSteps";
 import type { Freshness, Shown } from "./types";
 
 export function ApprovalPanel({ shown, freshness }: { shown: Shown; freshness: Freshness }) {
@@ -64,6 +65,7 @@ export function ApprovalPanel({ shown, freshness }: { shown: Shown; freshness: F
     <h3 className="block-title" id="confirm-producers-title">生産者に仕入れ相談する</h3>
     <p className="hint">この仕入れ案の農家（{names}）に、この条件で相談できるか確認します。「対応できます」の返事は注文確定ではなく、在庫も確保されません。</p>
     {!current ? <p role="status">{freshness === "stale" ? STALE_RECHECK : "最新の仕入れ案を計算してから確認してください。以前の返事は使いません。"}</p> : <>
+      {rows && rows.length > 0 && <ProgressSteps farms={rows} />}
       {matched
         ? <MatchBanner farms={rows!} onContactError={refresh} />
         : <p className="confirmation-overall" role="status">{rows ? overallConfirmation(rows) : error ? "確認状態を取得できません" : "確認状態を読み込み中…"}</p>}

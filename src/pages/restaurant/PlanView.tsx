@@ -181,7 +181,7 @@ export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, o
                     </span>
                     <span className="farm-amount num"><Num stale={stale}>{yen(a.subtotalYen)}</Num></span>
                     <span className="farm-calc num">{a.kg}kg × {yen(a.priceYenPerKg)}</span>
-                    {a.irregularReason && <span className="farm-note">規格外（{a.irregularReason}）</span>}
+                    {(a.grade === "irregular" || a.irregularReason) && <span className="farm-note">規格外{a.irregularReason ? `（${a.irregularReason}）` : ""}</span>}
                     {!a.participationConfirmed && <span className="farm-note caution-text">受け取りへの参加確認が必要</span>}
                   </li>
                 ))}

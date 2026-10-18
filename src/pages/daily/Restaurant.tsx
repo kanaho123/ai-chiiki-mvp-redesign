@@ -7,6 +7,7 @@ import {
 } from "../../lib/approvals";
 import { confirmationApi, friendlyError } from "../../lib/confirmation-api";
 import { MatchBanner } from "../restaurant/MatchBanner";
+import { ProgressSteps } from "../restaurant/ProgressSteps";
 import { PATHS } from "../../routes/paths";
 import { useMe } from "../../routes/session";
 import { ErrorRetry } from "./ErrorRetry";
@@ -33,6 +34,7 @@ function ConsultationCard({ c }: { c: Consultation }) {
           <StatusTag status={c.status} />
         </span>
         <span className="consult-when">{whenText(c.pickupStartAt, c.pickupEndAt)}・{c.pickupPlace}</span>
+        <ProgressSteps farms={c.farms} compact />
         <span className="consult-farms">
           {c.farms.map((f) => <span key={f.id} className={`farm-line farm-${f.status}`}>{f.producerName}：{confirmationLabel[f.status]}</span>)}
         </span>
@@ -149,6 +151,7 @@ export function RestaurantConsultationDetail() {
             <p className="consult-when">{whenText(c.pickupStartAt, c.pickupEndAt)}・{c.pickupPlace}</p>
             <p><StatusTag status={c.status} /></p>
           </div>
+          <ProgressSteps farms={c.farms} />
           {isMatched(c.farms)
             ? <MatchBanner farms={c.farms} onContactError={reload} />
             : <p className="hint">「対応できます」は注文の確定ではありません。受け渡しの詳細や最終確認は、農家と直接相談して決めてください。</p>}

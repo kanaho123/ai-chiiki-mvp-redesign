@@ -3,7 +3,8 @@ import type { Me } from "../App";
 import { formatJstDateTime, jstTimeOf } from "../lib/dates.js";
 import { Icon } from "../components/Icon";
 
-// 生産者本人の供給一覧。主な操作は「数量を変更」と「公開停止／再開」。
+// 生産者本人の供給一覧。主な操作は「数量を変更」「価格を変更」と「公開停止／再開」。
+// どの変更でも version が上がり、その在庫を使った仕入れ案・相談は「条件が変わりました」になる（サーバーの既存の判定）。
 // 権限（本人の供給か）と競合（version）はサーバーで確認する。
 
 type Supply = {
@@ -33,7 +34,7 @@ async function send(url: string, method: string, body: unknown) {
   try {
     const r = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const d = await r.json().catch(() => ({}));
-    return { ok: r.ok, status: r.status, data: d as { error?: string; supply?: Supply; before?: { availableKg: number; published: boolean } } };
+    return { ok: r.ok, status: r.status, data: d as { error?: string; supply?: Supply; before?: { availableKg: number; priceYenPerKg: number; published: boolean } } };
   } catch {
     return { ok: false, status: 0, data: { error: "通信に失敗しました。もう一度お試しください" } };
   }
@@ -97,10 +98,12 @@ export default function ProducerPage({ me }: { me: Me }) {
 
 function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: string | null; onChanged: (text?: string, updated?: Supply) => void }) {
   const [kg, setKg] = useState(String(s.availableKg));
+  const [price, setPrice] = useState(String(s.priceYenPerKg));
+  const [editPrice, setEditPrice] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: "ok" | "bad"; text: string; conflict?: boolean } | null>(null);
 
-  async function patch(body: { availableKg?: number | string; published?: boolean }) {
+  async function patch(body: { availableKg?: number | string; priceYenPerKg?: number | string; published?: boolean }) {
     setBusy(true);
     setMsg(null);
     // 画面を開いた時点の version を送り、別の更新と競合したら上書きしない
@@ -114,7 +117,9 @@ function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: stri
     const after = r.data.supply!;
     const text = body.availableKg !== undefined
       ? `${before.availableKg}kg → ${after.availableKg}kg に更新しました`
-      : after.published ? "公開を再開しました（仕入れ案に使われます）" : "公開を止めました（仕入れ案に使われません）";
+      : body.priceYenPerKg !== undefined
+        ? `${yen(before.priceYenPerKg)}/kg → ${yen(after.priceYenPerKg)}/kg に変更しました`
+        : after.published ? "公開を再開しました（仕入れ案に使われます）" : "公開を止めました（仕入れ案に使われません）";
     onChanged(text, after);
   }
 
@@ -137,7 +142,7 @@ function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: stri
     <li className={`supply listing ${s.published ? "" : "paused"}`}>
       <div className="supply-head">
         <span className="supply-icon" aria-hidden="true"><Icon name="leaf" size={24} /></span>
-        <h2 className="supply-title">{s.item.name}<small>{s.originPrefecture}産・{s.grade === "irregular" ? `規格外（${s.irregularReason}）` : "通常品"}</small></h2>
+        <h2 className="supply-title">{s.item.name}<small>{s.originPrefecture}産・{s.grade === "irregular" ? (s.irregularReason ? `規格外（${s.irregularReason}）` : "規格外") : "通常品"}</small></h2>
         
       </div>
       {done && <p className="supply-updated" role="status"><Icon name="check" size={22} strokeWidth={2.4} /><strong>{done}</strong></p>}
@@ -182,8 +187,21 @@ function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: stri
         </div>
       )}
 
+      {editPrice ? (
+        <form className="price-tool" onSubmit={(e) => { e.preventDefault(); patch({ priceYenPerKg: price }); }}>
+          <label className="field">
+            <span className="label">価格（1kgあたり・税込）</span>
+            <span className="with-unit"><input type="number" inputMode="numeric" min={1} step={1} value={price} onChange={(e) => setPrice(e.target.value)} aria-label={`${s.item.name}の新しい価格`} /><em>円/kg</em></span>
+          </label>
+          <p className="hint">価格を変えると、この在庫を使った仕入れ案・仕入れ相談は「条件が変わりました」になり、飲食店は計算し直してから相談し直します。</p>
+          <div className="bar-pair">
+            <button type="submit" className="btn-primary" disabled={busy || price === String(s.priceYenPerKg) || price === ""} aria-busy={busy}>価格を変更する</button>
+            <button type="button" className="btn-secondary" disabled={busy} onClick={() => { setEditPrice(false); setPrice(String(s.priceYenPerKg)); }}>やめる</button>
+          </div>
+        </form>
+      ) : null}
       <p className="supply-facts">
-        <span><Icon name="yen" size={20} />{yen(s.priceYenPerKg)}/kg</span>
+        <span><Icon name="yen" size={20} />{yen(s.priceYenPerKg)}/kg{!editPrice && <button type="button" className="text-btn price-edit" onClick={() => setEditPrice(true)} aria-label={`${s.item.name}の価格を変更する`}><Icon name="edit" size={18} />変更</button>}</span>
         <span><Icon name="calendar" size={20} />{formatJstDateTime(s.slot.startAt)}〜{jstTimeOf(s.slot.endAt)}</span>
         <span><Icon name="pin" size={20} />{s.slot.placeName}</span>
       </p>
@@ -276,7 +294,7 @@ function NewSupply({ data, defaultOrigin, onCreated }: { data: Data; defaultOrig
         </div>
         {f.grade === "irregular" && (
           <label className="field">
-            <span className="label">規格外の理由</span>
+            <span className="label">規格外の理由 <span className="tag-opt">任意</span></span>
             <input value={f.irregularReason} onChange={(e) => set("irregularReason", e.target.value)} maxLength={30} placeholder="例：形の不揃い" />
           </label>
         )}

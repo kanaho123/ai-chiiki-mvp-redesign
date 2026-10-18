@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parsePlanRequest } from "./validate.js";
+import { parsePlanRequest, parseSupplyInput, parseSupplyPatch } from "./validate.js";
 
 const NOW = new Date("2026-10-22T12:00:00+09:00");
 const plan = (o: Record<string, unknown> = {}) => ({
@@ -48,5 +48,26 @@ describe("仕入れ条件の検証", () => {
   ])("%s は受け付けない", (_, o) => {
     const body = _ === "空" ? {} : plan(o);
     expect(parsePlanRequest(body, NOW).ok).toBe(false);
+  });
+});
+
+describe("供給の登録・変更の検証", () => {
+  const supply = (o: Record<string, unknown> = {}) => ({
+    itemId: "i", varietyId: "v", grade: "irregular", irregularReason: "", originPrefecture: "大阪府",
+    availableKg: 5, priceYenPerKg: 600, minKg: 1, slotId: "s", published: true, ...o,
+  });
+  it("規格外の理由は任意：空欄・未指定でも登録できる（null で保存）", () => {
+    expect(parseSupplyInput(supply())).toMatchObject({ ok: true, value: { grade: "irregular", irregularReason: null } });
+    expect(parseSupplyInput(supply({ irregularReason: undefined }))).toMatchObject({ ok: true, value: { irregularReason: null } });
+    expect(parseSupplyInput(supply({ irregularReason: "  形の不揃い  " }))).toMatchObject({ ok: true, value: { irregularReason: "形の不揃い" } });
+    expect(parseSupplyInput(supply({ irregularReason: "あ".repeat(31) }))).toMatchObject({ ok: false });
+    expect(parseSupplyInput(supply({ grade: "regular", irregularReason: "書いても" }))).toMatchObject({ ok: true, value: { irregularReason: null } });
+  });
+  it("価格の変更：1円以上の整数だけ。数量・公開と同じく version が必要", () => {
+    expect(parseSupplyPatch({ version: 3, priceYenPerKg: 650 })).toEqual({ ok: true, value: { version: 3, priceYenPerKg: 650 } });
+    expect(parseSupplyPatch({ version: 3, priceYenPerKg: 0 })).toMatchObject({ ok: false });
+    expect(parseSupplyPatch({ version: 3, priceYenPerKg: 12.5 })).toMatchObject({ ok: false });
+    expect(parseSupplyPatch({ priceYenPerKg: 650 })).toMatchObject({ ok: false });
+    expect(parseSupplyPatch({ version: 3 })).toMatchObject({ ok: false, error: "変更内容がありません" });
   });
 });

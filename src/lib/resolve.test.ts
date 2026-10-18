@@ -75,6 +75,13 @@ describe("登録データへの照合（resolve）", () => {
     expect(r.candidateMatches.slotId?.map((c) => c.label)).toEqual(["G-P", "G-Q"]);
   });
 
+  it("I': カタカナ・ひらがなの違いは同じ品目として解決する（「ナス」→ なす、「とまと」→ トマト）", () => {
+    expect(resolve({ itemText: "とまと" }).draft.itemId).toBe("demo-item-tomato");
+    const withNasu: Catalog = { ...catalog, items: [...catalog.items, { id: "item-nasu", name: "なす", varieties: [{ id: "v-nasu", name: "指定なし" }] }] };
+    for (const t of ["ナス", "なす", "ﾅｽ"]) expect(resolveExtraction({ ...none, itemText: t }, withNasu, NOW).draft.itemId).toBe("item-nasu");
+    expect(resolveExtraction({ ...none, itemText: "キュウリ" }, withNasu, NOW).draft.itemId).toBeNull(); // 登録のない品目は解決しない
+  });
+
   it("I: 「トマト」は登録済みの品目 ID に通常処理で解決する（全角・空白も吸収）", () => {
     expect(resolve({ itemText: "トマト" }).draft.itemId).toBe("demo-item-tomato");
     expect(resolve({ itemText: " トマト " }).draft.itemId).toBe("demo-item-tomato");

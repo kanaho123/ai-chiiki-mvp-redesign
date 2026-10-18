@@ -66,11 +66,15 @@ export type Resolution = {
 /** 照合用に正規化（全角→半角・空白除去・小文字） */
 export const normalize = (s: string) => s.normalize("NFKC").replace(/\s+/g, "").toLowerCase();
 
-/** 完全一致を優先し、なければ部分一致（どちらか一方が他方を含む） */
+/** 名前の照合用：カタカナをひらがなにそろえる（「ナス」と「なす」、「とまと」と「トマト」を同じ名前として扱う） */
+export const kanaFold = (s: string) => s.replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
+const nameKey = (s: string) => kanaFold(normalize(s));
+
+/** 完全一致を優先し、なければ部分一致（どちらか一方が他方を含む）。カタカナ・ひらがなの違いは同じとみなす */
 function matchByName<T extends { name: string }>(text: string, list: T[]): { exact: T | null; partial: T[] } {
-  const t = normalize(text);
-  const exact = list.find((x) => normalize(x.name) === t) ?? null;
-  const partial = exact ? [] : list.filter((x) => normalize(x.name).includes(t) || t.includes(normalize(x.name)));
+  const t = nameKey(text);
+  const exact = list.find((x) => nameKey(x.name) === t) ?? null;
+  const partial = exact ? [] : list.filter((x) => nameKey(x.name).includes(t) || t.includes(nameKey(x.name)));
   return { exact, partial };
 }
 

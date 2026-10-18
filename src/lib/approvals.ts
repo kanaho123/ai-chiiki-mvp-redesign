@@ -9,8 +9,28 @@ export type Confirmation = {
   planFingerprint: string; itemName: string; quantityKg: number; priceYenPerKg: number; subtotalYen: number;
   pickupStartAt: string; pickupEndAt: string; pickupPlace: string;
   status: ConfirmationStatus; createdAt: string;
+  /** 依頼のときに保存した仕入れ条件（相手に見せてよいものだけ）。古いデータなどで読めなければ null */
+  conditions?: RequestConditions | null;
+};
+/** 飲食店の仕入れ条件（依頼のときの planRequest から）。requestedKg は飲食店が必要な全体の量（この農家への相談量は quantityKg） */
+export type RequestConditions = {
+  requestedKg: number; desiredDate: string; originPrefectures: string[];
+  allowIrregular: boolean | null; allowFirstTime: boolean | null; allowMixedVarieties: boolean | null; allowMixedGrades: boolean | null;
 };
 export type Contact = { contactPhone: string | null; contactEmail: string | null };
+
+/** 相談カードに並べる仕入れ条件（ふつうの言葉で） */
+export function conditionChips(c: RequestConditions): { label: string; value: string }[] {
+  const yesNo = (v: boolean | null) => (v === null ? null : v ? "可" : "不可");
+  const rows: [string, string | null][] = [
+    ["規格外", yesNo(c.allowIrregular)],
+    ["初めての農家", yesNo(c.allowFirstTime)],
+    ["産地", c.originPrefectures.length ? c.originPrefectures.join("・") : null],
+    ["品種のまぜ", yesNo(c.allowMixedVarieties)],
+    ["規格のまぜ", yesNo(c.allowMixedGrades)],
+  ];
+  return rows.flatMap(([label, value]) => (value === null ? [] : [{ label, value }]));
+}
 
 /** 農家ごとの状態 */
 export const confirmationLabel: Record<ConfirmationStatus, string> = {
@@ -80,6 +100,29 @@ export function groupConsultations(rows: Confirmation[]): Consultation[] {
       status: consultationStatus(sorted), farms: sorted,
     };
   }).sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : a.id.localeCompare(b.id)));
+}
+
+/**
+ * 相談の進み具合（既存の依頼の状態だけから決める。新しい状態は保存しない）。
+ * 相談送信済み → 生産者回答待ち → マッチ成立 → 受け渡し待ち。取引の完了は扱わない。
+ * 条件が変わった・対応できない農家がいる相談は、この流れでは表さない（null。画面は従来どおり状態のタグと案内を出す）。
+ */
+export type ProgressStep = { key: "sent" | "answer" | "matched" | "handover"; label: string; state: "done" | "current" | "todo" };
+export function consultationProgress(c: Pick<Consultation, "status" | "farms" | "pickupStartAt">, now: Date): { steps: ProgressStep[]; current: string } | null {
+  if (c.status !== "waiting" && c.status !== "accepted") return null;
+  const matched = c.status === "accepted";
+  const answered = c.farms.filter((f) => f.status !== "pending").length;
+  const pickupPassed = now.getTime() >= new Date(c.pickupStartAt).getTime();
+  const steps: ProgressStep[] = [
+    { key: "sent", label: "相談送信済み", state: "done" },
+    { key: "answer", label: "生産者回答待ち", state: matched ? "done" : "current" },
+    { key: "matched", label: "マッチ成立", state: matched ? "done" : "todo" },
+    { key: "handover", label: "受け渡し待ち", state: matched ? "current" : "todo" },
+  ];
+  const current = !matched
+    ? `生産者回答待ち（${answered}/${c.farms.length}農家が回答済み）`
+    : pickupPassed ? "受け渡し待ち（受け渡しの予定日時を過ぎています）" : "受け渡し待ち";
+  return { steps, current };
 }
 
 /** 進行中の相談：条件が変わったもの・全員が対応できなかったものは含めない */

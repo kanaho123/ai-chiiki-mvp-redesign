@@ -78,6 +78,22 @@ function req(id: string | null, method = "GET", payload?: unknown, path = "/api/
 }
 const create = () => approvals.create(db.users.get("r1"), body());
 
+describe("相談カードの仕入れ条件（保存済みの planRequest から）", () => {
+  it("生産者・飲食店の一覧に、見せてよい条件だけを付ける（予算・優先したい農家は出さない）", async () => {
+    await approvals.create(db.users.get("r1"), body({ ...request, budgetYen: 9000 }));
+    for (const who of ["a", "r1"]) {
+      const rows = await approvals.list(db.users.get(who));
+      expect(rows[0].conditions).toEqual({ requestedKg: 10, desiredDate: "2026-10-23", originPrefectures: ["大阪府"], allowIrregular: false, allowFirstTime: true, allowMixedVarieties: false, allowMixedGrades: false });
+      expect(JSON.stringify(rows)).not.toMatch(/budget|9000|preferredProducer/);
+    }
+  });
+  it("価格などで供給の version が上がると、相談は「条件が変わりました」（既存の判定）", async () => {
+    await create();
+    db.version = "v2"; db.inputs.supplies[1].priceYenPerKg = 650; db.inputs.supplies[1].version++;
+    expect((await approvals.list(db.users.get("r1"))).every(r => r.status === "stale")).toBe(true);
+  });
+});
+
 describe("承認・連絡先の権限と整合性", () => {
   it("未ログイン・ロール違い・外部サイトからの変更を拒否する", async () => {
     expect((await api.POST(req(null, "POST", body()))).status).toBe(401);

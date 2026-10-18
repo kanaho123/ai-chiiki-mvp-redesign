@@ -125,7 +125,7 @@ export const repo = {
   },
 
   /** version が一致したときだけ更新し、version を +1 する。一致しなければ null（競合） */
-  async updateSupplyIfVersion(id: string, version: number, data: { availableKg?: number; published?: boolean }): Promise<SupplyView | null> {
+  async updateSupplyIfVersion(id: string, version: number, data: { availableKg?: number; priceYenPerKg?: number; published?: boolean }): Promise<SupplyView | null> {
     const { count } = await prisma.supply.updateMany({ where: { id, version }, data: { ...data, version: { increment: 1 } } });
     return count === 1 ? this.getSupply(id) : null;
   },

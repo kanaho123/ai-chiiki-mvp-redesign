@@ -35,6 +35,7 @@ export function useConfirmations(): Load<Confirmation[]> {
 
 export type SupplyRow = {
   id: string; item: { name: string }; variety: { name: string }; availableKg: number; priceYenPerKg: number; published: boolean;
+  grade?: "regular" | "irregular"; updatedAt: string;
   slot: { label: string; placeName: string; startAt: string; endAt: string };
 };
 export type SlotRow = { id: string; label: string; placeName: string; startAt: string; endAt: string };

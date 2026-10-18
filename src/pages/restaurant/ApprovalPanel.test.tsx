@@ -81,7 +81,10 @@ describe("生産者に仕入れ相談する", () => {
     expect(statuses()).toEqual(["A農園 5kg：対応できます", "B農園 5kg：返事待ち"]);
     expect($(".confirmation-overall")?.textContent).toBe("返事待ち（1/2農家が回答済み）");
     expect($(".match-banner")).toBeNull();
-    expect(text()).not.toMatch(/マッチ成立|一部成立/);
+    // 進み具合では「マッチ成立」はまだ先の段階（todo）。成立した・一部成立したとは表示しない
+    expect([...el.querySelectorAll(".progress-step")].map((s) => s.className.replace("progress-step ", ""))).toEqual(["done", "current"]); // まだ先の段階（マッチ成立・受け渡し待ち）は出さない
+    expect($(".progress-current")?.textContent).toBe("いま：生産者回答待ち（1/2農家が回答済み）");
+    expect(text()).not.toMatch(/マッチ成立|一部成立|🎉/);
     expect(button("連絡先を見る")).toBeTruthy(); // 農家ごとの連絡先はこれまでどおり
     contacts = { a: { contactPhone: "000-0000-0001", contactEmail: null } };
     await click(button("連絡先を見る"));

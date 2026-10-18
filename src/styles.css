@@ -884,3 +884,49 @@ legend.label { padding: 0; margin-bottom: 8px; width: 100%; }
 .trial-note { padding: 12px 14px; border-radius: var(--r-input); background: var(--color-info-tint); color: var(--color-info); font-weight: 700; }
 /* 文章の中のリンクも押しやすい高さに（行の高さは変えない） */
 a.inline-link { display: inline-flex; align-items: center; min-height: var(--tap-min); vertical-align: middle; font-weight: 700; overflow-wrap: anywhere; }
+
+/* 相談の進み具合（相談送信済み → 生産者回答待ち → マッチ成立 → 受け渡し待ち）。既存の依頼の状態から表示するだけ */
+.progress-steps { display: grid; gap: 8px; min-width: 0; }
+.progress-steps ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.progress-step { display: grid; justify-items: center; gap: 4px; text-align: center; font-size: 14px; line-height: 1.35; color: var(--color-muted); min-width: 0; }
+.progress-dot { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--color-line-strong); background: var(--color-page, #fff); color: #fff; }
+.progress-step.done .progress-dot { background: var(--color-restaurant-dark); border-color: var(--color-restaurant-dark); }
+.progress-step.current .progress-dot { border-color: var(--color-restaurant-dark); box-shadow: inset 0 0 0 5px var(--color-restaurant-tint); }
+.progress-step.done, .progress-step.current { color: var(--color-text, #1f1f1f); }
+.progress-step.current .progress-label { font-weight: 800; }
+.progress-label { overflow-wrap: anywhere; }
+.progress-current { margin: 0; font-size: 15px; font-weight: 700; }
+.consult-next { font-size: 14px; font-weight: 700; color: var(--color-restaurant-dark); }
+
+/* 生産者の相談カード：飲食店の仕入れ条件 */
+.request-conds { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.request-conds li { display: inline-flex; gap: 6px; align-items: center; padding: 3px 10px; border-radius: var(--r-tag); background: var(--color-sunken); font-size: 14px; }
+.request-conds b { font-weight: 800; }
+
+/* マッチ成立：農家ごとの内訳と日時 */
+.match-farms { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.match-farms li { display: grid; gap: 2px; padding: 10px 12px; border-radius: var(--r-input); background: var(--color-page, #fff); color: var(--color-text, #1f1f1f); font-size: 15px; overflow-wrap: anywhere; }
+.match-farms b { font-size: 16px; }
+.match-facts { margin: 0; display: grid; gap: 4px; color: var(--color-text, #1f1f1f); font-size: 15px; }
+.match-facts div { display: grid; grid-template-columns: 5em minmax(0, 1fr); gap: 8px; }
+.match-facts dt { font-weight: 700; }
+.match-facts dd { margin: 0; overflow-wrap: anywhere; }
+
+/* 生産者のマイページ：いま出品しているもの */
+.listings-summary { display: grid; gap: 12px; }
+.listings-count { font-size: 14px; color: var(--color-muted); }
+.my-listings { list-style: none; margin: 0; padding: 0; display: grid; }
+.my-listing { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 12px 0; border-bottom: 1px solid var(--color-line); }
+.my-listing:last-child { border-bottom: 0; }
+.my-listing-name { font-size: 17px; font-weight: 800; overflow-wrap: anywhere; }
+.my-listing-tag { margin-left: 6px; padding: 0 6px; border-radius: var(--r-tag); background: var(--color-amber-tint); color: var(--color-amber); font-size: 14px; font-weight: 700; }
+.my-listing-state { font-size: 14px; font-weight: 800; padding: 1px 9px; border-radius: var(--r-tag); align-self: start; }
+.my-listing.on .my-listing-state { background: var(--color-restaurant-tint); color: var(--color-restaurant-dark); }
+.my-listing.off .my-listing-state { background: var(--color-sunken); color: var(--color-text, #1f1f1f); }
+.my-listing-qty { font-size: 15px; }
+.my-listing-updated { font-size: 14px; color: var(--color-muted); grid-column: 1 / -1; }
+
+/* 出品：価格の変更 */
+.price-tool { display: grid; gap: 10px; }
+.price-tool .bar-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.price-edit { min-height: var(--tap-min); margin-left: 4px; }

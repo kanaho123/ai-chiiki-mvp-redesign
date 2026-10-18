@@ -29,7 +29,13 @@ let profile: Record<string, unknown> | null = null;
 let calls: { url: string; method: string; body?: unknown }[] = [];
 let mode: "general" | "demo" = "general";
 let contact = { contactPhone: "000-0000-0001" as string | null, contactEmail: "a-farm@example.invalid" as string | null };
+const supplyRow = (over: Record<string, unknown> = {}) => ({
+  id: "sp1", item: { name: "トマト" }, variety: { name: "指定なし" }, grade: "regular", availableKg: 8, priceYenPerKg: 600, published: true,
+  updatedAt: "2026-10-20T03:00:00.000Z", slot: { label: "梅田・火", placeName: "梅田", startAt: "2026-10-27T01:00:00.000Z", endAt: "2026-10-27T02:00:00.000Z" }, ...over,
+});
+let supplyRows: ReturnType<typeof supplyRow>[] = [];
 beforeEach(() => {
+  supplyRows = [supplyRow()];
   mode = "general";
   contact = { contactPhone: "000-0000-0001", contactEmail: "a-farm@example.invalid" };
   requests = [];
@@ -62,7 +68,7 @@ beforeEach(() => {
       return r?.status === "approved" ? json({ contact: { contactPhone: "000-0000-0001", contactEmail: "a-farm@example.invalid" } }) : json({ error: "まだ連絡先は見られません" }, 403);
     }
     if (url === "/api/supplies") return json({
-      supplies: [{ id: "sp1", item: { name: "トマト" }, variety: { name: "指定なし" }, availableKg: 8, priceYenPerKg: 600, published: true, slot: { label: "梅田・火", placeName: "梅田", startAt: "2026-10-27T01:00:00.000Z", endAt: "2026-10-27T02:00:00.000Z" } }],
+      supplies: supplyRows,
       slots: [{ id: "sl1", label: "梅田・火", placeName: "梅田エリア受渡所（仮）", startAt: "2099-10-27T01:00:00.000Z", endAt: "2099-10-27T02:00:00.000Z" }],
     });
     if (url === "/api/profile" && method === "GET") return profile ? json(profile) : json({ error: "なし" }, 404);
@@ -126,6 +132,7 @@ describe("飲食店のホーム", () => {
     requests = [req("a", "approved"), req("b", "pending", { producerName: "B農園" })];
     await open("/restaurant/home");
     expect($(".consult-card .state-tag")?.textContent).toBe("返事待ち");
+    expect($(".consult-card .consult-next")?.textContent).toBe("生産者回答待ち（1/2農家が回答済み）");
     expect([...el.querySelectorAll(".farm-line")].map((x) => x.textContent)).toEqual(["A農園：対応できます", "B農園：返事待ち"]);
     expect($(".todo-text")?.textContent).toBe("A農園が「対応できます」と返事をしました。ほかの農家の返事を待っています");
     expect(text()).not.toMatch(/マッチ成立|一部成立/);
@@ -175,6 +182,13 @@ describe("飲食店の相談一覧・詳細", () => {
     expect($(".match-banner .match-text")?.textContent).toBe("A農園・B農園と、数量・価格・受け渡し条件がそろいました");
     expect($(".match-banner .match-note")?.textContent).toBe("これは注文確定ではありません。在庫の確保も行われません。");
     expect($("main .state-tag")?.textContent).toBe("マッチ成立");
+    // 進み具合：相談送信済み・生産者回答待ち・マッチ成立は済み、いまは受け渡し待ち
+    expect([...el.querySelectorAll(".progress-step")].map((s) => `${s.querySelector(".progress-label")?.textContent}:${s.className.replace("progress-step ", "")}`))
+      .toEqual(["相談送信済み:done", "生産者回答待ち:done", "マッチ成立:done", "受け渡し待ち:current"]);
+    expect($(".progress-current")?.textContent).toBe("いま：受け渡し待ち");
+    // 成立の内訳（農家・品目・数量・価格）と受け渡し
+    expect([...el.querySelectorAll(".match-farms li")].map((li) => li.textContent)).toEqual(["A農園トマト 5kg・¥600/kg・小計 ¥3,000", "B農園トマト 5kg・¥600/kg・小計 ¥3,000"]);
+    expect($(".match-facts")?.textContent).toContain("梅田エリア受渡所（仮）");
     await click(button("取引相談へ進む"));
     expect(el.querySelectorAll(".deal-farm")).toHaveLength(2);
     expect($(".deal-farm .deal-mail")?.textContent).toBe("A農園にメールで相談する");
@@ -184,7 +198,9 @@ describe("飲食店の相談一覧・詳細", () => {
     requests = [req("a", "approved"), req("b", "pending", { producerName: "B農園" })];
     await open("/restaurant/consultations/fp-1");
     expect($(".match-banner")).toBeNull();
-    expect(text()).not.toContain("マッチ成立");
+    expect($("main .state-tag")?.textContent).toBe("返事待ち");
+    expect([...el.querySelectorAll(".progress-step")].map((s) => s.className.replace("progress-step ", ""))).toEqual(["done", "current"]); // まだ先の段階（マッチ成立・受け渡し待ち）は出さない
+    expect(text()).not.toMatch(/マッチ成立|一部成立|🎉/);
     expect($("main .hint")?.textContent).toBe("「対応できます」は注文の確定ではありません。受け渡しの詳細や最終確認は、農家と直接相談して決めてください。");
     expect(text()).not.toMatch(/数量・受け?取/);
   });
@@ -255,6 +271,24 @@ describe("生産者の「依頼」", () => {
     expect(calls.filter((c) => c.url === "/api/inbox").length).toBeGreaterThan(inboxBefore);
     expect(badge()).toBeNull();
   });
+  it("相談カード：飲食店の必要量・希望日・規格外や初めての農家の可否など、保存済みの条件を出す", async () => {
+    requests = [req("a", "pending", { conditions: { requestedKg: 10, desiredDate: "2026-10-23", originPrefectures: ["大阪府"], allowIrregular: true, allowFirstTime: true, allowMixedVarieties: false, allowMixedGrades: false } })];
+    await open("/producer/requests");
+    const card = $(".request-list .farm-row")!;
+    expect(card.textContent).toContain("まちの食堂");
+    expect(card.querySelector(".request-what")?.textContent).toBe("トマト 5kg");
+    expect(card.textContent).toContain("飲食店が必要な量 10kg のうち、あなたへの相談は 5kg");
+    expect(card.textContent).toContain("希望日：10月23日（金）");
+    expect([...card.querySelectorAll(".request-conds li")].map((li) => li.textContent)).toEqual(["規格外可", "初めての農家可", "産地大阪府", "品種のまぜ不可", "規格のまぜ不可"]);
+    expect(text()).not.toMatch(/予算|budget/);
+  });
+  it("相談カード：条件を読めない古い相談でも、これまでどおりの内容で表示する", async () => {
+    requests = [req("a", "pending", { conditions: null })];
+    await open("/producer/requests");
+    expect($(".request-list .farm-row .request-what")?.textContent).toBe("トマト 5kg");
+    expect($(".request-conds")).toBeNull();
+    expect(text()).not.toContain("希望日");
+  });
   it("「今回は対応できません」も返事できる", async () => {
     requests = [req("a", "pending")];
     await open("/producer/requests");
@@ -320,6 +354,28 @@ describe("マイページ", () => {
     expect($(".field-error")?.textContent).toContain("電話番号かメールアドレスのどちらかを入力してください");
     await click(button("やめる"));
     expect(text()).toContain("000-0000-9999");
+  });
+});
+
+describe("生産者のマイページ：いま出品しているもの", () => {
+  beforeEach(() => { me = producer; });
+  it("一般向け：最初に品目・数量・価格・公開／停止・更新日時を一覧し、出品の変更へ進める", async () => {
+    profile = producerProfile();
+    supplyRows = [supplyRow(), supplyRow({ id: "sp2", item: { name: "なす" }, grade: "irregular", availableKg: 5, priceYenPerKg: 450, published: false, updatedAt: "2026-10-21T06:30:00.000Z" })];
+    await open("/producer/mypage");
+    const sec = $(".listings-summary")!;
+    // 販売スタイル・農園の情報より前にある
+    expect([...el.querySelectorAll("main .listings-summary, main .style-card")].map((x) => x.className)).toEqual(["listings-summary", "style-card"]);
+    expect(sec.querySelector(".listings-count")?.textContent).toBe("公開中 1件 / 全2件");
+    const rows = [...sec.querySelectorAll(".my-listing")].map((li) => [li.querySelector(".my-listing-name")?.textContent, li.querySelector(".my-listing-state")?.textContent, li.querySelector(".my-listing-qty")?.textContent, li.querySelector(".my-listing-updated")?.textContent]);
+    expect(rows).toEqual([["トマト", "公開中", "8kg・¥600/kg", "更新：10月20日（火） 12:00"], ["なす規格外", "停止中", "5kg・¥450/kg", "更新：10月21日（水） 15:30"]]);
+    expect(sec.querySelector("a")?.getAttribute("href")).toBe("/producer/listings");
+  });
+  it("デモ用の環境でも同じ一覧を出す（出品がなければその旨）", async () => {
+    mode = "demo";
+    supplyRows = [];
+    await open("/producer/mypage");
+    expect($(".listings-summary .empty-note")?.textContent).toBe("まだ出品はありません");
   });
 });
 

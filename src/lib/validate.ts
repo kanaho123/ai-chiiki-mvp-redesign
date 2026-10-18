@@ -108,9 +108,12 @@ export function parseLogin(body: unknown): Result<{ loginId: string; password: s
   return { ok: true, value: { loginId, password } };
 }
 
-export type SupplyPatch = { version: number; availableKg?: number; published?: boolean };
+export type SupplyPatch = { version: number; availableKg?: number; priceYenPerKg?: number; published?: boolean };
 
-/** 数量変更・公開停止／再開。画面で開いた時点の version が必要（古ければ 409） */
+/**
+ * 数量変更・価格変更・公開停止／再開。画面で開いた時点の version が必要（古ければ 409）。
+ * どの変更でも version が +1 され、その在庫を使った仕入れ案・相談は「条件が変わりました」になる（既存の判定）。
+ */
 export function parseSupplyPatch(body: unknown): Result<SupplyPatch> {
   if (!isObj(body)) return { ok: false, error: "入力を読み取れません" };
   const version = int(body.version, 1, Number.MAX_SAFE_INTEGER);
@@ -121,11 +124,16 @@ export function parseSupplyPatch(body: unknown): Result<SupplyPatch> {
     if (kg === null) return { ok: false, error: `販売可能量は0〜${SUPPLY_KG_MAX}kgの整数で入力してください` };
     patch.availableKg = kg;
   }
+  if (body.priceYenPerKg !== undefined) {
+    const price = int(body.priceYenPerKg, 1, SUPPLY_PRICE_MAX);
+    if (price === null) return { ok: false, error: "税込単価は1円以上の整数（円/kg）で入力してください" };
+    patch.priceYenPerKg = price;
+  }
   if (body.published !== undefined) {
     if (typeof body.published !== "boolean") return { ok: false, error: "公開状態が正しくありません" };
     patch.published = body.published;
   }
-  if (patch.availableKg === undefined && patch.published === undefined) return { ok: false, error: "変更内容がありません" };
+  if (patch.availableKg === undefined && patch.priceYenPerKg === undefined && patch.published === undefined) return { ok: false, error: "変更内容がありません" };
   return { ok: true, value: patch };
 }
 
@@ -151,8 +159,10 @@ export function parseSupplyInput(body: unknown): Result<SupplyInput> {
   if (!varietyId) return { ok: false, error: "品種を選択してください" };
   const grade = oneOf(body.grade, ["regular", "irregular"] as const);
   if (!grade) return { ok: false, error: "規格（通常品／規格外）を選択してください" };
-  const irregularReason = grade === "irregular" ? text(body.irregularReason, IRREGULAR_REASON_MAX) : null;
-  if (grade === "irregular" && !irregularReason) return { ok: false, error: `規格外の理由を${IRREGULAR_REASON_MAX}文字以内で入力してください` };
+  // 規格外の理由は任意（生産者の入力の負担を減らす）。空欄なら null。書いた場合だけ長さを確かめる
+  const reasonText = grade === "irregular" && typeof body.irregularReason === "string" ? body.irregularReason.trim() : "";
+  if (reasonText.length > IRREGULAR_REASON_MAX) return { ok: false, error: `規格外の理由は${IRREGULAR_REASON_MAX}文字以内で入力してください` };
+  const irregularReason = reasonText || null;
   const originPrefecture = oneOf(body.originPrefecture, PREFECTURES);
   if (!originPrefecture) return { ok: false, error: "産地（都道府県）を選択してください" };
   const availableKg = int(body.availableKg, 0, SUPPLY_KG_MAX);

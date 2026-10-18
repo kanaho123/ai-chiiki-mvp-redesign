@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NOT_AN_ORDER, matchMessage, type Confirmation, type Contact } from "../../lib/approvals";
 import { confirmationApi, friendlyError } from "../../lib/confirmation-api";
+import { formatDateJa } from "../../lib/dates";
 import { useSession } from "../../routes/session";
 import { whenText, yen } from "../daily/data";
 
@@ -30,6 +31,7 @@ export const telHref = (phone: string) => `tel:${phone.replace(/[^+\d]/g, "")}`;
 
 export function MatchBanner({ farms, onContactError }: { farms: Confirmation[]; onContactError?: () => void }) {
   const { appMode } = useSession();
+  const desired = farms.find((f) => f.conditions)?.conditions?.desiredDate ?? null;
   const [contacts, setContacts] = useState<Record<string, Contact> | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +57,18 @@ export function MatchBanner({ farms, onContactError }: { farms: Confirmation[]; 
     <section className="match-banner" aria-labelledby="match-title">
       <p className="match-title" id="match-title" role="status">🎉 マッチ成立</p>
       <p className="match-text">{matchMessage(farms)}</p>
+      <ul className="match-farms" aria-label="マッチした農家">
+        {farms.map((f) => (
+          <li key={f.id}>
+            <b>{f.producerName}</b>
+            <span>{f.itemName} {f.quantityKg}kg・{yen(f.priceYenPerKg)}/kg・小計 {yen(f.subtotalYen)}</span>
+          </li>
+        ))}
+      </ul>
+      <dl className="match-facts">
+        {desired && <div><dt>希望日</dt><dd>{formatDateJa(desired)}</dd></div>}
+        <div><dt>受け渡し</dt><dd>{whenText(farms[0].pickupStartAt, farms[0].pickupEndAt)}・{farms[0].pickupPlace}</dd></div>
+      </dl>
       <p className="match-note">{NOT_AN_ORDER}</p>
       {!contacts && (
         <button type="button" className="btn-primary btn-block" onClick={openDeal} disabled={busy} aria-busy={busy}>
