@@ -1,6 +1,6 @@
 import type { PrismaClient } from "./generated/prisma/client.js";
 import type { ProducerForm, ProducerProfile, RestaurantForm, RestaurantProfile } from "../src/lib/onboarding.js";
-import { OnboardingProblem } from "./onboarding.js";
+import { OnboardingProblem, TX_OPTIONS } from "./onboarding.js";
 
 // マイページ：本人のプロフィールの表示と更新（一般ユーザー向け）。
 // ・更新先は必ずログイン中の本人のプロフィール（送られた ID・ownerUserId は使わない）
@@ -72,7 +72,7 @@ export async function updateRestaurantProfile(db: Db, userId: string, p: Restaur
     });
     if (r.count !== 1) throw NO_PROFILE();
     await tx.user.update({ where: { id: userId }, data: { displayName: p.name } });
-  });
+  }, TX_OPTIONS);
 }
 
 export async function updateProducerProfile(db: Db, userId: string, p: ProducerProfile, now: Date) {
@@ -106,5 +106,5 @@ export async function updateProducerProfile(db: Db, userId: string, p: ProducerP
       if (slots.length > 0) await tx.slotParticipant.createMany({ data: slots.map((x) => ({ slotId: x.id, producerId: producer.id, confirmed: true })), skipDuplicates: true });
     }
     await tx.user.update({ where: { id: userId }, data: { displayName: p.farmName } });
-  });
+  }, TX_OPTIONS);
 }

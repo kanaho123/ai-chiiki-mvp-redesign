@@ -98,8 +98,8 @@ export function clearSessionCookie(env?: Record<string, string | undefined>): st
 
 type Guard<T> = { ok: true; user: T } | { ok: false; response: Response };
 
-/** 別サイトからの状態変更リクエストを拒否する（SameSite=Lax に加えた確認） */
-function crossSite(request: Request): boolean {
+/** 別サイトからの状態変更リクエストを拒否する（SameSite=Lax に加えた確認）。ログイン・新規登録・ログアウトでも使う */
+export function crossSite(request: Request): boolean {
   if (request.method === "GET" || request.method === "HEAD") return false;
   const origin = request.headers.get("origin");
   if (!origin) return false;
@@ -118,8 +118,10 @@ export async function currentUser(request: Request, now = new Date()): Promise<S
   return user && user.role === s.role ? user : null;
 }
 
+export const crossSiteResponse = () => json({ error: "このリクエストは受け付けられません。画面を再読み込みしてください" }, 403);
+
 export async function requireUser(request: Request): Promise<Guard<SessionUser>> {
-  if (crossSite(request)) return { ok: false, response: json({ error: "このリクエストは受け付けられません" }, 403) };
+  if (crossSite(request)) return { ok: false, response: crossSiteResponse() };
   const user = await currentUser(request);
   return user ? { ok: true, user } : { ok: false, response: json({ error: "ログインしてください" }, 401) };
 }

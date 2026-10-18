@@ -3,11 +3,13 @@ import { parseSupplyInput } from "../../src/lib/validate.js";
 import { requireRole } from "../../server/auth.js";
 import { handle, json, readJson } from "../../server/http.js";
 import { repo } from "../../server/repo.js";
+import { refillSlotsIfDue } from "../../server/slot-refill.js";
 
 // 生産者本人の供給一覧（他の生産者の供給は返さない）と、登録に使う選択肢
 export const GET = handle(async (request) => {
   const g = await requireRole(request, "producer");
   if (!g.ok) return g.response;
+  await refillSlotsIfDue(); // これからの受渡の回が足りなければ補充（一般向けの環境だけ）
   const producer = g.user.producer;
   if (!producer) return json({ error: "生産者情報が登録されていません" }, 403);
   const [supplies, slots, items] = await Promise.all([repo.listOwnSupplies(producer.id), repo.producerSlots(producer.id), repo.itemsWithVarieties()]);

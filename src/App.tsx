@@ -1,11 +1,12 @@
 import { useEffect } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigationType } from "react-router";
-import { AppShell, GuestShell, OnboardingShell } from "./components/AppShell";
+import { AppShell, GuestShell, OnboardingShell, PlainShell } from "./components/AppShell";
 import { PATHS } from "./routes/paths";
 import { SessionProvider, useMe } from "./routes/session";
 import Producer from "./pages/Producer";
 import Restaurant from "./pages/Restaurant";
 import { Demo, Login, Signup, Welcome } from "./pages/Guest";
+import { Privacy, Terms } from "./pages/Legal";
 import ProducerOnboarding from "./pages/onboarding/ProducerOnboarding";
 import RestaurantOnboarding from "./pages/onboarding/RestaurantOnboarding";
 import MyPage from "./pages/daily/MyPage";
@@ -53,6 +54,12 @@ export function AppRoutes() {
           <Route path={PATHS.signup} element={<Signup />} />
           <Route path={PATHS.demo} element={<Demo />} />
         </Route>
+      </Route>
+
+      {/* 利用規約・プライバシーポリシー：ログインの有無に関係なく読める */}
+      <Route element={<PlainShell />}>
+        <Route path={PATHS.terms} element={<Terms />} />
+        <Route path={PATHS.privacy} element={<Privacy />} />
       </Route>
 
       <Route path="/restaurant" element={<RoleGate role="restaurant" />}>

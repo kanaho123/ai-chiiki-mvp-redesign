@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link, Navigate } from "react-router";
 import { Icon } from "../components/Icon";
-import { DEMO_APP_URL, PATHS } from "../routes/paths";
+import { demoEntryUrl, PATHS } from "../routes/paths";
+import { OPERATOR } from "../lib/legal";
 import { useSession } from "../routes/session";
 import Onboarding from "./Onboarding";
 import RoleSelect from "./RoleSelect";
@@ -35,7 +36,7 @@ export function Welcome() {
       <div className="guest-actions">
         <Link className="btn-primary btn-block link-btn" to={PATHS.signup}>はじめての方（新規登録）</Link>
         <Link className="btn-secondary btn-block link-btn" to={PATHS.login}>登録済みの方（ログイン）</Link>
-        <Link className="text-btn link-btn" to={PATHS.demo}>まずはデモを試す<Icon name="chevronRight" /></Link>
+        {demoEntryUrl() && <a className="text-btn link-btn" href={demoEntryUrl()!}>まずはデモを試す<Icon name="chevronRight" /></a>}
       </div>
     </main>
   );
@@ -51,7 +52,9 @@ export function Demo() {
         <p className="muted">架空の農家・在庫・価格だけが入った、デモ用の別の画面を開きます。ここで登録したアカウントや情報は使いません。</p>
       </div>
       <div className="guest-actions">
-        <a className="btn-primary btn-block link-btn" href={DEMO_APP_URL} rel="noopener">デモの画面を開く<Icon name="arrowRight" /></a>
+        {demoEntryUrl()
+          ? <a className="btn-primary btn-block link-btn" href={demoEntryUrl()!}>デモの画面を開く<Icon name="arrowRight" /></a>
+          : <p className="empty-note">デモの画面の場所が設定されていません。運営にお問い合わせください。</p>}
         <Link className="text-btn link-btn" to={PATHS.welcome}>トップに戻る</Link>
       </div>
     </main>
@@ -102,7 +105,7 @@ export function Login() {
       </form>
       <details className="more-info">
         <summary>パスワードを忘れた方</summary>
-        <p className="hint">お手数ですが、運営までお問い合わせください。ご本人の確認後に、パスワードを設定し直す方法をご案内します。</p>
+        <p className="hint">いまは、画面やメールでパスワードを設定し直す機能はありません。お手数ですが、{OPERATOR.contact} までご連絡ください。</p>
       </details>
       <p className="guest-switch">はじめての方は <Link to={PATHS.signup}>新規登録</Link></p>
     </main>
@@ -167,6 +170,11 @@ export function Signup() {
           <input type="password" value={f.passwordConfirm} onChange={(e) => setF({ ...f, passwordConfirm: e.target.value })} autoComplete="new-password" aria-required="true" aria-invalid={error?.field === "passwordConfirm"} />
           {errorFor("passwordConfirm")}
         </label>
+        <div className="legal-links" data-field="legal">
+          <p className="hint">登録の前に、内容をご確認ください（新しいタブで開きます）。</p>
+          <a className="text-btn link-btn" href={PATHS.terms} target="_blank" rel="noopener">利用規約を読む<Icon name="chevronRight" /></a>
+          <a className="text-btn link-btn" href={PATHS.privacy} target="_blank" rel="noopener">プライバシーポリシーを読む<Icon name="chevronRight" /></a>
+        </div>
         <label className="check-row">
           <input type="checkbox" checked={f.legalAccepted} onChange={(e) => setF({ ...f, legalAccepted: e.target.checked })} />
           <span>利用規約とプライバシーポリシーに同意する</span>

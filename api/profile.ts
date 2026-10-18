@@ -6,6 +6,7 @@ import { handle, json, readJson } from "../server/http.js";
 import { OnboardingProblem } from "../server/onboarding.js";
 import { loadProfile, updateProducerProfile, updateRestaurantProfile } from "../server/profile.js";
 import { repo } from "../server/repo.js";
+import { refillSlotsIfDue } from "../server/slot-refill.js";
 
 // マイページ：本人のプロフィールの表示（GET）と更新（PATCH）。一般ユーザー向けの環境で、初回登録を終えた本人だけ。
 // ログイン用メールアドレス・パスワードの変更はここでは扱わない。
@@ -30,6 +31,7 @@ export const PATCH = handle(async (request) => {
     } else {
       const c = checkProducer(body);
       if (!c.ok) return json({ error: "入力内容を確認してください", errors: c.errors }, 400);
+      await refillSlotsIfDue();
       await updateProducerProfile(prisma, g.user.id, c.value, new Date());
     }
   } catch (e) {

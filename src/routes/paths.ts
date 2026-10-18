@@ -8,6 +8,8 @@ export const PATHS = {
   login: "/login",
   signup: "/signup",
   demo: "/demo",
+  terms: "/terms",
+  privacy: "/privacy",
   restaurant: {
     home: "/restaurant/home",
     buy: "/restaurant/buy",
@@ -47,5 +49,24 @@ export const NAV: Record<Role, NavItem[]> = {
   ],
 };
 
-/** 一般向けの環境から案内するデモ環境（デモ用のデータだけが入った別の環境） */
-export const DEMO_APP_URL: string = import.meta.env.VITE_DEMO_APP_URL || "https://ai-chiiki-mvp-redesign.vercel.app/";
+/**
+ * 一般向けの環境とデモ用の環境は、同じコードを別々の URL で公開する。お互いの URL はビルド時の環境変数で設定する（コードに書かない）。
+ * ・VITE_DEMO_APP_URL：一般向けの環境に設定。デモ用の環境の URL（例：https://…）。「デモを試す」はその /demo へ
+ * ・VITE_GENERAL_APP_URL：デモ用の環境に設定。一般向けの環境の URL。「一般向けのサービスへ」の戻り先
+ * 未設定・不正な値ならリンクを出さない。https だけを使う（開発中だけ localhost の http も可）
+ */
+export function appUrl(raw: string | undefined, dev = import.meta.env.DEV): string | null {
+  const v = (raw ?? "").trim().replace(/\/+$/, "");
+  if (!v) return null;
+  try {
+    const u = new URL(v);
+    const local = u.hostname === "localhost" || u.hostname === "127.0.0.1";
+    if (u.protocol === "https:" && !local) return u.origin;
+    if (dev && u.protocol === "http:" && local) return u.origin;
+  } catch {}
+  return null;
+}
+/** デモ用の環境の入口（/demo）。未設定なら null */
+export const demoEntryUrl = (base = appUrl(import.meta.env.VITE_DEMO_APP_URL)) => (base ? `${base}${PATHS.demo}` : null);
+/** 一般向けの環境のトップ。未設定なら null */
+export const generalHomeUrl = (base = appUrl(import.meta.env.VITE_GENERAL_APP_URL)) => (base ? `${base}/` : null);

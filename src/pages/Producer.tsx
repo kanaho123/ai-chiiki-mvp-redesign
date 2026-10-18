@@ -53,12 +53,12 @@ export default function ProducerPage({ me }: { me: Me }) {
       const r = await fetch("/api/supplies", { cache: "no-store" });
       const d = await r.json();
       if (seq !== loadSeq.current) return;
-      if (!r.ok) throw new Error(d.error);
+      if (!r.ok) throw Object.assign(new Error(typeof d?.error === "string" ? d.error : ""), { name: "LoadError" });
       setData(d);
       setLoadError(null);
     } catch (e) {
       if (seq !== loadSeq.current) return;
-      setLoadError(e instanceof Error && e.message ? e.message : "供給を読み込めませんでした。再読み込みしてください。");
+      setLoadError(e instanceof Error && e.name === "LoadError" && e.message ? e.message : "出品を読み込めませんでした。画面を再読み込みしてください。");
     }
   }, []);
 

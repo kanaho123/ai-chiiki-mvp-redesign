@@ -251,6 +251,22 @@ describe("メールアドレスでのログイン", () => {
   });
 });
 
+describe("別サイトからの送信（CSRF）", () => {
+  const foreign = (handler: { POST: (r: Request) => Promise<Response> }, body: unknown, origin: string) =>
+    handler.POST(new Request(`${BASE}/api`, { method: "POST", headers: { "content-type": "application/json", origin, "x-forwarded-for": freshIp() }, body: JSON.stringify(body) }));
+  it("新規登録・ログインは、別のサイトの Origin なら 403 で何もしない。同じサイトなら通る", async () => {
+    const r1 = await foreign(signup, signupBody(), "https://evil.example");
+    expect(r1.status).toBe(403);
+    expect(r1.headers.get("set-cookie")).toBeNull();
+    expect(db.users.size).toBe(0);
+    expect((await foreign(signup, signupBody(), BASE)).status).toBe(201);
+    const r2 = await foreign(login, { email: "taro@example.com", password: PASSWORD }, "https://evil.example");
+    expect(r2.status).toBe(403);
+    expect(r2.headers.get("set-cookie")).toBeNull();
+    expect((await foreign(login, { email: "taro@example.com", password: PASSWORD }, BASE)).status).toBe(200);
+  });
+});
+
 describe("登録直後のユーザーの権限", () => {
   it("オンボーディング前は、ロールに合った API でも使えない（onboarding-required）", async () => {
     const p = await post(signup, signupBody({ role: "producer" }));

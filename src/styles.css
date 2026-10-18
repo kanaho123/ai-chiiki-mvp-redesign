@@ -860,3 +860,12 @@ legend.label { padding: 0; margin-bottom: 8px; width: 100%; }
 @media (max-width: 400px) {
   .info-row { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }
+
+/* ── 利用規約・プライバシーポリシー（Phase 5） ── */
+.legal { gap: 14px; }
+.legal-h { font-size: 18px; margin-top: 12px; }
+.legal ul { margin: 0; padding-left: 1.3em; display: grid; gap: 8px; }
+.legal-links { display: grid; justify-items: start; gap: 0; }
+.legal-links .text-btn { margin-left: -12px; }
+.error-retry p { margin-bottom: 8px; }
+.guest-switch a { display: inline-flex; align-items: center; min-height: var(--tap-min); padding: 0 8px; font-weight: 700; }

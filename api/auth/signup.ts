@@ -1,6 +1,6 @@
 import { createAccount, parseSignup } from "../../server/accounts.js";
 import { appMode } from "../../server/app-mode.js";
-import { createSessionToken, sessionCookie } from "../../server/auth.js";
+import { createSessionToken, crossSite, crossSiteResponse, sessionCookie } from "../../server/auth.js";
 import { handle, json, readJson } from "../../server/http.js";
 import { clientIp } from "../../server/rate-limit.js";
 import { repo } from "../../server/repo.js";
@@ -13,6 +13,7 @@ export const SIGNUP_RULE = { max: 10, windowMs: 60 * 60_000, lockMs: 60 * 60_000
 
 export const POST = handle(async (request) => {
   if (appMode() !== "general") return json({ error: "この環境では新規登録できません" }, 404);
+  if (crossSite(request)) return crossSiteResponse();
   const now = new Date();
   const ipKey = `signup-ip:${clientIp(request)}`;
   if (await repo.isThrottled([ipKey], now)) return json({ error: "登録の操作が続いたため、しばらく時間をおいてからお試しください" }, 429);

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Confirmation, Contact } from "../../lib/approvals";
 import { confirmationLabel, overallConfirmation } from "../../lib/approvals";
-import { confirmationApi } from "../../lib/confirmation-api";
+import { confirmationApi, friendlyError } from "../../lib/confirmation-api";
 import type { Freshness, Shown } from "./types";
 
 export function ApprovalPanel({ shown, freshness }: { shown: Shown; freshness: Freshness }) {
@@ -24,7 +24,7 @@ export function ApprovalPanel({ shown, freshness }: { shown: Shown; freshness: F
       setContacts(previous => Object.fromEntries(Object.entries(previous).filter(([id]) => data.requests.some(r => r.id === id && r.status === "approved"))));
     } catch (e) {
       if (seq !== sequence.current) return;
-      setRows(null); setContacts({}); setError(e instanceof Error ? e.message : "確認状態を読み込めませんでした");
+      setRows(null); setContacts({}); setError(friendlyError(e, "確認状態を読み込めませんでした。もう一度お試しください"));
     }
   }, [fingerprint, freshness]);
   useEffect(() => {
@@ -42,7 +42,7 @@ export function ApprovalPanel({ shown, freshness }: { shown: Shown; freshness: F
     try {
       const data = await confirmationApi<{ requests: Confirmation[] }>("/api/approvals", "POST", { request: shown.request, version: shown.version, fingerprint });
       setRows(data.requests);
-    } catch (e) { setRows(null); setError(e instanceof Error ? e.message : "依頼を送れませんでした"); }
+    } catch (e) { setRows(null); setError(friendlyError(e, "依頼を送れませんでした。もう一度お試しください")); }
     finally { actionLock.current = false; setBusy(false); }
   }
   async function showContact(id: string) {
@@ -52,7 +52,7 @@ export function ApprovalPanel({ shown, freshness }: { shown: Shown; freshness: F
       const data = await confirmationApi<{ contact: Contact }>(`/api/approvals/${encodeURIComponent(id)}`);
       setContacts(previous => ({ ...previous, [id]: data.contact }));
     } catch (e) {
-      setContacts({}); setContactError(e instanceof Error ? e.message : "連絡先を読み込めませんでした");
+      setContacts({}); setContactError(friendlyError(e, "連絡先を読み込めませんでした。もう一度お試しください"));
       await refresh();
     } finally { actionLock.current = false; setBusy(false); }
   }

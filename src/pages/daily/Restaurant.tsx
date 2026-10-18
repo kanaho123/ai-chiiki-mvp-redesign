@@ -5,9 +5,10 @@ import { Icon } from "../../components/Icon";
 import {
   confirmationLabel, consultationLabel, groupConsultations, isOngoing, restaurantTodo, type Consultation, type Contact,
 } from "../../lib/approvals";
-import { confirmationApi } from "../../lib/confirmation-api";
+import { confirmationApi, friendlyError } from "../../lib/confirmation-api";
 import { PATHS } from "../../routes/paths";
 import { useMe } from "../../routes/session";
+import { ErrorRetry } from "./ErrorRetry";
 import { WelcomeNotice } from "./WelcomeNotice";
 import { useConfirmations, whenText, yen } from "./data";
 
@@ -41,7 +42,7 @@ function ConsultationCard({ c }: { c: Consultation }) {
 
 export function RestaurantHome() {
   const me = useMe();
-  const { data, error } = useConfirmations();
+  const { data, error, reload } = useConfirmations();
   const consultations = data ? groupConsultations(data) : null;
   const ongoing = consultations?.filter(isOngoing) ?? [];
   const todo = consultations ? restaurantTodo(consultations) : null;
@@ -52,7 +53,7 @@ export function RestaurantHome() {
         <h1 className="display">{nameOf(me)}</h1>
       </div>
       <WelcomeNotice role="restaurant" text="さっそく、欲しい食材の仕入れ案をつくってみましょう。" />
-      {error && <div className="alert bad" role="alert"><Icon name="alert" />{error}</div>}
+      {error && <ErrorRetry text={error} onRetry={reload} />}
 
       <section className="todo" aria-labelledby="todo-title">
         <h2 className="section-title" id="todo-title">今やること</h2>
@@ -75,7 +76,7 @@ export function RestaurantHome() {
 }
 
 export function RestaurantConsultations() {
-  const { data, error } = useConfirmations();
+  const { data, error, reload } = useConfirmations();
   const consultations = data ? groupConsultations(data) : null;
   const ongoing = consultations?.filter(isOngoing) ?? [];
   const ended = consultations?.filter((c) => !isOngoing(c)) ?? [];
@@ -85,7 +86,7 @@ export function RestaurantConsultations() {
         <h1 className="display">相談</h1>
         <p className="muted">生産者に確認を依頼した仕入れです。「対応できます」と返事をした農家の連絡先を見られます。</p>
       </div>
-      {error && <div className="alert bad" role="alert"><Icon name="alert" />{error}</div>}
+      {error && <ErrorRetry text={error} onRetry={reload} />}
       {!consultations && !error && <p className="muted" aria-busy="true">読み込み中…</p>}
       {consultations?.length === 0 && (
         <>
@@ -125,7 +126,7 @@ export function RestaurantConsultationDetail() {
       const d = await confirmationApi<{ contact: Contact }>(`/api/approvals/${encodeURIComponent(requestId)}`);
       setContacts((prev) => ({ ...prev, [requestId]: d.contact }));
     } catch (e) {
-      setContactError(e instanceof Error ? e.message : "連絡先を読み込めませんでした");
+      setContactError(friendlyError(e, "連絡先を読み込めませんでした。もう一度お試しください"));
       await reload();
     } finally {
       setBusy(null);
@@ -135,7 +136,7 @@ export function RestaurantConsultationDetail() {
   return (
     <main className="screen">
       <Link className="text-btn link-btn back-link" to={PATHS.restaurant.consultations}><Icon name="chevronRight" style={{ transform: "rotate(180deg)" }} />相談の一覧へ</Link>
-      {error && <div className="alert bad" role="alert"><Icon name="alert" />{error}</div>}
+      {error && <ErrorRetry text={error} onRetry={reload} />}
       {c === undefined && !error && <p className="muted" aria-busy="true">読み込み中…</p>}
       {c === null && <p className="empty-note">この相談は見つかりませんでした。</p>}
       {c && (

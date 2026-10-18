@@ -16,6 +16,9 @@ export type CompleteResult = { status: "completed" | "already-completed" };
 type Db = Pick<PrismaClient, "$transaction">;
 type Tx = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
 
+// DB との往復が遅いとき（接続先が遠い・混んでいる）でも、途中で打ち切られないように余裕をもたせる（既定は5秒）
+export const TX_OPTIONS = { timeout: 20_000, maxWait: 10_000 } as const;
+
 const INCONSISTENT = "登録情報に不整合があるため完了できませんでした。お手数ですが運営までお問い合わせください";
 
 /** 本人の状態を確かめる。再送なら "already"、作ってよければ null */
@@ -66,7 +69,7 @@ export async function completeRestaurantOnboarding(db: Db, userId: string, p: Re
     // 表示名は既存の画面との互換用。プロフィールの正は Restaurant.name
     await markOnboarded(tx, userId, p.name, now);
     return { status: "completed" } as const;
-  }));
+  }, TX_OPTIONS));
 }
 
 export async function completeProducerOnboarding(db: Db, userId: string, p: ProducerProfile, now: Date): Promise<CompleteResult> {
@@ -95,7 +98,7 @@ export async function completeProducerOnboarding(db: Db, userId: string, p: Prod
     }
     await markOnboarded(tx, userId, p.farmName, now);
     return { status: "completed" } as const;
-  }));
+  }, TX_OPTIONS));
 }
 
 /** 生産者の登録画面で使うマスタ（品目・有効な定期の受渡枠と場所）。内部の設定値は返さない */

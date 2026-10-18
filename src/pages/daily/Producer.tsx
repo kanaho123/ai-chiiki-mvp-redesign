@@ -3,10 +3,11 @@ import { Link } from "react-router";
 import { nameOf } from "../../components/AppShell";
 import { Icon } from "../../components/Icon";
 import { classifyRequests, confirmationLabel, type Confirmation } from "../../lib/approvals";
-import { confirmationApi } from "../../lib/confirmation-api";
+import { confirmationApi, friendlyError } from "../../lib/confirmation-api";
 import { useInbox } from "../../routes/inbox";
 import { PATHS } from "../../routes/paths";
 import { useMe, useSession } from "../../routes/session";
+import { ErrorRetry } from "./ErrorRetry";
 import { WelcomeNotice } from "./WelcomeNotice";
 import { useConfirmations, useSupplies, whenText, yen } from "./data";
 
@@ -43,7 +44,7 @@ export function ProducerHome() {
         <h1 className="display">{nameOf(me)}</h1>
       </div>
       <WelcomeNotice role="producer" text="次は、今日出せる野菜と量を登録しましょう。" />
-      {(requests.error || supplies.error) && <div className="alert bad" role="alert"><Icon name="alert" />{requests.error ?? supplies.error}</div>}
+      {(requests.error || supplies.error) && <ErrorRetry text={(requests.error ?? supplies.error)!} onRetry={() => Promise.all([requests.reload(), supplies.reload()])} />}
 
       <section className="todo" aria-labelledby="todo-title">
         <h2 className="section-title" id="todo-title">今やること</h2>
@@ -115,7 +116,7 @@ export function ProducerRequests() {
       await confirmationApi(`/api/approvals/${encodeURIComponent(id)}`, "PATCH", { status });
       setMessage({ tone: "ok", text: status === "approved" ? "「対応できます」と返事をしました。この飲食店に、あなたの連絡先が表示されます。" : "「今回は対応できません」と返事をしました。" });
     } catch (e) {
-      setMessage({ tone: "bad", text: e instanceof Error ? e.message : "返事を送れませんでした" });
+      setMessage({ tone: "bad", text: friendlyError(e, "返事を送れませんでした。もう一度お試しください") });
     } finally {
       await reload();
       inbox.refresh();
@@ -132,7 +133,7 @@ export function ProducerRequests() {
         {appMode === "general" && <p className="hint">表示する連絡先は、マイページで確認・変更できます。</p>}
       </div>
       {message && <div className={`alert ${message.tone}`} role={message.tone === "bad" ? "alert" : "status"}><Icon name={message.tone === "ok" ? "check" : "alert"} />{message.text}</div>}
-      {error && <div className="alert bad" role="alert"><Icon name="alert" />{error}</div>}
+      {error && <ErrorRetry text={error} onRetry={reload} />}
       {!groups && !error && <p className="muted" aria-busy="true">読み込み中…</p>}
       {groups && (
         <>

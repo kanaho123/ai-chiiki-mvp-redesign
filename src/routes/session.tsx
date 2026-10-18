@@ -60,6 +60,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     void refresh();
+    const onUnauthorized = () => void refresh();
+    window.addEventListener("aic:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("aic:unauthorized", onUnauthorized);
   }, [refresh]);
 
   const logout = useCallback(async () => {

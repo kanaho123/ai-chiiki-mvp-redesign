@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { isEmail, isPhone } from "../../lib/onboarding";
 import type { Contact } from "../../lib/approvals";
-import { confirmationApi } from "../../lib/confirmation-api";
+import { confirmationApi, friendlyError } from "../../lib/confirmation-api";
 import { nameOf, ROLE_TEXT } from "../../components/AppShell";
 import { Icon } from "../../components/Icon";
 import {
@@ -11,6 +11,7 @@ import {
 } from "../../lib/onboarding";
 import { useMe, useSession } from "../../routes/session";
 import { ChoiceGroup, focusFirstError, MultiChoiceGroup, PrefectureField, StyleText, TextField } from "../onboarding/parts";
+import { ErrorRetry } from "./ErrorRetry";
 
 // マイページ：閲覧ではまとめて読みやすく表示し、「編集」を押した区切りだけを変更する（一度に1つの区切りだけ）。
 // 保存はサーバーで初回登録と同じ確認をする。ログイン用メールアドレス・パスワードの変更は扱わない。
@@ -71,6 +72,7 @@ export default function MyPage() {
   const { appMode, logout, refresh } = useSession();
   const [view, setView] = useState<View | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadTick, setLoadTick] = useState(0);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [errors, setErrors] = useState<Errors>({});
@@ -81,12 +83,11 @@ export default function MyPage() {
   useEffect(() => {
     if (!general) return;
     let alive = true;
-    fetch("/api/profile", { cache: "no-store" })
-      .then(async (r) => { const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error); return d as View; })
+    confirmationApi<View>("/api/profile")
       .then((d) => { if (alive) setView(d); })
-      .catch((e) => { if (alive) setLoadError(e instanceof Error && e.message ? e.message : "プロフィールを読み込めませんでした"); });
+      .catch((e) => { if (alive) setLoadError(friendlyError(e, "プロフィールを読み込めませんでした。もう一度お試しください")); });
     return () => { alive = false; };
-  }, [general]);
+  }, [general, loadTick]);
 
   const logoutButton = <button type="button" className="btn-secondary btn-block" onClick={logout}><Icon name="logout" />ログアウト</button>;
 
@@ -95,7 +96,7 @@ export default function MyPage() {
     return (
       <main className="screen">
         <h1 className="display">マイページ</h1>
-        {loadError && <div className="alert bad" role="alert"><Icon name="alert" />{loadError}</div>}
+        {loadError && <ErrorRetry text={loadError} onRetry={() => { setLoadError(null); setLoadTick((t) => t + 1); }} />}
         {general && !view && !loadError && <p className="muted" aria-busy="true">読み込み中…</p>}
         <dl className="account-rows">
           <div><dt>使い方</dt><dd>{ROLE_TEXT[me.role]}</dd></div>
@@ -298,7 +299,7 @@ function DemoContactSection() {
       setEditing(false);
       setMessage({ tone: "ok", text: "「飲食店に伝える連絡先」を保存しました" });
     } catch (err) {
-      setMessage({ tone: "bad", text: err instanceof Error ? err.message : "保存できませんでした" });
+      setMessage({ tone: "bad", text: friendlyError(err, "保存できませんでした。もう一度お試しください") });
     } finally {
       setBusy(false);
     }

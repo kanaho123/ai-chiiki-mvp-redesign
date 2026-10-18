@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Confirmation } from "../../lib/approvals";
-import { confirmationApi } from "../../lib/confirmation-api";
+import { confirmationApi, friendlyError } from "../../lib/confirmation-api";
 import { formatJstDateTime, jstTimeOf } from "../../lib/dates";
 
 // 日常の画面（ホーム・相談・依頼）で使うデータの読み込み。表示する状態はサーバーの実データだけを使う。
@@ -21,7 +21,7 @@ export function useConfirmations(): Load<Confirmation[]> {
       setError(null);
     } catch (e) {
       if (mine !== seq.current) return;
-      setError(e instanceof Error ? e.message : "読み込めませんでした。再読み込みしてください");
+      setError(friendlyError(e, "読み込めませんでした。もう一度お試しください"));
     }
   }, []);
   useEffect(() => {
@@ -49,7 +49,7 @@ export function useSupplies(): Load<SuppliesData> {
       setData(await confirmationApi<SuppliesData>("/api/supplies"));
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "出品を読み込めませんでした");
+      setError(friendlyError(e, "出品を読み込めませんでした。もう一度お試しください"));
     }
   }, []);
   useEffect(() => { void reload(); }, [reload]);

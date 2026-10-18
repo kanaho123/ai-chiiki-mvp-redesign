@@ -5,6 +5,7 @@ import { prisma } from "./db.js";
 import { json, readJson } from "./http.js";
 import { completeProducerOnboarding, completeRestaurantOnboarding, OnboardingProblem } from "./onboarding.js";
 import { repo } from "./repo.js";
+import { refillSlotsIfDue } from "./slot-refill.js";
 
 // 初回登録の完了 API の共通処理（飲食店・生産者）。
 // ・一般ユーザー向けの環境だけ（デモ用アカウントは最初から登録済み）
@@ -18,6 +19,7 @@ export async function completeOnboarding<R extends keyof Profiles>(request: Requ
   if (!g.ok) return g.response;
   const checked = check(await readJson(request));
   if (!checked.ok) return json({ error: "入力内容を確認してください", errors: checked.errors }, 400);
+  if (role === "producer") await refillSlotsIfDue(); // 参加する受渡枠の、これからの回をそろえてから登録する
   try {
     const now = new Date();
     const result = role === "restaurant"

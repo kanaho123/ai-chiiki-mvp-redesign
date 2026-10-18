@@ -29,6 +29,61 @@ export const MATERIALIZE_DAYS = 28;
 
 const WEEKDAY = "日月火水木金土";
 
+/** 最後の回がこれより近くなったら補充する（日） */
+export const REFILL_WHEN_DAYS_LEFT = 21;
+const DAY_MS = 86_400_000;
+/** 「梅田エリア受渡所（仮）」→「梅田」（受渡の回の短い名前に使う） */
+export const shortPlaceName = (name: string) => name.replace(/(エリア)?受渡所.*$/, "") || name;
+
+/**
+ * 運営が有効にしている定期枠（SlotSeries.active=true）から、これから MATERIALIZE_DAYS 日分の受渡の回を補充する。
+ * ・何度実行しても同じ（定期枠＋開始時刻の一意制約と skipDuplicates で重複を作らない。同時に実行されても安全）
+ * ・active=false の定期枠からは新しく作らない
+ * ・すでにある回・参加者は削除も変更もしない（定期枠の参加者を、これからの回の参加者に加えるだけ）
+ * ・曜日・時刻は Asia/Tokyo（server/service-time.ts）
+ * force=false のときは、最後の回がまだ REFILL_WHEN_DAYS_LEFT 日より先にある定期枠を飛ばす（ふだんの画面表示から呼ぶため）
+ */
+export async function ensureUpcomingSlots(prisma: PrismaClient, now: Date, opts: { force?: boolean } = {}) {
+  const result = { activeSeries: 0, refilledSeries: 0, slotsCreated: 0, participantsAdded: 0 };
+  const series = await prisma.slotSeries.findMany({
+    where: { active: true },
+    select: {
+      id: true, placeId: true, weekday: true, startTime: true, endTime: true, deadlineHours: true, feeYen: true, maxKg: true,
+      place: { select: { name: true } },
+      slots: { select: { startAt: true }, orderBy: { startAt: "desc" }, take: 1 },
+      participants: { select: { producerId: true } },
+    },
+  });
+  const threshold = now.getTime() + REFILL_WHEN_DAYS_LEFT * DAY_MS;
+  for (const s of series) {
+    result.activeSeries++;
+    const last = s.slots[0]?.startAt;
+    if (!opts.force && last && last.getTime() > threshold) continue;
+    const occurrences = upcomingOccurrences(s, now, MATERIALIZE_DAYS);
+    if (occurrences.length === 0) continue;
+    result.refilledSeries++;
+    const label = `${shortPlaceName(s.place.name)}・${WEEKDAY[s.weekday]}${s.startTime}`;
+    const created = await prisma.handoverSlot.createMany({
+      data: occurrences.map((o) => ({
+        placeId: s.placeId, seriesId: s.id, label, startAt: o.startAt, endAt: o.endAt, confirmDeadlineAt: o.confirmDeadlineAt,
+        feeYen: s.feeYen, feeConfirmed: true, maxKg: s.maxKg, conditionsConfirmed: true,
+      })),
+      skipDuplicates: true,
+    });
+    result.slotsCreated += created.count;
+    // 定期枠に参加している生産者を、これからの回の参加者にする（二重登録はしない）
+    if (s.participants.length > 0) {
+      const slots = await prisma.handoverSlot.findMany({ where: { seriesId: s.id, startAt: { in: occurrences.map((o) => o.startAt) } }, select: { id: true } });
+      const r = await prisma.slotParticipant.createMany({
+        data: slots.flatMap((slot) => s.participants.map((m) => ({ slotId: slot.id, producerId: m.producerId, confirmed: true }))),
+        skipDuplicates: true,
+      });
+      result.participantsAdded += r.count;
+    }
+  }
+  return result;
+}
+
 export async function seedGeneralMaster(prisma: PrismaClient, now: Date) {
   const result = { items: 0, varieties: 0, places: 0, series: 0, inactiveSeries: 0, slotsCreated: 0, participantsAdded: 0 };
   // 品目と「指定なし」
@@ -43,34 +98,16 @@ export async function seedGeneralMaster(prisma: PrismaClient, now: Date) {
     await prisma.place.upsert({ where: { id: p.id }, update: { name: p.name, address: p.address }, create: { id: p.id, name: p.name, address: p.address } });
     result.places++;
   }
-  // 定期枠と、実際の回
+  // 定期枠（active は上書きしない）
   for (const s of GENERAL_SERIES) {
     const { id, ...data } = s;
     const row = await prisma.slotSeries.upsert({ where: { id }, update: data, create: { id, ...data }, select: { active: true } });
     result.series++;
-    if (!row.active) {
-      result.inactiveSeries++;
-      continue;
-    }
-    const place = GENERAL_PLACES.find((p) => p.id === s.placeId)!;
-    const members = await prisma.slotSeriesParticipant.findMany({ where: { seriesId: id }, select: { producerId: true } });
-    for (const o of upcomingOccurrences(s, now, MATERIALIZE_DAYS)) {
-      const existing = await prisma.handoverSlot.findUnique({ where: { seriesId_startAt: { seriesId: id, startAt: o.startAt } }, select: { id: true } });
-      const slot = existing ?? await prisma.handoverSlot.create({
-        data: {
-          placeId: s.placeId, seriesId: id, label: `${place.short}・${WEEKDAY[s.weekday]}${s.startTime}`,
-          startAt: o.startAt, endAt: o.endAt, confirmDeadlineAt: o.confirmDeadlineAt,
-          feeYen: s.feeYen, feeConfirmed: true, maxKg: s.maxKg, conditionsConfirmed: true,
-        },
-        select: { id: true },
-      });
-      if (!existing) result.slotsCreated++;
-      // 定期枠に参加している生産者を、その回の参加者にする（二重登録はしない）
-      if (members.length > 0) {
-        const r = await prisma.slotParticipant.createMany({ data: members.map((m) => ({ slotId: slot.id, producerId: m.producerId, confirmed: true })), skipDuplicates: true });
-        result.participantsAdded += r.count;
-      }
-    }
+    if (!row.active) result.inactiveSeries++;
   }
+  // 実際の回（ふだんの補充と同じ処理。seed では日数に関係なく必ず確かめる）
+  const r = await ensureUpcomingSlots(prisma, now, { force: true });
+  result.slotsCreated = r.slotsCreated;
+  result.participantsAdded = r.participantsAdded;
   return result;
 }

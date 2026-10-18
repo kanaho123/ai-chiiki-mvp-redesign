@@ -1,7 +1,7 @@
 import { parseLogin } from "../../src/lib/validate.js";
 import { normalizeEmail } from "../../server/accounts.js";
 import { appMode } from "../../server/app-mode.js";
-import { createSessionToken, sessionCookie, verifyPassword } from "../../server/auth.js";
+import { createSessionToken, crossSite, crossSiteResponse, sessionCookie, verifyPassword } from "../../server/auth.js";
 import { handle, json, readJson } from "../../server/http.js";
 import { clientIp } from "../../server/rate-limit.js";
 import { repo } from "../../server/repo.js";
@@ -38,6 +38,7 @@ function readCredentials(body: unknown): Credentials | null {
 // メールアドレス（またはデモ用ログイン名）＋パスワードでログインし、署名付きの HttpOnly Cookie を発行する。
 // 失敗理由（ユーザーが無い・パスワード違い）は区別せず、内部情報も返さない。
 export const POST = handle(async (request) => {
+  if (crossSite(request)) return crossSiteResponse(); // 別サイトから勝手にログインさせない
   const cred = readCredentials(await readJson(request));
   if (!cred) return json({ error: FAILED }, 401);
   const now = new Date();
