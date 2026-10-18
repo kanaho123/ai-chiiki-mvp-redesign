@@ -64,3 +64,47 @@
   - general 専用 Project に利用記録がある。
   - 記録のモデル（`gpt-6-luna`）と利用制限（$5 hard limit）を確認した。
 - 一般公開（Deployment Protection の解除）と Gate 4（demo Production）は、この記録とは別に判断する。
+
+### Gate 4：demo Production（2026-10-18）
+
+- 判断：**合格**。既存の demo Production（Vercel プロジェクト `ai-chiiki-mvp-redesign`）を、共通コード（commit / tree `c853920`）へ更新した。demo 専用の挙動と既存のデモストーリーは維持した。
+- 理由：
+  - 本番でデモストーリーを 22/22 項目すべて成功した。
+  - P2028・5xx・CSP violation・routing error・runtime error はいずれも0件。
+  - general と demo は、別の DB・別のモード（`APP_MODE`）のまま動いている。
+- 捨てた案：
+  - migration を down して元に戻す。
+  - `demo-day-final` tag を新しい版へ動かす。
+- トレードオフ：DB には追加の migration（`general_user_foundation`）が残る。コードは `195204a` の deployment へ戻せる状態を保つ。
+- 審査上の意味：デモデイの「在庫条件が変わると、複数農家を組み合わせた仕入れ案も再計算される」という価値を壊さずに、一般向けの版への導線を足した。
+
+#### 検証結果
+
+| 項目 | 結果 |
+|---|---|
+| deployment | commit / tree `c853920`（Functions 7個）。canonical URL `https://ai-chiiki-mvp-redesign.vercel.app` はこの deployment を指す |
+| demo Production DB の migration | `prisma migrate deploy` で `general_user_foundation` だけを適用した。6件すべて適用済み、rolled back なし、schema の差分なし |
+| 旧版 `195204a` | migration 後の DB に対して動作確認済み（demo-r・demo-a のログイン、`/api/me`、A10 の仕入れ案） |
+| 環境変数 | `APP_MODE=demo` と `VITE_GENERAL_APP_URL=https://ai-chiiki-general.vercel.app` を追加した。既存の DB・SESSION_SECRET・OpenAI・DEMO_NOW は変更していない |
+| deploy 直後の確認（非破壊） | `appMode=demo`、固定日時（2026-10-22 12:00 JST）、demo account のログイン、一般向け API（登録・onboarding・profile）は demo で利用不可（404）、API rewrite・7 Functions 正常 |
+| デモストーリー | 22/22 成功（下の流れ） |
+| P2028 / 5xx / CSP violation / routing error / runtime error | すべて 0 |
+| 一般向けへの導線 | デモの「一般向けのサービスへ」は `https://ai-chiiki-general.vercel.app/` を指す |
+| final reset 後の DB | A10 / B5 / C0 / D10、ApprovalRequest 0、demo user 維持、架空の連絡先は初期値、migration 6件 |
+| `demo-day-final` | `195204a` のまま維持（ロールバックの基準） |
+
+デモストーリーの流れ：
+1. 飲食店がトマト 10kg を要求する → A10 で揃う（¥6,800）。
+2. A農園が 5kg に変える → 案が無効になり、計算し直すと A5 ＋ B5（¥6,550）。
+3. 生産者に確認を依頼する。返事の前は連絡先を見られない（API も拒否する）。
+4. A農園が「対応できます」と返事する。この時点では B の連絡先は拒否される。
+5. B農園が「対応できます」と返事する → 飲食店に双方の状態が反映される。承認しても在庫は変わらない。
+6. 対応できる農家だけ連絡先を表示する。
+7. A農園が連絡先を編集する → 飲食店の表示に反映される。
+8. B農園が 4kg に変える → 計算し直すと「あと1kg 足りません」・9kgまで（¥6,000）。
+
+#### 留意点
+
+- migration 前の demo Production DB は D15・ApprovalRequest 2件で、完全な初期状態ではなかった。最後の変更は 2026-10-17 22:42 JST。
+- 約15時間変更がなく、利用中ではないことを確認してから migration した。migration の前に、全テーブルを read-only でリポジトリ外へ退避した。
+- 最終的に reset-demo でデモ開始状態へ戻した。
