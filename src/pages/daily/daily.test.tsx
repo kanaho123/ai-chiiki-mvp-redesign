@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter, useLocation } from "react-router";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { AppRoutes } from "../../App";
 import type { Confirmation, ConfirmationStatus } from "../../lib/approvals";
 import { SessionProvider, type Me } from "../../routes/session";
@@ -381,17 +381,61 @@ describe("マイページ", () => {
 
 describe("生産者のマイページ：いま出品しているもの", () => {
   beforeEach(() => { me = producer; });
-  it("一般向け：最初に品目・数量・価格・公開／停止・更新日時を一覧し、出品の変更へ進める", async () => {
+  it("一般向け：最初に、品目 → 状態 → 残り → 価格 → 「編集する」を商品ごとに出す（公開中／止めています／売り切れ）", async () => {
     profile = producerProfile();
-    supplyRows = [supplyRow(), supplyRow({ id: "sp2", item: { name: "なす" }, grade: "irregular", availableKg: 5, priceYenPerKg: 450, published: false, updatedAt: "2026-10-21T06:30:00.000Z" })];
+    supplyRows = [
+      supplyRow(),
+      supplyRow({ id: "sp2", item: { name: "なす" }, grade: "irregular", availableKg: 5, priceYenPerKg: 450, published: false }),
+      supplyRow({ id: "sp3", item: { name: "きゅうり" }, availableKg: 0, priceYenPerKg: 300, published: true }),
+    ];
     await open("/producer/mypage");
     const sec = $(".listings-summary")!;
     // 販売スタイル・農園の情報より前にある
     expect([...el.querySelectorAll("main .listings-summary, main .style-card")].map((x) => x.className)).toEqual(["listings-summary", "style-card"]);
-    expect(sec.querySelector(".listings-count")?.textContent).toBe("公開中 1件 / 全2件");
-    const rows = [...sec.querySelectorAll(".my-listing")].map((li) => [li.querySelector(".my-listing-name")?.textContent, li.querySelector(".my-listing-state")?.textContent, li.querySelector(".my-listing-qty")?.textContent, li.querySelector(".my-listing-updated")?.textContent]);
-    expect(rows).toEqual([["トマト", "公開中", "8kg・¥600/kg", "更新：10月20日（火） 12:00"], ["なす規格外", "停止中", "5kg・¥450/kg", "更新：10月21日（水） 15:30"]]);
-    expect(sec.querySelector("a")?.getAttribute("href")).toBe("/producer/listings");
+    const rows = [...sec.querySelectorAll(".my-listing")].map((li) => [li.querySelector(".my-listing-name")?.textContent, li.querySelector(".my-listing-state")?.textContent, li.querySelector(".my-listing-qty")?.textContent, li.querySelector(".my-listing-price")?.textContent, li.querySelector("a")?.textContent]);
+    expect(rows).toEqual([
+      ["トマト", "公開中", "残り 8kg", "価格 ¥600/kg", "編集する"],
+      ["なす規格外", "止めています", "残り 5kg", "価格 ¥450/kg", "編集する"],
+      ["きゅうり", "売り切れ", "残り 0kg", "価格 ¥300/kg", "編集する"],
+    ]);
+    expect([...sec.querySelectorAll(".my-listing")].map((li) => li.className)).toEqual(["my-listing on", "my-listing off", "my-listing soldout"]);
+    // 「編集する」はその商品のところへ（読み上げでも、どの商品か分かる）
+    const edit = sec.querySelectorAll<HTMLAnchorElement>(".my-listing-edit")[1];
+    expect(edit.getAttribute("href")).toBe("/producer/listings#supply-sp2");
+    expect(edit.getAttribute("aria-label")).toBe("なすを編集する");
+    expect(text()).not.toContain("停止中");
+    await click(edit);
+    expect(path).toBe("/producer/listings");
+  });
+  it("「編集する」から開いた「出品」の画面：その商品が枠で囲まれ、移動先になる。数量の欄は「残りの量」", async () => {
+    supplyRows = [supplyRow(), supplyRow({ id: "sp2", item: { name: "なす" }, availableKg: 10, published: true })].map((r) => ({ ...r, version: 1, originPrefecture: "大阪府" }));
+    const scrolled: string[] = [];
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this.id); } as Element["scrollIntoView"];
+    onTestFinished(() => { Element.prototype.scrollIntoView = original; });
+    await open("/producer/listings#supply-sp2");
+    const card = $("#supply-sp2")!;
+    expect(card.classList.contains("targeted")).toBe(true);
+    expect($("#supply-sp1")!.classList.contains("targeted")).toBe(false);
+    expect(scrolled).toEqual(["supply-sp2"]);
+    expect(document.activeElement).toBe(card); // キーボードは開かない（数量の欄にはフォーカスしない）
+    expect(card.querySelector(".qty-label")?.textContent).toBe("残りの量");
+    expect(card.querySelector<HTMLInputElement>("input[type=number]")?.getAttribute("aria-label")).toBe("なすの残りの量");
+  });
+  it("「出品」の画面の公開の状態：公開中で 0kg は「売り切れ」（マイページと同じ）。公開中・公開を停止中の表示は今のまま", async () => {
+    supplyRows = [
+      supplyRow(),
+      supplyRow({ id: "sp2", item: { name: "なす" }, availableKg: 5, published: false }),
+      supplyRow({ id: "sp3", item: { name: "きゅうり" }, availableKg: 0, published: true }),
+      supplyRow({ id: "sp4", item: { name: "玉ねぎ" }, availableKg: 0, published: false }),
+    ].map((r) => ({ ...r, version: 1, originPrefecture: "大阪府" }));
+    await open("/producer/listings");
+    const state = (id: string) => { const p = $(`#supply-${id} .publish-state`)!; return [p.className, p.textContent]; };
+    expect(state("sp1")).toEqual(["publish-state on", "公開中飲食店に表示されています"]);
+    expect(state("sp2")).toEqual(["publish-state off", "公開を停止中飲食店には表示されません"]);
+    expect(state("sp3")).toEqual(["publish-state soldout", "売り切れ仕入れ案には使われません。量を増やすと、また使われます"]);
+    expect(state("sp4")).toEqual(["publish-state off", "公開を停止中飲食店には表示されません"]); // 止めている 0kg は止めているまま
+    expect($("#supply-sp3 .publish-btn")?.textContent).toBe("公開を止める"); // 公開の状態・ボタンは変わらない
   });
   it("デモ用の環境でも同じ一覧を出す（出品がなければその旨）", async () => {
     mode = "demo";

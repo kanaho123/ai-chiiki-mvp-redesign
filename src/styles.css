@@ -439,6 +439,9 @@ button.tile:hover { background: var(--color-zone); }
 .publish-state b { display: inline-flex; align-items: center; gap: 6px; }
 .publish-state b::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--color-restaurant); }
 .publish-state.off b::before { background: var(--color-line-strong); }
+/* 売り切れ（公開中で 0kg）：マイページの「売り切れ」と同じ札 */
+.publish-state.soldout b { padding: 2px 10px; border-radius: var(--r-tag); background: var(--color-amber); color: #fff; font-weight: 800; }
+.publish-state.soldout b::before { display: none; }
 .publish-btn { padding: 0 16px; }
 
 details.more { background: var(--color-zone); border-radius: var(--r-zone); }
@@ -915,17 +918,22 @@ a.inline-link { display: inline-flex; align-items: center; min-height: var(--tap
 
 /* 生産者のマイページ：いま出品しているもの */
 .listings-summary { display: grid; gap: 12px; }
-.listings-count { font-size: 14px; color: var(--color-muted); }
-.my-listings { list-style: none; margin: 0; padding: 0; display: grid; }
-.my-listing { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 12px 0; border-bottom: 1px solid var(--color-line); }
-.my-listing:last-child { border-bottom: 0; }
-.my-listing-name { font-size: 17px; font-weight: 800; overflow-wrap: anywhere; }
+/* 1商品＝1枚のカード：品目と状態 → 残り・価格（大きめ）→ 編集する（幅いっぱいの大きなボタン） */
+.my-listings { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.my-listing { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; padding: 14px 16px; border: 1.5px solid var(--color-line); border-radius: var(--r-input); background: var(--color-page); }
+.my-listing-name { font-size: 18px; font-weight: 800; overflow-wrap: anywhere; }
 .my-listing-tag { margin-left: 6px; padding: 0 6px; border-radius: var(--r-tag); background: var(--color-amber-tint); color: var(--color-amber); font-size: 14px; font-weight: 700; }
-.my-listing-state { font-size: 14px; font-weight: 800; padding: 1px 9px; border-radius: var(--r-tag); align-self: start; }
+.my-listing-state { font-size: 15px; font-weight: 800; padding: 2px 10px; border-radius: var(--r-tag); white-space: nowrap; }
 .my-listing.on .my-listing-state { background: var(--color-restaurant-tint); color: var(--color-restaurant-dark); }
-.my-listing.off .my-listing-state { background: var(--color-sunken); color: var(--color-text, #1f1f1f); }
-.my-listing-qty { font-size: 15px; }
-.my-listing-updated { font-size: 14px; color: var(--color-muted); grid-column: 1 / -1; }
+.my-listing.off .my-listing-state { background: var(--color-sunken); color: var(--color-text); }
+.my-listing.soldout .my-listing-state { background: var(--color-amber); color: #fff; }
+.my-listing-qty, .my-listing-price { font-size: 16px; color: var(--color-muted); }
+.my-listing-qty b, .my-listing-price b { font-size: 22px; color: var(--color-text); }
+.my-listing-price { text-align: right; }
+.my-listing-edit { grid-column: 1 / -1; }
+/* 「出品」の画面：マイページの「編集する」から来た商品（固定のヘッダーに隠れないように少し下で止める） */
+.supply.listing { scroll-margin-top: 88px; }
+.supply.listing.targeted { outline: 3px solid var(--color-producer); outline-offset: 4px; }
 
 /* 出品：価格の変更 */
 .price-tool { display: grid; gap: 10px; }

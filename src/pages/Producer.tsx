@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router";
 import type { Me } from "../App";
 import { formatJstDateTime, jstTimeOf } from "../lib/dates.js";
 import { Icon } from "../components/Icon";
 import { useSession } from "../routes/session";
+import { supplyAnchor } from "./daily/ListingsSummary";
 import { PickupSetup, usePickupData } from "./daily/PickupPoints";
 
 // 生産者本人の供給一覧。主な操作は「数量を変更」「価格を変更」と「公開停止／再開」。
@@ -67,6 +69,21 @@ export default function ProducerPage({ me }: { me: Me }) {
     reload();
   }, [reload]);
 
+  // マイページの「編集する」から来たとき（#supply-…）：その商品のところまで移動し、枠で囲んで分かるようにする。
+  // 数量の欄にはフォーカスしない（スマートフォンでキーボードが開いて商品が隠れないように）
+  const { hash } = useLocation();
+  const [target, setTarget] = useState<string | null>(null);
+  useEffect(() => {
+    if (!data || !hash.startsWith("#supply-")) return;
+    const id = decodeURIComponent(hash.slice("#supply-".length));
+    const el = document.getElementById(supplyAnchor(id));
+    if (!el) return;
+    setTarget(id);
+    const smooth = !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView?.({ block: "start", behavior: smooth ? "smooth" : "auto" });
+    el.focus({ preventScroll: true });
+  }, [data !== null, hash]); // 読み込みが終わったとき・行き先が変わったときだけ（一覧の読み直しでは動かさない）
+
   // これからの受け渡しの回（受け渡しの場所と日時）。はじめての出品で1つもなければ、場所を聞く
   const { appMode, demoNow } = useSession();
   const general = appMode === "general";
@@ -84,6 +101,7 @@ export default function ProducerPage({ me }: { me: Me }) {
           <SupplyCard
             key={`${s.id}:${s.version}`}
             supply={s}
+            targeted={target === s.id}
             done={done?.id === s.id ? done.text : null}
             onChanged={(text, updated) => {
               setDone(text ? { id: s.id, text } : null);
@@ -103,7 +121,7 @@ export default function ProducerPage({ me }: { me: Me }) {
   );
 }
 
-function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: string | null; onChanged: (text?: string, updated?: Supply) => void }) {
+function SupplyCard({ supply: s, targeted = false, done, onChanged }: { supply: Supply; targeted?: boolean; done: string | null; onChanged: (text?: string, updated?: Supply) => void }) {
   const [kg, setKg] = useState(String(s.availableKg));
   const [price, setPrice] = useState(String(s.priceYenPerKg));
   const [editPrice, setEditPrice] = useState(false);
@@ -146,7 +164,7 @@ function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: stri
   const kgId = `kg-${s.id}`;
   const changed = kg !== String(s.availableKg);
   return (
-    <li className={`supply listing ${s.published ? "" : "paused"}`}>
+    <li id={supplyAnchor(s.id)} tabIndex={-1} className={`supply listing ${s.published ? "" : "paused"} ${targeted ? "targeted" : ""}`} aria-label={targeted ? `編集する商品：${s.item.name}` : undefined}>
       <div className="supply-head">
         <span className="supply-icon" aria-hidden="true"><Icon name="leaf" size={24} /></span>
         <h2 className="supply-title">{s.item.name}<small>{s.originPrefecture}産・{s.grade === "irregular" ? (s.irregularReason ? `規格外（${s.irregularReason}）` : "規格外") : "通常品"}</small></h2>
@@ -160,9 +178,9 @@ function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: stri
         <div className={`qty-panel ${changed ? "changed" : ""}`}>
           <div className="qty-top">
             <label className="qty-next" htmlFor={kgId}>
-              <span className="qty-label">変更後</span>
+              <span className="qty-label">残りの量</span>
               <span className="with-unit">
-                <input ref={inputRef} id={kgId} type="number" inputMode="numeric" min={0} max={100} step={1} value={kg} onChange={(e) => setKg(e.target.value)} aria-label={`${s.item.name}の変更後の量`} />
+                <input ref={inputRef} id={kgId} type="number" inputMode="numeric" min={0} max={100} step={1} value={kg} onChange={(e) => setKg(e.target.value)} aria-label={`${s.item.name}の残りの量`} />
                 <em>kg</em>
               </span>
             </label>
@@ -213,7 +231,10 @@ function SupplyCard({ supply: s, done, onChanged }: { supply: Supply; done: stri
         <span><Icon name="pin" size={20} />{s.slot.placeName}</span>
       </p>
       <div className="publish-row">
-        <p className={`publish-state ${s.published ? "on" : "off"}`}><b>{s.published ? "公開中" : "公開を停止中"}</b>{s.published ? "飲食店に表示されています" : "飲食店には表示されません"}</p>
+        {/* 公開中で 0kg は「売り切れ」（マイページと同じ言葉・見た目）。仕入れ案の候補にはならない（公開の状態はそのまま） */}
+        {s.published && s.availableKg === 0
+          ? <p className="publish-state soldout"><b>売り切れ</b>仕入れ案には使われません。量を増やすと、また使われます</p>
+          : <p className={`publish-state ${s.published ? "on" : "off"}`}><b>{s.published ? "公開中" : "公開を停止中"}</b>{s.published ? "飲食店に表示されています" : "飲食店には表示されません"}</p>}
         <button type="button" className="btn-secondary publish-btn" onClick={() => patch({ published: !s.published })} disabled={busy}>
           {s.published ? "公開を止める" : "公開を再開する"}
         </button>
