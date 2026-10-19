@@ -3,6 +3,7 @@ import { useLocation } from "react-router";
 import type { Me } from "../App";
 import { formatJstDateTime, jstTimeOf } from "../lib/dates.js";
 import { Icon } from "../components/Icon";
+import { findItemByName, itemKey, ITEM_NAME_MAX, parseItemName } from "../lib/items.js";
 import { useSession } from "../routes/session";
 import { supplyAnchor } from "./daily/ListingsSummary";
 import { PickupSetup, usePickupData } from "./daily/PickupPoints";
@@ -116,7 +117,7 @@ export default function ProducerPage({ me }: { me: Me }) {
 
       {/* はじめての出品で、まだ渡せる場所がない（一般向けの環境）：その場で「普段、野菜をどこで渡せますか？」を1回だけ聞いてから出品へ進む */}
       {data && general && upcoming.length === 0 && <FirstPlaceSetup onDone={reload} />}
-      {data && (!general || upcoming.length > 0) && <NewSupply data={{ ...data, slots: upcoming }} defaultOrigin={me.producer?.originPrefecture ?? ""} onCreated={reload} openFirst={data.supplies.length === 0} />}
+      {data && (!general || upcoming.length > 0) && <NewSupply data={{ ...data, slots: upcoming }} defaultOrigin={me.producer?.originPrefecture ?? ""} onCreated={reload} openFirst={data.supplies.length === 0} general={general} />}
     </main>
   );
 }
@@ -243,10 +244,14 @@ function SupplyCard({ supply: s, targeted = false, done, onChanged }: { supply: 
   );
 }
 
-type NewForm = {
-  itemId: string; varietyId: string; grade: "" | "regular" | "irregular"; irregularReason: string; originPrefecture: string;
-  availableKg: string; priceYenPerKg: string; minKg: string; slotId: string; published: "" | "yes" | "no";
+/** 出品の1行（商品ごと）。品目は候補つきの自由入力 */
+type SupplyRow = {
+  key: number; itemName: string; varietyId: string; grade: "regular" | "irregular"; irregularReason: string;
+  availableKg: string; priceYenPerKg: string; minKg: string; status: { tone: "ok" | "bad"; text: string } | null;
 };
+/** 全行に共通（産地・受け渡し・公開するか） */
+type SupplyShared = { originPrefecture: string; slotId: string; published: "" | "yes" | "no" };
+const MAX_ROWS = 10;
 
 /** はじめての出品の前に、普段の受け渡しの場所を1回だけ聞く */
 function FirstPlaceSetup({ onDone }: { onDone: () => void }) {
@@ -298,32 +303,72 @@ function PickupChoice({ slots, value, onChange }: { slots: Slot[]; value: string
   );
 }
 
-function NewSupply({ data, defaultOrigin, onCreated, openFirst = false }: { data: Data; defaultOrigin: string; onCreated: () => void; openFirst?: boolean }) {
-  const empty: NewForm = { itemId: "", varietyId: "", grade: "regular", irregularReason: "", originPrefecture: defaultOrigin, availableKg: "", priceYenPerKg: "", minKg: "1", slotId: "", published: "" };
-  const [f, setF] = useState<NewForm>(empty);
+function NewSupply({ data, defaultOrigin, onCreated, openFirst = false, general = false }: { data: Data; defaultOrigin: string; onCreated: () => void; openFirst?: boolean; general?: boolean }) {
+  const keyRef = useRef(1);
+  const newRow = (): SupplyRow => ({ key: keyRef.current++, itemName: "", varietyId: "", grade: "regular", irregularReason: "", availableKg: "", priceYenPerKg: "", minKg: "1", status: null });
+  const [rows, setRows] = useState<SupplyRow[]>(() => [newRow()]);
+  const [shared, setShared] = useState<SupplyShared>({ originPrefecture: defaultOrigin, slotId: "", published: "" });
   // 受け渡しは、いつもの場所のいちばん近い日時を最初から選んでおく
   const defaultSlot = data.slots[0]?.id ?? "";
   useEffect(() => {
-    if (!f.slotId || !data.slots.some((s) => s.id === f.slotId)) setF((x) => ({ ...x, slotId: defaultSlot }));
-  }, [f.slotId, data.slots, defaultSlot]);
+    if (!shared.slotId || !data.slots.some((s) => s.id === shared.slotId)) setShared((x) => ({ ...x, slotId: defaultSlot }));
+  }, [shared.slotId, data.slots, defaultSlot]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
-  const set = <K extends keyof NewForm>(k: K, v: NewForm[K]) => setF((x) => ({ ...x, [k]: v }));
-  const item = data.items.find((i) => i.id === f.itemId);
+  const setRow = (key: number, patch: Partial<SupplyRow>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch, status: null } : r)));
+  const setShare = <K extends keyof SupplyShared>(k: K, v: SupplyShared[K]) => setShared((x) => ({ ...x, [k]: v }));
+  // 入力した品目名が、すでにある品目（照合の鍵が同じ）か。なければ新しい品目
+  const knownOf = (r: SupplyRow) => (r.itemName.trim() ? findItemByName(r.itemName, data.items) : null);
+  const varietyOf = (r: SupplyRow, known: Item) => r.varietyId || (known.varieties.length === 1 ? known.varieties[0].id : "");
+  const dupKey = (r: SupplyRow) => { const known = knownOf(r); return known ? `${known.id}:${varietyOf(r, known)}` : `new:${itemKey(r.itemName)}`; };
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
     setMsg(null);
-    const r = await send("/api/supplies", "POST", {
-      ...f, irregularReason: f.grade === "irregular" ? f.irregularReason : null, grade: f.grade || null,
-      published: f.published === "" ? null : f.published === "yes",
+    // 送る前に止める：品目が空・品目名の形が違う・品種が未選択・同じ画面の中で同じ品目（品種）が重なっている
+    const checked = rows.map((r): SupplyRow => {
+      const known = knownOf(r);
+      if (!known) {
+        const name = parseItemName(r.itemName);
+        if (!name.ok) return { ...r, status: { tone: "bad", text: name.error } };
+      } else if (known.varieties.length > 1 && !r.varietyId) return { ...r, status: { tone: "bad", text: "品種を選んでください" } };
+      return r;
     });
+    const counts = new Map<string, number>();
+    for (const r of checked) if (!r.status) counts.set(dupKey(r), (counts.get(dupKey(r)) ?? 0) + 1);
+    const marked = checked.map((r): SupplyRow => (!r.status && (counts.get(dupKey(r)) ?? 0) > 1 ? { ...r, status: { tone: "bad", text: "同じ品目がほかの行にもあります。1つの行にまとめてください" } } : r));
+    if (marked.some((r) => r.status)) {
+      setRows(marked);
+      setMsg({ tone: "bad", text: "まだ登録していません。理由が出ている行を直してください" });
+      return;
+    }
+
+    // 1行ずつ、今までの出品の API で登録する（一部だけ失敗しても、行ごとに結果を出す）
+    setBusy(true);
+    const failed: SupplyRow[] = [];
+    const done: string[] = [];
+    for (const r of rows) {
+      const known = knownOf(r);
+      const itemPart = known
+        ? { itemId: known.id, varietyId: varietyOf(r, known) || (known.varieties.find((v) => v.name === "指定なし")?.id ?? "") }
+        : { itemName: r.itemName };
+      const res = await send("/api/supplies", "POST", {
+        ...itemPart, grade: r.grade, irregularReason: r.grade === "irregular" ? r.irregularReason : null,
+        originPrefecture: shared.originPrefecture, availableKg: r.availableKg, priceYenPerKg: r.priceYenPerKg, minKg: r.minKg,
+        slotId: shared.slotId, published: shared.published === "" ? null : shared.published === "yes",
+      });
+      if (res.ok) done.push(`${res.data.supply!.item.name} ${res.data.supply!.availableKg}kg`);
+      else failed.push({ ...r, status: { tone: "bad", text: res.data.error ?? "登録できませんでした" } });
+    }
     setBusy(false);
-    if (!r.ok) return setMsg({ tone: "bad", text: r.data.error ?? "登録できませんでした" });
-    setMsg({ tone: "ok", text: `${r.data.supply!.item.name} ${r.data.supply!.availableKg}kg を登録しました` });
-    setF(empty);
-    onCreated();
+    if (failed.length === 0) {
+      setRows([newRow()]);
+      setMsg({ tone: "ok", text: done.length === 1 ? `${done[0]} を登録しました` : `${done.length}件を登録しました（${done.join("・")}）` });
+    } else {
+      setRows(failed); // 登録できた行は消し、できなかった行だけを理由つきで残す
+      setMsg({ tone: "bad", text: done.length ? `${done.length}件を登録しました（${done.join("・")}）。${failed.length}件は登録できませんでした。理由が出ている行を確認してください` : "登録できませんでした。理由が出ている行を確認してください" });
+    }
+    if (done.length) onCreated();
   }
 
   return (
@@ -333,78 +378,86 @@ function NewSupply({ data, defaultOrigin, onCreated, openFirst = false }: { data
         <Icon name="chevronDown" />
       </summary>
       <form className="more-body" onSubmit={submit}>
-        <div className="row2">
-          <label className="field">
-            <span className="label">品目</span>
-            <select
-              value={f.itemId}
-              onChange={(e) => {
-                // 品種が1つだけの品目は、その品種を自動で選ぶ（選択欄は出さない）
-                const next = data.items.find((i) => i.id === e.target.value);
-                setF((x) => ({ ...x, itemId: e.target.value, varietyId: next && next.varieties.length === 1 ? next.varieties[0].id : "" }));
-              }}
-              aria-required="true"
-            >
-              <option value="">選択</option>
-              {data.items.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
-            </select>
-          </label>
-          {item && item.varieties.length > 1 && (
-            <label className="field">
-              <span className="label">品種</span>
-              <select value={f.varietyId} onChange={(e) => set("varietyId", e.target.value)} aria-required="true">
-                <option value="">選択</option>
-                {item.varieties.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-              </select>
-            </label>
-          )}
-        </div>
-        <div className="row2">
-          <label className="field">
-            <span className="label">規格</span>
-            <select value={f.grade} onChange={(e) => set("grade", e.target.value as NewForm["grade"])}>
-              <option value="regular">通常品</option>
-              <option value="irregular">規格外</option>
-            </select>
-          </label>
-          <label className="field">
-            <span className="label">産地</span>
-            <select value={f.originPrefecture} onChange={(e) => set("originPrefecture", e.target.value)} aria-required="true">
-              <option value="">選択</option>
-              {data.prefectures.map((p) => <option key={p}>{p}</option>)}
-            </select>
-          </label>
-        </div>
-        {f.grade === "irregular" && (
-          <label className="field">
-            <span className="label">規格外の理由 <span className="tag-opt">任意</span></span>
-            <input value={f.irregularReason} onChange={(e) => set("irregularReason", e.target.value)} maxLength={30} placeholder="例：形の不揃い" />
-          </label>
+        <datalist id="supply-item-options">{data.items.map((i) => <option key={i.id} value={i.name} />)}</datalist>
+        {rows.map((r, idx) => {
+          const known = knownOf(r);
+          const isNew = general && !known && r.itemName.trim() !== "" && parseItemName(r.itemName).ok;
+          return (
+            <fieldset key={r.key} className={`supply-new-row ${r.status?.tone === "bad" ? "bad" : ""}`} aria-label={`商品 ${idx + 1}`}>
+              {rows.length > 1 && (
+                <div className="supply-new-row-head">
+                  <span className="supply-new-row-title">商品 {idx + 1}</span>
+                  <button type="button" className="text-btn" onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))} disabled={busy}>この行を消す</button>
+                </div>
+              )}
+              {/* 品目は長い名前（万願寺とうがらし など）も見えるよう、品種を選ぶときだけ2列にする */}
+              <div className={known && known.varieties.length > 1 ? "row2" : "supply-item-line"}>
+                <label className="field">
+                  <span className="label">品目</span>
+                  <input value={r.itemName} onChange={(e) => setRow(r.key, { itemName: e.target.value, varietyId: "" })} list="supply-item-options" maxLength={ITEM_NAME_MAX} placeholder="例：万願寺とうがらし" aria-required="true" autoComplete="off" />
+                  {isNew && <span className="hint">新しい品目として登録します</span>}
+                </label>
+                {known && known.varieties.length > 1 && (
+                  <label className="field">
+                    <span className="label">品種</span>
+                    <select value={r.varietyId} onChange={(e) => setRow(r.key, { varietyId: e.target.value })} aria-required="true">
+                      <option value="">選択</option>
+                      {known.varieties.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                    </select>
+                  </label>
+                )}
+              </div>
+              <label className="field">
+                <span className="label">規格</span>
+                <select value={r.grade} onChange={(e) => setRow(r.key, { grade: e.target.value as SupplyRow["grade"] })}>
+                  <option value="regular">通常品</option>
+                  <option value="irregular">規格外</option>
+                </select>
+              </label>
+              {r.grade === "irregular" && (
+                <label className="field">
+                  <span className="label">規格外の理由 <span className="tag-opt">任意</span></span>
+                  <input value={r.irregularReason} onChange={(e) => setRow(r.key, { irregularReason: e.target.value })} maxLength={30} placeholder="例：形の不揃い" />
+                </label>
+              )}
+              <div className="row2">
+                <label className="field">
+                  <span className="label">販売できる量</span>
+                  <span className="with-unit"><input type="number" inputMode="numeric" min={0} max={100} step={1} value={r.availableKg} onChange={(e) => setRow(r.key, { availableKg: e.target.value })} /><em>kg</em></span>
+                </label>
+                <label className="field">
+                  <span className="label">価格（1kgあたり・税込）</span>
+                  <span className="with-unit"><input type="number" inputMode="numeric" min={1} step={1} value={r.priceYenPerKg} onChange={(e) => setRow(r.key, { priceYenPerKg: e.target.value })} /><em>円/kg</em></span>
+                </label>
+              </div>
+              <label className="field">
+                <span className="label">最低販売量</span>
+                <span className="with-unit"><input type="number" inputMode="numeric" min={1} max={100} step={1} value={r.minKg} onChange={(e) => setRow(r.key, { minKg: e.target.value })} /><em>kg</em></span>
+              </label>
+              {r.status && <p className="supply-new-row-status" role="alert"><Icon name="alert" size={18} />{r.status.text}</p>}
+            </fieldset>
+          );
+        })}
+        {rows.length < MAX_ROWS && (
+          <button type="button" className="btn-secondary btn-block supply-add-row" onClick={() => setRows((rs) => [...rs, newRow()])} disabled={busy}><Icon name="plus" />商品を追加</button>
         )}
-        <div className="row2">
-          <label className="field">
-            <span className="label">販売できる量</span>
-            <span className="with-unit"><input type="number" inputMode="numeric" min={0} max={100} step={1} value={f.availableKg} onChange={(e) => set("availableKg", e.target.value)} /><em>kg</em></span>
-          </label>
-          <label className="field">
-            <span className="label">価格（1kgあたり・税込）</span>
-            <span className="with-unit"><input type="number" inputMode="numeric" min={1} step={1} value={f.priceYenPerKg} onChange={(e) => set("priceYenPerKg", e.target.value)} /><em>円/kg</em></span>
-          </label>
-        </div>
         <label className="field">
-          <span className="label">最低販売量</span>
-          <span className="with-unit"><input type="number" inputMode="numeric" min={1} max={100} step={1} value={f.minKg} onChange={(e) => set("minKg", e.target.value)} /><em>kg</em></span>
+          <span className="label">産地</span>
+          <select value={shared.originPrefecture} onChange={(e) => setShare("originPrefecture", e.target.value)} aria-required="true">
+            <option value="">選択</option>
+            {data.prefectures.map((p) => <option key={p}>{p}</option>)}
+          </select>
         </label>
-        <PickupChoice slots={data.slots} value={f.slotId} onChange={(id) => set("slotId", id)} />
+        <PickupChoice slots={data.slots} value={shared.slotId} onChange={(id) => setShare("slotId", id)} />
         <div className="field">
           <span className="label" id="pub-title">すぐに公開する？</span>
           <div className="seg" role="radiogroup" aria-labelledby="pub-title">
-            <label><input type="radio" name="pub" checked={f.published === "no"} onChange={() => set("published", "no")} />まだ公開しない</label>
-            <label><input type="radio" name="pub" checked={f.published === "yes"} onChange={() => set("published", "yes")} />公開する</label>
+            <label><input type="radio" name="pub" checked={shared.published === "no"} onChange={() => setShare("published", "no")} />まだ公開しない</label>
+            <label><input type="radio" name="pub" checked={shared.published === "yes"} onChange={() => setShare("published", "yes")} />公開する</label>
           </div>
         </div>
         {msg && <div className={`alert ${msg.tone}`} role="status"><Icon name={msg.tone === "ok" ? "check" : "alert"} />{msg.text}</div>}
-        <button type="submit" className="btn-primary btn-block" disabled={busy} aria-busy={busy}>登録する</button>
+        <button type="submit" className="btn-primary btn-block" disabled={busy} aria-busy={busy}>{busy ? <><span className="spinner" aria-hidden="true" />登録しています…</> : rows.length > 1 ? `${rows.length}件を登録する` : "登録する"}</button>
       </form>
     </details>
   );

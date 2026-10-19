@@ -37,9 +37,14 @@ let supplyRows: ReturnType<typeof supplyRow>[] = [];
 type SlotMock = { id: string; label: string; placeId?: string; placeName: string; startAt: string; endAt: string; participationConfirmed?: boolean };
 const umedaSlot: SlotMock = { id: "sl1", label: "梅田・火", placeId: "pl-umeda", placeName: "梅田エリア受渡所（仮）", startAt: "2099-10-27T01:00:00.000Z", endAt: "2099-10-27T02:00:00.000Z", participationConfirmed: true };
 let slots: SlotMock[] = [];
+type Json = (b: unknown, status?: number) => Response;
+// 出品の登録（POST /api/supplies）の応答。テストごとに差し替える
+const defaultSupplyPost = (b: Record<string, unknown>, json: Json) => json({ supply: { item: { name: (b.itemName as string) ?? ({ "i-tomato": "トマト", "i-nasu": "なす" } as Record<string, string>)[b.itemId as string] }, availableKg: Number(b.availableKg) } }, 201);
+let supplyPost: (b: Record<string, unknown>, json: Json) => Response = defaultSupplyPost;
 const usualUmeda = { placeId: "pl-umeda", name: "梅田エリア受渡所（仮）", address: "大阪市北区", kind: null, times: [{ seriesId: "s-umeda", weekday: 2, startTime: "10:00", endTime: "11:00", active: true }] };
 let pickup: { usual: unknown[]; candidates: { placeId: string; name: string; address: string; kind: string | null }[] } = { usual: [], candidates: [] };
 beforeEach(() => {
+  supplyPost = defaultSupplyPost;
   supplyRows = [supplyRow()];
   slots = [umedaSlot];
   pickup = {
@@ -80,7 +85,8 @@ beforeEach(() => {
       const r = requests.find((x) => x.id === decodeURIComponent(one[1]));
       return r?.status === "approved" ? json({ contact: { contactPhone: "000-0000-0001", contactEmail: "a-farm@example.invalid" } }) : json({ error: "まだ連絡先は見られません" }, 403);
     }
-    if (url === "/api/supplies") return json({ supplies: supplyRows, slots, items: [{ id: "i-tomato", name: "トマト", varieties: [] }], prefectures: ["大阪府"] });
+    if (url === "/api/supplies" && method === "POST") return supplyPost(body as Record<string, unknown>, json);
+    if (url === "/api/supplies") return json({ supplies: supplyRows, slots, items: [{ id: "i-tomato", name: "トマト", varieties: [{ id: "v-tomato", name: "指定なし" }] }, { id: "i-nasu", name: "なす", varieties: [{ id: "v-nasu", name: "指定なし" }] }], prefectures: ["大阪府"] });
     if (url === "/api/pickup-points" && method === "GET") return json({ points: [], ...pickup });
     if (url === "/api/pickup-points" && method === "POST") {
       const b = body as { placeId?: string; name?: string; weekday: number; startTime: string; endTime: string };
@@ -603,5 +609,92 @@ describe("生産者：いつもの受け渡し場所（物流の言葉を使わ�
     await open("/producer/listings");
     expect($(".first-place")).toBeNull();
     expect(calls.some((c) => c.url === "/api/pickup-points")).toBe(false);
+  });
+});
+
+describe("出品：複数の商品を1つの画面から登録（品目は候補つきの自由入力）", () => {
+  beforeEach(() => { me = producer; });
+  const typeInto = async (input: HTMLInputElement, value: string) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+    await act(async () => { input.dispatchEvent(new Event("input", { bubbles: true })); });
+  };
+  const rowInputs = (i: number) => {
+    const row = el.querySelectorAll<HTMLFieldSetElement>(".supply-new-row")[i];
+    const numbers = row.querySelectorAll<HTMLInputElement>('input[type="number"]'); // 販売できる量・価格・最低販売量の順
+    return { row, item: row.querySelector<HTMLInputElement>('input[list="supply-item-options"]')!, kg: numbers[0], price: numbers[1] };
+  };
+  const posts = () => calls.filter((c) => c.url === "/api/supplies" && c.method === "POST").map((c) => c.body as Record<string, unknown>);
+  const fillRow = async (i: number, name: string, kg: string, price: string) => {
+    const r = rowInputs(i);
+    await typeInto(r.item, name);
+    await typeInto(r.kg, kg);
+    await typeInto(r.price, price);
+  };
+  const choosePublish = async () => { await click(el.querySelectorAll<HTMLInputElement>('input[name="pub"]')[1]); };
+
+  it("品目は候補（既存の品目）つきの自由入力。新しい品目名には「新しい品目として登録します」", async () => {
+    await open("/producer/listings");
+    expect([...el.querySelectorAll("#supply-item-options option")].map((o) => o.getAttribute("value"))).toEqual(["トマト", "なす"]);
+    await typeInto(rowInputs(0).item, "万願寺とうがらし");
+    expect(rowInputs(0).row.textContent).toContain("新しい品目として登録します");
+    await typeInto(rowInputs(0).item, "ナス"); // 表記の違いは既存の品目
+    expect(rowInputs(0).row.textContent).not.toContain("新しい品目として登録します");
+  });
+  it("「＋ 商品を追加」で3品目を1回で登録：既存の品目は itemId、新しい品目は itemName で、1行ずつ送る", async () => {
+    supplyRows = [];
+    await open("/producer/listings");
+    await click(button("商品を追加"));
+    await click(button("商品を追加"));
+    expect(el.querySelectorAll(".supply-new-row")).toHaveLength(3);
+    await fillRow(0, "トマト", "5", "600");
+    await fillRow(1, "ナス", "8", "450");
+    await fillRow(2, "万願寺とうがらし", "3", "900");
+    await choosePublish();
+    expect(button("3件を登録する")).toBeTruthy();
+    await click(button("3件を登録する"));
+    await flush();
+    expect(posts().map((b) => [b.itemId ?? null, b.varietyId ?? null, b.itemName ?? null, b.availableKg])).toEqual([
+      ["i-tomato", "v-tomato", null, "5"], ["i-nasu", "v-nasu", null, "8"], [null, null, "万願寺とうがらし", "3"],
+    ]);
+    expect(posts().every((b) => b.slotId === "sl1" && b.originPrefecture === "大阪府" && b.published === true)).toBe(true); // 受け渡し・産地・公開は全行に共通
+    expect($("details.more [role=status]")?.textContent).toContain("3件を登録しました（トマト 5kg・なす 8kg・万願寺とうがらし 3kg）");
+    expect(el.querySelectorAll(".supply-new-row")).toHaveLength(1); // 終わったら1行に戻る
+  });
+  it("同じ画面の中で同じ品目（表記違いも含む）が2行あれば、送る前に止める", async () => {
+    await open("/producer/listings");
+    await click(button("商品を追加"));
+    await fillRow(0, "なす", "5", "400");
+    await fillRow(1, "ナス", "3", "400");
+    await choosePublish();
+    await click(button("2件を登録する"));
+    expect(posts()).toHaveLength(0);
+    expect([...el.querySelectorAll(".supply-new-row-status")].map((x) => x.textContent)).toEqual(["同じ品目がほかの行にもあります。1つの行にまとめてください", "同じ品目がほかの行にもあります。1つの行にまとめてください"]);
+    expect($("details.more [role=status]")?.textContent).toContain("まだ登録していません");
+  });
+  it("一部だけ失敗：登録できた行は消え、できなかった行は理由（すでに出品中など）つきで残る", async () => {
+    supplyPost = (b, json) => (b.itemId === "i-tomato"
+      ? json({ error: "同じ品目・受渡枠の供給がすでにあります。数量の変更をご利用ください" }, 409)
+      : json({ supply: { item: { name: (b.itemName as string) ?? "なす" }, availableKg: Number(b.availableKg) } }, 201));
+    await open("/producer/listings");
+    await click(button("商品を追加"));
+    await fillRow(0, "トマト", "5", "600");
+    await fillRow(1, "水なす", "2", "700");
+    await choosePublish();
+    await click(button("2件を登録する"));
+    await flush();
+    expect(posts()).toHaveLength(2);
+    const left = el.querySelectorAll(".supply-new-row");
+    expect(left).toHaveLength(1);
+    expect(rowInputs(0).item.value).toBe("トマト");
+    expect(left[0].querySelector(".supply-new-row-status")?.textContent).toContain("数量の変更をご利用ください");
+    expect($("details.more [role=status]")?.textContent).toContain("1件を登録しました（水なす 2kg）。1件は登録できませんでした");
+  });
+  it("品目名の形が違う（記号）・空の行は送らずに理由を出す", async () => {
+    await open("/producer/listings");
+    await fillRow(0, "<b>", "5", "600");
+    await choosePublish();
+    await click(button("登録する"));
+    expect(posts()).toHaveLength(0);
+    expect($(".supply-new-row-status")?.textContent).toContain("記号は使えません");
   });
 });

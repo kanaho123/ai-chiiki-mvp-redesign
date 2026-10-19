@@ -145,6 +145,28 @@ export const repo = {
     return items.map((i) => ({ id: i.id, name: i.name, varieties: i.varieties.map((v) => ({ id: v.id, name: v.name })) }));
   },
 
+  /**
+   * 新しい品目名での出品（一般向けの環境だけ）：品目・品種「指定なし」・出品を1つの transaction で作る。
+   * 出品まで作れなければ全体を取り消す（品目や品種だけが残ることはない）。
+   * 同時に同じ名前の品目が作られていた（Item.name の一意制約）ときは、その品目で今までどおりの出品を作る（重複なら null）。
+   * MVP の判断：照合の鍵（itemKey）の一意はアプリ側で確かめるだけ。将来は正規化した鍵の列を DB の一意制約にする方が安全。
+   */
+  async createSupplyWithNewItem(name: string, data: Omit<SupplyCreate, "itemId" | "varietyId">): Promise<SupplyView | null> {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const item = await tx.item.create({ data: { name, varieties: { create: { name: "指定なし" } } }, include: { varieties: true } });
+        const s = await tx.supply.create({ data: { ...data, itemId: item.id, varietyId: item.varieties[0].id }, include: supplyInclude });
+        return toView(s);
+      });
+    } catch (e) {
+      if ((e as { code?: string }).code !== "P2002") throw e;
+      const again = await prisma.item.findUnique({ where: { name }, include: { varieties: true } });
+      const plain = again?.varieties.find((v) => v.name === "指定なし");
+      if (!again || !plain) throw e;
+      return repo.createSupply({ ...data, itemId: again.id, varietyId: plain.id });
+    }
+  },
+
   /** ログイン失敗の記録で、いずれかのキーがロック中か */
   async isThrottled(keys: string[], now: Date): Promise<boolean> {
     const n = await prisma.authThrottle.count({ where: { key: { in: keys }, lockedUntil: { gt: now } } });

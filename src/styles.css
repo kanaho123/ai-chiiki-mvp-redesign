@@ -1008,3 +1008,13 @@ a.inline-link { display: inline-flex; align-items: center; min-height: var(--tap
 .pickup-options { display: grid; gap: 8px; }
 .pickup-option { min-height: 52px; padding: 8px 14px; border: 1.5px solid var(--color-line-strong); border-radius: var(--r-btn); background: var(--color-page); color: var(--color-text); font-size: 16px; font-weight: 700; text-align: left; }
 .pickup-option.on { border-color: var(--color-producer-dark); background: var(--color-producer-tint); }
+
+/* 出品：商品ごとの行（「＋ 商品を追加」で増やす）。行ごとに登録の結果・理由を出す */
+.supply-new-row { display: grid; gap: 12px; margin: 0; padding: 12px; border: 1.5px solid var(--color-line); border-radius: var(--r-input); background: var(--color-page); min-width: 0; }
+.supply-new-row.bad { border-color: var(--color-error); }
+.supply-new-row-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.supply-new-row-title { font-size: 15px; font-weight: 800; }
+.supply-new-row-status { display: flex; gap: 6px; align-items: flex-start; margin: 0; font-size: 15px; font-weight: 700; color: var(--color-error); }
+.supply-new-row-status svg { flex: none; margin-top: 2px; }
+.supply-add-row { gap: 6px; }
+.supply-item-line { display: grid; }

@@ -1,6 +1,7 @@
 import { QUANTITY_KG_MAX, QUANTITY_KG_MIN, type PlanRequest } from "./allocate.js";
 import { PREFECTURES } from "./constants.js";
 import { isValidDate, jstDate } from "./dates.js";
+import { parseItemName } from "./items.js";
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -138,8 +139,11 @@ export function parseSupplyPatch(body: unknown): Result<SupplyPatch> {
 }
 
 export type SupplyInput = {
-  itemId: string;
-  varietyId: string;
+  /** 既存の品目を選んだとき（品種も選ぶ）。新しい品目名を入れたときは null で itemName を使う */
+  itemId: string | null;
+  varietyId: string | null;
+  /** 新しい品目名（itemId がないとき）。照合の鍵で既存の品目を探し、なければサーバーで作る（一般向けの環境だけ） */
+  itemName: string | null;
   grade: "regular" | "irregular";
   irregularReason: string | null;
   originPrefecture: string;
@@ -153,10 +157,17 @@ export type SupplyInput = {
 /** 新しい供給。生産者は入力させず、ログイン中の生産者に紐付ける（API 側で設定） */
 export function parseSupplyInput(body: unknown): Result<SupplyInput> {
   if (!isObj(body)) return { ok: false, error: "入力を読み取れません" };
+  // 品目：既存の品目（itemId と品種）か、入力した品目名（itemName）のどちらか
   const itemId = id(body.itemId);
-  if (!itemId) return { ok: false, error: "品目を選択してください" };
-  const varietyId = id(body.varietyId);
-  if (!varietyId) return { ok: false, error: "品種を選択してください" };
+  let varietyId: string | null = null, itemName: string | null = null;
+  if (itemId) {
+    varietyId = id(body.varietyId);
+    if (!varietyId) return { ok: false, error: "品種を選択してください" };
+  } else {
+    const n = parseItemName(body.itemName);
+    if (!n.ok) return { ok: false, error: n.error };
+    itemName = n.name;
+  }
   const grade = oneOf(body.grade, ["regular", "irregular"] as const);
   if (!grade) return { ok: false, error: "規格（通常品／規格外）を選択してください" };
   // 規格外の理由は任意（生産者の入力の負担を減らす）。空欄なら null。書いた場合だけ長さを確かめる
@@ -176,7 +187,7 @@ export function parseSupplyInput(body: unknown): Result<SupplyInput> {
   if (typeof body.published !== "boolean") return { ok: false, error: "公開するかを選択してください" };
   return {
     ok: true,
-    value: { itemId, varietyId, grade, irregularReason, originPrefecture, availableKg, priceYenPerKg, minKg, slotId, published: body.published },
+    value: { itemId, varietyId, itemName, grade, irregularReason, originPrefecture, availableKg, priceYenPerKg, minKg, slotId, published: body.published },
   };
 }
 
