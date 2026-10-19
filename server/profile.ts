@@ -40,7 +40,8 @@ export async function loadProfile(db: Db, user: { id: string; role: "restaurant"
   const [items, series] = await Promise.all([
     db.item.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
     db.slotSeries.findMany({
-      where: { OR: [{ active: true }, { id: { in: joined } }] },
+      // 運営の場所の有効な回と、本人が参加している回だけ（ほかの生産者が登録した場所・回は返さない）
+      where: { OR: [{ active: true, place: { ownerProducerId: null } }, { id: { in: joined } }] },
       select: { id: true, weekday: true, startTime: true, endTime: true, feeYen: true, active: true, place: { select: { name: true, address: true, kind: true } } },
       orderBy: [{ weekday: "asc" }, { startTime: "asc" }],
     }),
@@ -82,8 +83,9 @@ export async function updateProducerProfile(db: Db, userId: string, p: ProducerP
     const joined = new Set(producer.seriesMemberships.map((m) => m.seriesId));
     const items = await tx.item.findMany({ where: { id: { in: p.itemIds } }, select: { id: true } });
     if (items.length !== p.itemIds.length) throw new OnboardingProblem(400, "選べない作物が含まれています。選び直してください", "itemIds");
-    const series = await tx.slotSeries.findMany({ where: { id: { in: p.seriesIds } }, select: { id: true, active: true } });
-    const allowed = series.filter((x) => x.active || joined.has(x.id));
+    // 新しく加われるのは運営の場所の有効な回だけ。参加中の回はそのまま残せる（ほかの生産者の私的な場所に ID だけで加わらないように）
+    const series = await tx.slotSeries.findMany({ where: { id: { in: p.seriesIds } }, select: { id: true, active: true, place: { select: { ownerProducerId: true } } } });
+    const allowed = series.filter((x) => joined.has(x.id) || (x.active && x.place.ownerProducerId === null));
     if (allowed.length !== p.seriesIds.length) throw new OnboardingProblem(400, "選べない受渡枠が含まれています。選び直してください", "seriesIds");
 
     await tx.producer.update({

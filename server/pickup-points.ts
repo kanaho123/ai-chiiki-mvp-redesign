@@ -85,10 +85,20 @@ export async function usualPlaces(db: PrismaClient, producerId: string): Promise
     .sort((a, b) => a.name.localeCompare(b.name, "ja"));
 }
 
-/** 「場所を教えてください」で出す、すでにある場所の候補 */
+/**
+ * 「場所を教えてください」で出す、すでにある場所の候補。
+ * 住所は、運営の場所・自分が登録した場所・自分が参加している場所だけ。ほかの生産者が登録した直売所などは名前と種類だけ（住所は空）
+ */
 export async function placeCandidates(db: PrismaClient, producerId: string): Promise<PlaceCandidate[]> {
-  const places = await db.place.findMany({ where: visibleTo(producerId), select: { id: true, name: true, address: true, kind: true }, orderBy: { name: "asc" } });
-  return places.map((p) => ({ placeId: p.id, name: p.name, address: p.address, kind: p.kind }));
+  const places = await db.place.findMany({
+    where: visibleTo(producerId),
+    select: { id: true, name: true, address: true, kind: true, ownerProducerId: true, series: { where: { participants: { some: { producerId } } }, select: { id: true }, take: 1 } },
+    orderBy: { name: "asc" },
+  });
+  return places.map((p) => {
+    const mayShowAddress = p.ownerProducerId === null || p.ownerProducerId === producerId || p.series.length > 0;
+    return { placeId: p.id, name: p.name, address: mayShowAddress ? p.address : "", kind: p.kind };
+  });
 }
 
 /**

@@ -75,10 +75,11 @@ export async function completeRestaurantOnboarding(db: Db, userId: string, p: Re
 export async function completeProducerOnboarding(db: Db, userId: string, p: ProducerProfile, now: Date): Promise<CompleteResult> {
   return settle(db, userId, "producer", () => db.$transaction(async (tx) => {
     if ((await precheck(tx, userId, "producer")) === "already") return { status: "already-completed" } as const;
-    // 品目はマスタにあるものだけ、受渡枠は運営が有効にしている定期枠だけ（active=false は新しく参加できない）
+    // 品目はマスタにあるものだけ、受渡枠は運営が有効にしている定期枠だけ（active=false は新しく参加できない）。
+    // 生産者が登録した場所の回は、ここからは参加できない（ほかの生産者の私的な場所に、ID だけで加わらないように）
     const items = await tx.item.findMany({ where: { id: { in: p.itemIds } }, select: { id: true } });
     if (items.length !== p.itemIds.length) throw new OnboardingProblem(400, "選べない作物が含まれています。選び直してください", "itemIds");
-    const series = await tx.slotSeries.findMany({ where: { id: { in: p.seriesIds }, active: true }, select: { id: true } });
+    const series = await tx.slotSeries.findMany({ where: { id: { in: p.seriesIds }, active: true, place: { ownerProducerId: null } }, select: { id: true } });
     if (series.length !== p.seriesIds.length) throw new OnboardingProblem(400, "選べない受渡枠が含まれています。選び直してください", "seriesIds");
 
     const producer = await tx.producer.create({
@@ -101,12 +102,12 @@ export async function completeProducerOnboarding(db: Db, userId: string, p: Prod
   }, TX_OPTIONS));
 }
 
-/** 生産者の登録画面で使うマスタ（品目・有効な定期の受渡枠と場所）。内部の設定値は返さない */
+/** 生産者の登録画面で使うマスタ（品目・運営の場所の有効な定期の受渡枠）。内部の設定値は返さない。ほかの生産者が登録した場所・回は返さない */
 export async function producerOnboardingMaster(db: Pick<PrismaClient, "item" | "slotSeries">) {
   const [items, series] = await Promise.all([
     db.item.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
     db.slotSeries.findMany({
-      where: { active: true },
+      where: { active: true, place: { ownerProducerId: null } },
       select: { id: true, weekday: true, startTime: true, endTime: true, feeYen: true, place: { select: { name: true, address: true, kind: true } } },
       orderBy: [{ weekday: "asc" }, { startTime: "asc" }],
     }),

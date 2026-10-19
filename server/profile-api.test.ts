@@ -9,7 +9,7 @@ type Row = Record<string, unknown> & { id: string; ownerUserId: string };
 type State = {
   users: User[]; restaurants: Row[]; producers: Row[]; producerItems: { producerId: string; itemId: string }[];
   seriesParticipants: { seriesId: string; producerId: string }[]; slotParticipants: { slotId: string; producerId: string }[];
-  items: { id: string; name: string }[]; slotSeries: { id: string; active: boolean; weekday: number; startTime: string; endTime: string; feeYen: number }[];
+  items: { id: string; name: string }[]; slotSeries: { id: string; active: boolean; weekday: number; startTime: string; endTime: string; feeYen: number; owner?: string }[];
   handoverSlots: { id: string; seriesId: string; confirmDeadlineAt: Date }[]; approvals: Confirmation[];
 };
 const mem = vi.hoisted(() => ({ state: null as unknown as State, failOn: null as string | null }));
@@ -56,10 +56,11 @@ vi.mock("./db.js", () => {
       },
       item: { findMany: async ({ where }: { where?: { id?: { in: string[] } } }) => s.items.filter((i) => !where?.id || where.id.in.includes(i.id)) },
       slotSeries: {
-        findMany: async ({ where }: { where: { id?: { in: string[] }; OR?: [{ active: boolean }, { id: { in: string[] } }] } }) =>
+        // where.OR[0] は「運営の場所の有効な回」（place.ownerProducerId が null）。owner がある回は生産者が登録した場所
+        findMany: async ({ where }: { where: { id?: { in: string[] }; OR?: [{ active: boolean; place?: { ownerProducerId: null } }, { id: { in: string[] } }] } }) =>
           s.slotSeries
-            .filter((x) => (where.id ? where.id.in.includes(x.id) : true) && (where.OR ? x.active || where.OR[1].id.in.includes(x.id) : true))
-            .map((x) => ({ ...x, place: { name: `${x.id}の受渡所（仮）`, address: "大阪市" } })),
+            .filter((x) => (where.id ? where.id.in.includes(x.id) : true) && (where.OR ? (x.active && !(where.OR[0].place && x.owner)) || where.OR[1].id.in.includes(x.id) : true))
+            .map((x) => ({ ...x, place: { name: `${x.id}の受渡所（仮）`, address: x.owner ? "大阪府堺市南区9-9（自宅）" : "大阪市", kind: x.owner ? "farm" : null, ownerProducerId: x.owner ?? null } })),
       },
       user: { update: async ({ where, data }: { where: { id: string }; data: Partial<User> }) => { fail("user.update"); Object.assign(s.users.find((u) => u.id === where.id)!, data); } },
     };
@@ -149,6 +150,7 @@ beforeEach(() => {
       { id: "s-b", active: true, weekday: 3, startTime: "14:00", endTime: "15:00", feeYen: 800 },
       { id: "s-old", active: false, weekday: 5, startTime: "10:00", endTime: "11:00", feeYen: 800 }, // 止めたが、p-1 は参加中
       { id: "s-off", active: false, weekday: 6, startTime: "10:00", endTime: "11:00", feeYen: 800 },
+      { id: "s-farm", active: true, weekday: 1, startTime: "08:00", endTime: "09:00", feeYen: 0, owner: "p-2" }, // 別の農園が登録した「自分の農園」
     ],
     handoverSlots: [
       { id: "slot-b-past", seriesId: "s-b", confirmDeadlineAt: new Date(NOW - 3600_000) },
@@ -219,6 +221,16 @@ describe("生産者のプロフィール更新", () => {
     // ほかの生産者のデータは変わらない
     expect(mem.state.producers[1]).toMatchObject({ farmName: "別の農園" });
     expect(mem.state.seriesParticipants.filter((x) => x.producerId === "p-2")).toEqual([{ seriesId: "s-a", producerId: "p-2" }]);
+  });
+  it("ほかの生産者が登録した場所の回は返さない（住所も）。ID を送っても新しく加われない", async () => {
+    const d = await (await get(profileApi, P)).json();
+    expect(d.series.map((s: { id: string }) => s.id)).not.toContain("s-farm");
+    expect(JSON.stringify(d)).not.toContain("堺市南区9-9");
+    const before = structuredClone(mem.state);
+    const res = await patch({ ...(await current()), seriesIds: ["s-old", "s-farm"] }, P);
+    expect(res.status).toBe(400);
+    expect((await res.json()).errors.seriesIds).toBeTruthy();
+    expect(mem.state).toEqual(before);
   });
   it("受け渡しの場所がなくても保存できる。参加はそのまま", async () => {
     expect((await patch({ ...(await current()), seriesIds: [] }, P)).status).toBe(200);

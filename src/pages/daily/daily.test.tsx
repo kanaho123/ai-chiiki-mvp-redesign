@@ -46,7 +46,7 @@ beforeEach(() => {
     usual: [usualUmeda],
     candidates: [
       { placeId: "pl-umeda", name: "梅田エリア受渡所（仮）", address: "大阪市北区", kind: null },
-      { placeId: "pl-store", name: "南区ふれあい直売所", address: "大阪府堺市南区1-2-3", kind: "direct_store" },
+      { placeId: "pl-store", name: "南区ふれあい直売所", address: "", kind: "direct_store" }, // ほかの生産者が登録した場所：住所は来ない
     ],
   };
   mode = "general";
@@ -527,6 +527,7 @@ describe("生産者：いつもの受け渡し場所（物流の言葉を使わ�
     await click(button("いつもの直売所"));
     // 直売所の候補だけ（運営の場所は「その他」に出る）
     expect([...el.querySelectorAll(".ps-place-name")].map((x) => x.textContent)).toEqual(["南区ふれあい直売所"]);
+    expect($(".ps-place .ps-place-address")).toBeNull(); // 住所のない候補は住所の行を出さない
     await click(button("ここで渡せる"));
     expect($(".ps-title")?.textContent).toBe("いつ渡せますか？");
     await click(button("この場所を登録する"));
@@ -555,6 +556,7 @@ describe("生産者：いつもの受け渡し場所（物流の言葉を使わ�
     expect($("form")).toBeNull(); // 出品の入力はまだ出さない
     await click(button("その他"));
     expect([...el.querySelectorAll(".ps-place-name")].map((x) => x.textContent)).toEqual(["梅田エリア受渡所（仮）"]);
+    expect($(".ps-place .ps-place-address")?.textContent).toBe("大阪市北区"); // 運営の場所は住所あり
     await click(button("ここにない場所を入れる"));
     await click(button("次へ"));
     expect(text()).toContain("場所の名前を入れてください");

@@ -13,7 +13,7 @@ import { loadPlanInputs } from "./plan-data.js";
 export const MAX_OPTION_SLOTS = 12;
 
 export type PlanOption = {
-  slotId: string; label: string; placeName: string; placeAddress: string; placeKind: string | null;
+  slotId: string; label: string; placeName: string; placeKind: string | null;
   startAt: string; endAt: string;
   status: string; requestedKg: number; fulfilledKg: number; shortageKg: number; producerCount: number; totalYen: number | null;
   farms: { producerName: string; kg: number }[];
@@ -25,7 +25,7 @@ async function candidateSlots(itemId: string, desiredDate: string) {
   const end = new Date(start.getTime() + 24 * 3600e3);
   const slots = await prisma.handoverSlot.findMany({
     where: { startAt: { gte: start, lt: end }, supplies: { some: { itemId, published: true, availableKg: { gt: 0 } } } },
-    include: { place: { select: { name: true, address: true, kind: true } } },
+    include: { place: { select: { name: true, kind: true } } }, // 住所は読まない・返さない
     orderBy: [{ startAt: "asc" }, { label: "asc" }],
     take: MAX_OPTION_SLOTS,
   });
@@ -50,7 +50,7 @@ export async function planOptions(request: Omit<PlanRequest, "slotId">, restaura
     const { inputs } = await loadPlanInputs({ itemId: req.itemId, slotId: s.id, restaurantUserId });
     const plan = allocatePlan({ request: req, ...inputs, now });
     return {
-      slotId: s.id, label: s.label, placeName: s.place.name, placeAddress: s.place.address, placeKind: s.place.kind,
+      slotId: s.id, label: s.label, placeName: s.place.name, placeKind: s.place.kind,
       startAt: s.startAt.toISOString(), endAt: s.endAt.toISOString(),
       status: plan.status, requestedKg: plan.requestedKg, fulfilledKg: plan.fulfilledKg, shortageKg: plan.shortageKg,
       producerCount: plan.producerCount, totalYen: plan.totalYen,

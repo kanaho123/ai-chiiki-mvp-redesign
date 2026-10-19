@@ -19,7 +19,7 @@ function shownFor(supplies: PlanSupply[]): Shown {
   const plan = allocatePlan({ request, supplies, slot, participants: supplies.map((s) => ({ slotId: "slot-x", producerId: s.producerId, confirmed: true })), relationships: [], now: NOW });
   return { plan, request, version: "v1", fingerprint: "f".repeat(64), suggestions: [], demoClock: false };
 }
-const option = (slotId: string, o: Partial<PlanOption>): PlanOption => ({ slotId, label: slotId, placeName: slotId, placeAddress: "", placeKind: null, startAt: "2026-10-23T07:00:00.000Z", endAt: "2026-10-23T09:00:00.000Z", status: "MATCHED", requestedKg: 10, fulfilledKg: 10, shortageKg: 0, producerCount: 1, totalYen: 6000, farms: [], ...o });
+const option = (slotId: string, o: Partial<PlanOption>): PlanOption => ({ slotId, label: slotId, placeName: slotId, placeKind: null, startAt: "2026-10-23T07:00:00.000Z", endAt: "2026-10-23T09:00:00.000Z", status: "MATCHED", requestedKg: 10, fulfilledKg: 10, shortageKg: 0, producerCount: 1, totalYen: 6000, farms: [], ...o });
 
 beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {

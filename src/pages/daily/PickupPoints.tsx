@@ -80,7 +80,7 @@ export function PickupSetup({ candidates, onDone, onCancel }: { candidates: Cand
             {list.map((c) => (
               <li key={c.placeId} className="ps-place">
                 <b className="ps-place-name">{c.name}</b>
-                <span className="ps-place-address"><Icon name="pin" size={18} />{c.address}</span>
+                {c.address && <span className="ps-place-address"><Icon name="pin" size={18} />{c.address}</span>}
                 <button type="button" className="btn-primary btn-block" onClick={() => setStep({ kind: "when", placeKind: step.placeKind, place: { placeId: c.placeId, name: c.name } })}>ここで渡せる</button>
               </li>
             ))}

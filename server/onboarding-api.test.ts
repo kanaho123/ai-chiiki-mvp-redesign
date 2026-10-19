@@ -11,7 +11,7 @@ type State = {
   slotParticipants: { slotId: string; producerId: string; confirmed: boolean }[];
   items: { id: string; name: string }[];
   slotSeries: { id: string; active: boolean; weekday: number; startTime: string; endTime: string; feeYen: number; maxKg: number; deadlineHours: number; placeId: string }[];
-  places: { id: string; name: string; address: string }[];
+  places: { id: string; name: string; address: string; ownerProducerId?: string | null }[];
   handoverSlots: { id: string; seriesId: string | null; confirmDeadlineAt: Date }[];
 };
 const mem = vi.hoisted(() => ({ state: null as unknown as State, failOn: null as string | null, seq: 0, lock: Promise.resolve() as Promise<unknown> }));
@@ -73,10 +73,12 @@ vi.mock("./db.js", () => {
         },
       },
       slotSeries: {
-        findMany: async ({ where }: { where: { id?: { in?: string[] }; active?: boolean } }) => {
+        // where.place.ownerProducerId: null は「運営の場所だけ」
+        findMany: async ({ where }: { where: { id?: { in?: string[] }; active?: boolean; place?: { ownerProducerId: null } } }) => {
           const ids = inIds(where);
-          return s.slotSeries.filter((x) => (!ids || ids.includes(x.id)) && (where.active === undefined || x.active === where.active))
-            .map((x) => ({ ...x, place: s.places.find((p) => p.id === x.placeId)! }));
+          const placeOf = (x: State["slotSeries"][number]) => s.places.find((p) => p.id === x.placeId)!;
+          return s.slotSeries.filter((x) => (!ids || ids.includes(x.id)) && (where.active === undefined || x.active === where.active) && (!where.place || !placeOf(x).ownerProducerId))
+            .map((x) => ({ ...x, place: placeOf(x) }));
         },
       },
       handoverSlot: {
@@ -165,10 +167,14 @@ beforeEach(() => {
     ],
     restaurants: [], producers: [], producerItems: [], seriesParticipants: [], slotParticipants: [],
     items: [{ id: "item-tomato", name: "トマト" }, { id: "item-eggplant", name: "なす" }],
-    places: [{ id: "place-a", name: "梅田エリア受渡所（仮）", address: "大阪市北区" }],
+    places: [
+      { id: "place-a", name: "梅田エリア受渡所（仮）", address: "大阪市北区" },
+      { id: "place-farm", name: "山田農園の作業場", address: "大阪府堺市南区9-9", ownerProducerId: "p-other" }, // ほかの生産者が登録した場所
+    ],
     slotSeries: [
       { id: "series-a", active: true, weekday: 2, startTime: "10:00", endTime: "11:00", feeYen: 800, maxKg: 20, deadlineHours: 17, placeId: "place-a" },
       { id: "series-off", active: false, weekday: 4, startTime: "10:00", endTime: "11:00", feeYen: 800, maxKg: 20, deadlineHours: 17, placeId: "place-a" },
+      { id: "series-farm", active: true, weekday: 1, startTime: "08:00", endTime: "09:00", feeYen: 0, maxKg: 100, deadlineHours: 17, placeId: "place-farm" },
     ],
     handoverSlots: [
       { id: "slot-past", seriesId: "series-a", confirmDeadlineAt: later(-24) },
@@ -254,6 +260,7 @@ describe("生産者の初回登録", () => {
     ["作物が空", { itemIds: [] }, "itemIds"],
     ["運営が止めている受渡枠", { seriesIds: ["series-off"] }, "seriesIds"],
     ["存在しない受渡枠", { seriesIds: ["series-a", "series-x"] }, "seriesIds"],
+    ["ほかの生産者が登録した場所の回", { seriesIds: ["series-farm"] }, "seriesIds"],
     ["連絡先がどちらもない", { contactPhone: "", contactEmail: " " }, "contactPhone"],
     ["メールの形式", { contactPhone: "", contactEmail: "farm@" }, "contactEmail"],
     ["生産スタイルが選択肢にない", { productionStyle: "huge" }, "productionStyle"],
@@ -382,10 +389,11 @@ describe("権限", () => {
 });
 
 describe("登録画面用のマスタ API", () => {
-  it("品目と、有効な受渡枠だけを返す（内部の設定値は返さない）", async () => {
+  it("品目と、運営の場所の有効な受渡枠だけを返す（内部の設定値・ほかの生産者が登録した場所は返さない）", async () => {
     const res = await get(masterApi, P);
     expect(res.status).toBe(200);
     const d = await res.json();
+    expect(JSON.stringify(d)).not.toMatch(/山田農園|堺市南区9-9/);
     expect(d.items).toEqual([{ id: "item-tomato", name: "トマト" }, { id: "item-eggplant", name: "なす" }]);
     expect(d.series).toEqual([{ id: "series-a", placeName: "梅田エリア受渡所（仮）", placeAddress: "大阪市北区", weekday: 2, startTime: "10:00", endTime: "11:00", feeYen: 800 }]);
   });

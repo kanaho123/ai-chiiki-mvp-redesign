@@ -9,7 +9,7 @@ export type CatalogData = {
   demoClock: boolean;
   aiAvailable: boolean;
   items: { id: string; name: string; varieties: { id: string; name: string }[] }[];
-  slots: { id: string; label: string; placeName: string; placeAddress: string; startAt: string; endAt: string; confirmDeadlineAt: string; feeYen: number; feeConfirmed: boolean; maxKg: number }[];
+  slots: { id: string; label: string; placeName: string; startAt: string; endAt: string; confirmDeadlineAt: string; feeYen: number; feeConfirmed: boolean; maxKg: number }[];
   prefectures: string[];
   nearbyPrefectures: string[];
   priorTradeProducers: { id: string; name: string }[];
@@ -29,7 +29,7 @@ export type Shown = { plan: PlanResult; version: string; fingerprint?: string; r
 
 /** POST /api/plan-options の1件：希望日に受け取れる1つの回（受け取り1か所）での案の要約。おすすめ順に並ぶ */
 export type PlanOption = {
-  slotId: string; label: string; placeName: string; placeAddress: string; placeKind: string | null;
+  slotId: string; label: string; placeName: string; placeKind: string | null;
   startAt: string; endAt: string;
   status: string; requestedKg: number; fulfilledKg: number; shortageKg: number; producerCount: number; totalYen: number | null;
   farms: { producerName: string; kg: number }[];

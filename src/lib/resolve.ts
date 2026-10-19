@@ -193,8 +193,9 @@ export function resolveExtraction(x: ExtractedRequest, catalog: Catalog, now: Da
   const slotsOnDate = catalog.slots.filter((s) => !draft.desiredDate || jstDate(0, new Date(s.startAt)) === draft.desiredDate);
   if (x.handoverText) {
     const t = normalize(x.handoverText).replace(/で受け?取り?(たい)?|受取|受け取り|で$/g, "");
+    // 空の値（生産者が登録した場所の住所は照合に使わないので空）は照合しない（空文字はどの文にも含まれるため）
     const hits = slotsOnDate.filter((s) =>
-      [s.label, s.placeName, s.placeAddress].some((v) => normalize(v).includes(t) || (t.length >= 2 && t.includes(normalize(v)))));
+      [s.label, s.placeName, s.placeAddress].filter((v) => normalize(v) !== "").some((v) => normalize(v).includes(t) || (t.length >= 2 && t.includes(normalize(v)))));
     if (hits.length === 1) draft.slotId = hits[0].id;
     else if (hits.length > 1) {
       candidateMatches.slotId = hits.map((s) => ({ id: s.id, label: s.label }));
