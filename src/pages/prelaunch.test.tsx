@@ -5,7 +5,7 @@ import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppRoutes } from "../App";
 import { ApiError, confirmationApi, ERROR_TEXT, friendlyError } from "../lib/confirmation-api";
-import { hasUndecidedOperatorInfo, isDraftVersion, OPERATOR, PRIVACY_VERSION, TERMS_VERSION } from "../lib/legal";
+import { hasUndecidedOperatorInfo, isDraftVersion, OPERATOR, PRIVACY_DATES, PRIVACY_HISTORY, PRIVACY_VERSION, TERMS_VERSION } from "../lib/legal";
 import * as serverLegal from "../../server/legal";
 import { appUrl, demoEntryUrl, generalHomeUrl } from "../routes/paths";
 import { SessionProvider, type Me } from "../routes/session";
@@ -71,10 +71,40 @@ describe("利用規約・プライバシーポリシー", () => {
     expect(path).toBe(at);
     expect(el.querySelector("main h1")?.textContent).toBe(title);
     expect(text()).toContain(version);
-    expect(text()).not.toContain("公開前の案"); // 公開用の版（-draft ではない）
     expect(text()).toContain("AI BOOTCAMP の最終課題として開発した、実証・試験運用の段階の Web サービス");
-    expect(text()).toContain(`施行日：${OPERATOR.effectiveDate}`);
     expect(el.querySelector(".bottom-nav")).toBeNull();
+  });
+  it("利用規約：公開用の版・施行日のまま（プライバシーポリシーの改定の影響を受けない）", async () => {
+    await open("/terms");
+    expect(text()).toContain(`版：2026-10-18・施行日：${OPERATOR.effectiveDate}`);
+    expect(text()).not.toContain("公開前の案");
+    expect(text()).not.toContain("改定");
+  });
+  it("プライバシーポリシー：専用の版・制定日・最終改定日・改定履歴を出す。dev の間は公開前の案と分かる", async () => {
+    await open("/privacy");
+    expect(text()).toContain(`版：${PRIVACY_VERSION}・制定：${PRIVACY_DATES.established}・最終改定：${PRIVACY_DATES.lastRevised}`);
+    expect(text()).not.toContain("施行日");
+    expect([...el.querySelectorAll(".legal-dates div")].map((d) => d.textContent)).toEqual([`制定日${PRIVACY_DATES.established}`, `最終改定日${PRIVACY_DATES.lastRevised}（公開前の案）`]);
+    expect([...el.querySelectorAll(".legal-history li")].map((li) => li.textContent)).toEqual(PRIVACY_HISTORY.map((h) => `${h.date}　${h.text}`));
+    expect(el.querySelector(".alert.warn")?.textContent).toContain("これは公開前の案です");
+    expect(text()).toContain("変更内容は、本サービス上の本ポリシーの改定日・改定履歴等でお知らせします");
+    expect(text()).not.toContain("変更するときは、本サービス上でお知らせします");
+  });
+  it("プライバシーポリシー：受け渡し場所の取り扱いを、今の実装のとおりに書く（住所の表示範囲）", async () => {
+    await open("/privacy");
+    const t = text();
+    expect(t).toContain("場所の名前、住所、場所の種類（直売所・集荷場・出荷先・自分の農園・その他）、渡せる曜日と時間帯");
+    expect(t).not.toContain("参加する受渡枠");
+    expect(t).not.toContain("メモ");
+    expect(t).toContain("品目・品種・規格と規格外の理由・産地・数量・最低販売量・価格・受け渡しの場所と日時・公開の状態");
+    expect(t).toContain("生産者の受け渡し場所の登録と、仕入れ案での受け取りの場所と日時の提案");
+    expect(t).toContain("生産者が登録した受け渡し場所の住所は、飲食店には表示しません");
+    expect(t).toContain("飲食店が入力した文章と受け取りの場所を照合するときにも、その住所は使いません");
+    expect(t).toContain("候補の段階では住所を表示しません");
+    expect(t).toContain("ほかの生産者がその場所を自分の受け渡し場所として選んだ場合は、その生産者に住所が表示されます");
+    expect(t).toContain("種類が「自分の農園」「その他」の場所は、ほかの生産者の候補には表示しません");
+    expect(t).toContain("登録した受け渡し場所は、現在アプリ内で変更・削除できません");
+    expect(t).not.toMatch(/住所は(ほかの利用者に)?公開されます|必ず|絶対に|完全に/);
   });
   it("ログイン中でも読める（ホームへ戻されない）", async () => {
     me = { id: "u", role: "restaurant", displayName: "店", producer: null, onboarded: true };
@@ -123,10 +153,12 @@ describe("利用規約・プライバシーポリシー", () => {
       el.remove();
     }
   });
-  it("規約の版：公開用の版で、新規登録の同意として記録する版（サーバー）と同じ", () => {
+  it("規約の版：新規登録の同意として記録する版（サーバー）と同じ。プライバシーポリシーは dev の間は公開前の案", () => {
     expect(TERMS_VERSION).toBe("2026-10-18");
-    expect(PRIVACY_VERSION).toBe("2026-10-18");
-    expect(isDraftVersion(TERMS_VERSION) || isDraftVersion(PRIVACY_VERSION)).toBe(false);
+    expect(isDraftVersion(TERMS_VERSION)).toBe(false);
+    // Production に反映する日に、正式な版（"-draft" なし）・改定日に変え、このテストも公開用の版を確かめる形に戻す
+    expect(PRIVACY_VERSION).toBe("2026-10-19-draft");
+    expect(isDraftVersion(PRIVACY_VERSION)).toBe(true);
     expect(serverLegal.TERMS_VERSION).toBe(TERMS_VERSION);
     expect(serverLegal.PRIVACY_VERSION).toBe(PRIVACY_VERSION);
   });
