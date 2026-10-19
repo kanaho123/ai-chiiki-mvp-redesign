@@ -964,8 +964,6 @@ a.inline-link { display: inline-flex; align-items: center; min-height: var(--tap
 .shared-pickup li svg { flex: none; margin-top: 2px; color: var(--color-restaurant-dark); }
 .shared-pickup li span { overflow-wrap: anywhere; }
 .shared-pickup .place-kind { margin-left: 6px; }
-.shared-pickup-match { font-weight: 800; color: var(--color-restaurant-dark); }
-.pickup-picked { margin: 2px 0 0; font-size: 14px; color: var(--color-muted); }
 /* 仕入れ案：ほかの受け取り方（おまかせのときだけ） */
 .alt-options ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .alt-option { display: grid; gap: 4px; padding: 12px 14px; border: 1.5px solid var(--color-line); border-radius: var(--r-input); min-width: 0; font-size: 15px; }
