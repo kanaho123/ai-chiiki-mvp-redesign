@@ -2,7 +2,7 @@
 // 新規登録時の同意は、クライアントから送られた値ではなく、ここにある版とサーバーの現在時刻で記録する（server/legal.ts）。
 // 文書を改訂したら版を上げる。版が "-draft" で終わる間は、画面に「公開前の案」と表示する。
 export const TERMS_VERSION = "2026-10-18";
-export const PRIVACY_VERSION = "2026-10-19-draft"; // Production に反映する日に、正式な版（"-draft" なし）と改定日にする
+export const PRIVACY_VERSION = "2026-10-19"; // 改定したら、反映する日の版と改定日・改定履歴にする（確認中は末尾に "-draft"）
 export const isDraftVersion = (v: string) => v.endsWith("-draft");
 
 // プライバシーポリシーの制定日・最終改定日・改定履歴（利用規約の施行日 OPERATOR.effectiveDate とは別に管理する）。

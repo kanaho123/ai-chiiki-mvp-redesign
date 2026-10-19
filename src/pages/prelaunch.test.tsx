@@ -80,13 +80,16 @@ describe("利用規約・プライバシーポリシー", () => {
     expect(text()).not.toContain("公開前の案");
     expect(text()).not.toContain("改定");
   });
-  it("プライバシーポリシー：専用の版・制定日・最終改定日・改定履歴を出す。dev の間は公開前の案と分かる", async () => {
+  it("プライバシーポリシー：専用の版・制定日・最終改定日・改定履歴を出す（公開用の版。公開前の案とは出さない）", async () => {
     await open("/privacy");
     expect(text()).toContain(`版：${PRIVACY_VERSION}・制定：${PRIVACY_DATES.established}・最終改定：${PRIVACY_DATES.lastRevised}`);
     expect(text()).not.toContain("施行日");
-    expect([...el.querySelectorAll(".legal-dates div")].map((d) => d.textContent)).toEqual([`制定日${PRIVACY_DATES.established}`, `最終改定日${PRIVACY_DATES.lastRevised}（公開前の案）`]);
+    expect([...el.querySelectorAll(".legal-dates div")].map((d) => d.textContent)).toEqual([`制定日${PRIVACY_DATES.established}`, `最終改定日${PRIVACY_DATES.lastRevised}`]);
     expect([...el.querySelectorAll(".legal-history li")].map((li) => li.textContent)).toEqual(PRIVACY_HISTORY.map((h) => `${h.date}　${h.text}`));
-    expect(el.querySelector(".alert.warn")?.textContent).toContain("これは公開前の案です");
+    expect(el.querySelector(".alert.warn")).toBeNull();
+    expect(text()).not.toContain("公開前の案");
+    expect(PRIVACY_DATES).toEqual({ established: "2026年10月18日", lastRevised: "2026年10月19日" });
+    expect(PRIVACY_HISTORY.map((h) => h.date)).toEqual(["2026年10月19日"]);
     expect(text()).toContain("変更内容は、本サービス上の本ポリシーの改定日・改定履歴等でお知らせします");
     expect(text()).not.toContain("変更するときは、本サービス上でお知らせします");
   });
@@ -153,12 +156,11 @@ describe("利用規約・プライバシーポリシー", () => {
       el.remove();
     }
   });
-  it("規約の版：新規登録の同意として記録する版（サーバー）と同じ。プライバシーポリシーは dev の間は公開前の案", () => {
+  it("規約の版：公開用の版で、新規登録の同意として記録する版（サーバー）と同じ", () => {
     expect(TERMS_VERSION).toBe("2026-10-18");
     expect(isDraftVersion(TERMS_VERSION)).toBe(false);
-    // Production に反映する日に、正式な版（"-draft" なし）・改定日に変え、このテストも公開用の版を確かめる形に戻す
-    expect(PRIVACY_VERSION).toBe("2026-10-19-draft");
-    expect(isDraftVersion(PRIVACY_VERSION)).toBe(true);
+    expect(PRIVACY_VERSION).toBe("2026-10-19");
+    expect(isDraftVersion(PRIVACY_VERSION)).toBe(false);
     expect(serverLegal.TERMS_VERSION).toBe(TERMS_VERSION);
     expect(serverLegal.PRIVACY_VERSION).toBe(PRIVACY_VERSION);
   });
