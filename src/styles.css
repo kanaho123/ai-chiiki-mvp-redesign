@@ -958,16 +958,13 @@ a.inline-link { display: inline-flex; align-items: center; min-height: var(--tap
 .pickup-summary { display: grid; gap: 2px; margin: 4px 0 0; padding: 10px 12px; border-radius: var(--r-input); background: var(--color-restaurant-tint); color: var(--color-restaurant-dark); font-size: 15px; }
 .pickup-summary b { font-size: 17px; }
 .pickup-reason { color: var(--color-text, #1f1f1f); }
-/* 共通の受け渡し条件：見出し（N農家・受け取り1か所）の理由。場所だけが目立たないよう、「全員の条件が重なっている」ことを最後に言い切る */
-.shared-pickup { display: grid; gap: 8px; margin: 0; padding: 12px 14px; border: 1.5px solid var(--color-restaurant-tint); border-radius: var(--r-input); background: var(--color-page); }
-.shared-pickup-title { margin: 0; font-size: 14px; font-weight: 800; color: var(--color-muted); }
-.shared-pickup-rows { display: grid; gap: 4px; margin: 0; }
-.shared-pickup-rows div { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: baseline; }
-.shared-pickup-rows dt { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; color: var(--color-muted); white-space: nowrap; }
-.shared-pickup-rows dt svg { align-self: center; }
-.shared-pickup-rows dd { margin: 0; font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
-.shared-pickup-note { display: flex; gap: 6px; align-items: flex-start; margin: 0; font-size: 15px; font-weight: 700; color: var(--color-restaurant-dark); }
-.shared-pickup-note svg { flex: none; margin-top: 2px; }
+/* 複数の農家の案：見出しの下に、場所・日時・「条件が一致」だけを短く（なぜ受け取りが1か所か） */
+.shared-pickup { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 3px; color: var(--color-text); font-size: 15px; }
+.shared-pickup li { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
+.shared-pickup li svg { flex: none; margin-top: 2px; color: var(--color-restaurant-dark); }
+.shared-pickup li span { overflow-wrap: anywhere; }
+.shared-pickup .place-kind { margin-left: 6px; }
+.shared-pickup-match { font-weight: 800; color: var(--color-restaurant-dark); }
 .pickup-picked { margin: 2px 0 0; font-size: 14px; color: var(--color-muted); }
 /* 仕入れ案：ほかの受け取り方（おまかせのときだけ） */
 .alt-options ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }

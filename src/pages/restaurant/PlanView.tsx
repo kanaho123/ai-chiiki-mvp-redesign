@@ -84,9 +84,11 @@ function Bundle({ plan, stale }: { plan: PlanResult; stale: boolean }) {
 function pickupSummary(plan: PlanResult): { head: string; reason: string | null; shared: boolean } {
   const matched = plan.allocations.length > 0 && plan.status === "MATCHED";
   // 複数の農家で揃う案：理由（なぜ1か所か）は、下の「共通の受け渡し条件」で場所・日時と一緒に示す
-  if (matched && plan.producerCount >= 2) return { head: `${plan.producerCount}農家から仕入れて、受け取りは1か所`, reason: null, shared: true };
+  if (matched && plan.producerCount >= 2) return { head: `${plan.producerCount}農家から直接仕入れ、受け取りは1か所に`, reason: null, shared: true };
   return { head: "受け取りは1か所です", reason: matched ? "1農家で必要な量を確保できます" : null, shared: false };
 }
+/** 短い日付（例：10/27（火））。日本時間の日付から */
+const shortDateJa = (at: string) => { const [, m, d] = jstDateOf(at).split("-").map(Number); return `${m}/${d}（${formatDateJa(jstDateOf(at)).slice(-2, -1)}）`; };
 const optionAmount = (o: PlanOption) => (o.status === "MATCHED" ? `${o.fulfilledKg}kg確保` : `${o.fulfilledKg}kgまで（${o.shortageKg}kg不足）`);
 
 export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, onEdit, onSuggestion, options = null, onPickOption }: {
@@ -190,21 +192,19 @@ export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, o
           )}
           {/* 受け取りの見通し：何か所で受け取るか（今回の案は1つの受渡の回＝1か所）と、その理由 */}
           {hasPlan && plan.slot && (
-            <p className="pickup-summary">
-              <b>{pickup.head}</b>
+            <div className="pickup-summary">
+              {/* 折り返すときは「、」の後で（「受け取りは1か所に」を1行に保つ） */}
+              <b>{pickup.shared ? <>{pickup.head.split("、")[0]}、<span className="nowrap">{pickup.head.split("、").slice(1).join("、")}</span></> : pickup.head}</b>
               {pickup.reason && <span className="pickup-reason">{pickup.reason}</span>}
-            </p>
-          )}
-          {/* なぜ1か所で受け取れるか：選んだ農家すべての受け渡しの場所・時間が重なっている（計算に使った回そのもの） */}
-          {hasPlan && plan.slot && pickup.shared && (
-            <section className="shared-pickup" aria-labelledby="shared-pickup-title">
-              <h3 className="shared-pickup-title" id="shared-pickup-title">共通の受け渡し条件</h3>
-              <dl className="shared-pickup-rows">
-                <div><dt><Icon name="pin" size={18} />場所</dt><dd>{plan.slot.placeName}{kindLabel && <span className="place-kind">{kindLabel}</span>}</dd></div>
-                <div><dt><Icon name="calendar" size={18} />日時</dt><dd>{formatDateJa(jstDateOf(plan.slot.startAt))} {jstTimeOf(plan.slot.startAt)}〜{jstTimeOf(plan.slot.endAt)}</dd></div>
-              </dl>
-              <p className="shared-pickup-note"><Icon name="check" size={18} strokeWidth={2.4} />{plan.producerCount}農家すべて、この場所・時間で受け渡し可能です</p>
-            </section>
+              {/* 複数の農家の案：なぜ1か所か＝選んだ農家すべての受け渡しの場所・時間が一致している（計算に使った回そのもの） */}
+              {pickup.shared && (
+                <ul className="shared-pickup" aria-label="受け渡しの場所と日時">
+                  <li><Icon name="pin" size={18} /><span>{plan.slot.placeName}{kindLabel && <span className="place-kind">{kindLabel}</span>}</span></li>
+                  <li><Icon name="calendar" size={18} /><span>{shortDateJa(plan.slot.startAt)}{jstTimeOf(plan.slot.startAt)}〜{jstTimeOf(plan.slot.endAt)}</span></li>
+                  <li className="shared-pickup-match"><Icon name="check" size={18} strokeWidth={2.6} /><span>{plan.producerCount}農家の受け渡し条件が一致</span></li>
+                </ul>
+              )}
+            </div>
           )}
           {currentOption && options && options.length > 1 && <p className="pickup-picked">受け取れる場所 {options.length}か所の中から、おすすめの案を選びました</p>}
           {hasPlan && <p className="answer-tag"><Icon name="info" size={16} />注文前の案・在庫は未確保</p>}

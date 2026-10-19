@@ -44,24 +44,20 @@ async function open(shown: Shown, options: PlanOption[] | null, onPickOption = v
 const text = () => el.textContent ?? "";
 
 describe("受け取りの見通し", () => {
-  it("2農家・1か所：見出し「2農家から仕入れて、受け取りは1か所」の下に「共通の受け渡し条件」（場所と種類・日時・全農家が受け渡し可能）", async () => {
+  it("2農家・1か所：見出し「2農家から直接仕入れ、受け取りは1か所に」の下に、場所（種類）・日時・「2農家の受け渡し条件が一致」だけを短く", async () => {
     await open(shownFor([supply("A", 5), supply("B", 5)]), [option("slot-x", { placeKind: "direct_store", producerCount: 2 })]);
     expect(el.querySelector(".answer-head")?.textContent).toContain("10kg 揃いました");
-    expect(el.querySelector(".pickup-summary b")?.textContent).toBe("2農家から仕入れて、受け取りは1か所");
-    expect(el.querySelector(".pickup-reason")).toBeNull(); // 理由は共通の受け渡し条件で示す
-    const block = el.querySelector(".shared-pickup")!;
-    expect(block.querySelector(".shared-pickup-title")?.textContent).toBe("共通の受け渡し条件");
-    const rows = [...block.querySelectorAll(".shared-pickup-rows div")].map((d) => [d.querySelector("dt")?.textContent, d.querySelector("dd")?.textContent]);
-    expect(rows[0][0]).toBe("場所");
-    expect(rows[0][1]).toMatch(/直売所$/);
-    expect(block.querySelector(".place-kind")?.textContent).toBe("直売所");
-    expect(rows[1][0]).toBe("日時");
-    expect(rows[1][1]).toBe("10月23日（金） 16:00〜18:00"); // 計算に使った回（テストデータ）の日時
-    expect(block.querySelector(".shared-pickup-note")?.textContent).toBe("2農家すべて、この場所・時間で受け渡し可能です");
-    expect(el.querySelector(".answer-meta")).toBeNull(); // 場所・日時は共通の受け渡し条件の中だけに出す
-    // 見出し → 共通の受け渡し条件 の順
-    const order = [...el.querySelectorAll(".pickup-summary, .shared-pickup")].map((x) => x.className);
-    expect(order).toEqual(["pickup-summary", "shared-pickup"]);
+    expect(el.querySelector(".pickup-summary b")?.textContent).toBe("2農家から直接仕入れ、受け取りは1か所に");
+    expect(el.querySelector(".pickup-reason")).toBeNull();
+    const lines = [...el.querySelectorAll(".pickup-summary .shared-pickup li")].map((li) => li.textContent);
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).toMatch(/直売所$/); // 場所の名前と種類
+    expect(el.querySelector(".shared-pickup .place-kind")?.textContent).toBe("直売所");
+    expect(lines[1]).toBe("10/23（金）16:00〜18:00"); // 計算に使った回（テストデータ）の日時
+    expect(lines[2]).toBe("2農家の受け渡し条件が一致");
+    expect(el.textContent).not.toContain("共通の受け渡し条件"); // 見出しと長い説明は出さない
+    expect(el.textContent).not.toContain("この場所・時間で受け渡し可能です");
+    expect(el.querySelector(".answer-meta")).toBeNull(); // 場所・日時は見出しの下だけに出す
   });
   it("1農家で満たせる案：「1農家で必要な量を確保できます」", async () => {
     await open(shownFor([supply("C", 10)]), null);
@@ -77,11 +73,11 @@ describe("受け取りの見通し", () => {
     expect(el.querySelector(".pickup-reason")).toBeNull();
     expect(el.querySelector(".pickup-summary b")?.textContent).toBe("受け取りは1か所です");
   });
-  it("3農家で揃う案：見出しの農家数は計算結果から（3農家から仕入れて、受け取りは1か所）", async () => {
+  it("3農家で揃う案：農家数は計算結果から（3農家から直接仕入れ、受け取りは1か所に・3農家の受け渡し条件が一致）", async () => {
     await open(shownFor([supply("A", 5), supply("B", 3), supply("C", 2)]), null);
     expect(el.querySelector(".answer-head")?.textContent).toContain("10kg 揃いました");
-    expect(el.querySelector(".pickup-summary b")?.textContent).toBe("3農家から仕入れて、受け取りは1か所");
-    expect(el.querySelector(".shared-pickup-note")?.textContent).toBe("3農家すべて、この場所・時間で受け渡し可能です");
+    expect(el.querySelector(".pickup-summary b")?.textContent).toBe("3農家から直接仕入れ、受け取りは1か所に");
+    expect(el.querySelector(".shared-pickup-match")?.textContent).toBe("3農家の受け渡し条件が一致");
   });
 });
 
