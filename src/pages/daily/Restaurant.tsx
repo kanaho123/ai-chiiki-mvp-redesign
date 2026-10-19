@@ -160,7 +160,7 @@ export function RestaurantConsultationDetail() {
             {c.farms.map((f) => (
               <li key={f.id} className={`farm-row farm-${f.status}`}>
                 <div className="farm-head"><b>{f.producerName}</b><span className={`state-tag state-farm-${f.status}`}>{confirmationLabel[f.status]}</span></div>
-                <p className="farm-detail">{f.quantityKg}kg・{yen(f.priceYenPerKg)}/kg・小計 {yen(f.subtotalYen)}（税込・受渡費別）</p>
+                <p className="farm-detail">{f.quantityKg}kg・{yen(f.priceYenPerKg)}/kg・小計 {yen(f.subtotalYen)}（税込・受け渡し費用は別）</p>
                 {f.status === "approved" && !contacts[f.id] && (
                   <button type="button" className="btn-secondary" disabled={busy !== null} aria-busy={busy === f.id} onClick={() => showContact(f.id)}>
                     <Icon name="info" />連絡先を見る
@@ -176,7 +176,7 @@ export function RestaurantConsultationDetail() {
             ))}
           </ul>
           {contactError && <div className="alert bad" role="alert"><Icon name="alert" />{contactError}</div>}
-          <p className="hint">商品代の合計 {yen(c.subtotalYen)}（税込・受渡費別）</p>
+          <p className="hint">商品代の合計 {yen(c.subtotalYen)}（税込・受け渡し費用は別）</p>
         </>
       )}
     </main>

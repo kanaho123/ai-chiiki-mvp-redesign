@@ -31,6 +31,7 @@ export function Welcome() {
     <main className="screen guest-screen">
       <div className="title-block">
         <h1 className="display">地域の食材を、<span className="nowrap">必要な分だけ</span></h1>
+        <p className="guest-value">複数の農家から集めても、受け取りは1か所。</p>
         <p className="muted">飲食店は、足りない仕入れを近くの生産者の供給を組み合わせて補えます。生産者は、今日出せる量を数タップで登録できます。</p>
       </div>
       <div className="guest-actions">

@@ -77,11 +77,14 @@ function Bundle({ plan, stale }: { plan: PlanResult; stale: boolean }) {
   );
 }
 
-/** 受け取りの見通しの説明（受け渡しの回は1つ＝受け取り1か所。数量・農家数は計算結果から） */
-function pickupReason(plan: PlanResult): string | null {
-  if (plan.allocations.length === 0) return null;
-  if (plan.status !== "MATCHED") return null;
-  return plan.producerCount <= 1 ? "1農家で必要な量を確保できます" : `${plan.producerCount}農家から仕入れますが、同じ場所でまとめて受け取れます`;
+/**
+ * 受け取りの見通し（受け渡しの回は1つ＝受け取り1か所。農家数は計算結果から）。
+ * 複数の農家で揃う案は「N農家から仕入れて、受け取りは1か所」を見出しにする（このサービスの価値が一目で分かるように）
+ */
+function pickupSummary(plan: PlanResult): { head: string; reason: string | null } {
+  const matched = plan.allocations.length > 0 && plan.status === "MATCHED";
+  if (matched && plan.producerCount >= 2) return { head: `${plan.producerCount}農家から仕入れて、受け取りは1か所`, reason: "同じ場所・時間でまとめて受け取れます" };
+  return { head: "受け取りは1か所です", reason: matched ? "1農家で必要な量を確保できます" : null };
 }
 const optionAmount = (o: PlanOption) => (o.status === "MATCHED" ? `${o.fulfilledKg}kg確保` : `${o.fulfilledKg}kgまで（${o.shortageKg}kg不足）`);
 
@@ -95,7 +98,7 @@ export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, o
   const currentOption = options?.find((o) => o.slotId === request.slotId) ?? null;
   const otherOptions = (options ?? []).filter((o) => o.slotId !== request.slotId && o.fulfilledKg > 0).slice(0, 3);
   const kindLabel = placeKindLabel(currentOption?.placeKind);
-  const reason = pickupReason(plan);
+  const pickup = pickupSummary(plan);
   // 相談の欄が知らせる「マッチ成立」（全農家が「対応できます」・条件が最新）。上部の短い表示だけに使う
   const [matched, setMatched] = useState(false);
   // 古い案・確認中の案は、再計算するまで適合状態（MATCHED）を有効扱いしない
@@ -187,8 +190,8 @@ export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, o
           {/* 受け取りの見通し：何か所で受け取るか（今回の案は1つの受渡の回＝1か所）と、その理由 */}
           {hasPlan && plan.slot && (
             <p className="pickup-summary">
-              <b>受け取りは1か所です</b>
-              {reason && <span className="pickup-reason">{reason}</span>}
+              <b>{pickup.head}</b>
+              {pickup.reason && <span className="pickup-reason">{pickup.reason}</span>}
             </p>
           )}
           {currentOption && options && options.length > 1 && <p className="pickup-picked">受け取れる場所 {options.length}か所の中から、おすすめの案を選びました</p>}

@@ -755,6 +755,8 @@ a.btn-primary.link-btn:hover { filter: brightness(1.08); }
 
 .header-action { margin-left: auto; padding: 0 12px; font-size: 15px; }
 .guest-screen { align-content: start; }
+/* トップページ：このサービスの価値（複数の農家から集めても、受け取りは1か所）を最初に見せる */
+.guest-value { margin: 4px 0 0; font-size: 20px; font-weight: 800; line-height: 1.5; color: var(--color-restaurant-dark); }
 .guest-actions { display: grid; gap: 12px; }
 .guest-switch { text-align: center; }
 .form-stack { display: grid; gap: 18px; }
