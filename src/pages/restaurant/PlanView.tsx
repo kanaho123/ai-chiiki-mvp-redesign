@@ -81,10 +81,11 @@ function Bundle({ plan, stale }: { plan: PlanResult; stale: boolean }) {
  * 受け取りの見通し（受け渡しの回は1つ＝受け取り1か所。農家数は計算結果から）。
  * 複数の農家で揃う案は「N農家から仕入れて、受け取りは1か所」を見出しにする（このサービスの価値が一目で分かるように）
  */
-function pickupSummary(plan: PlanResult): { head: string; reason: string | null } {
+function pickupSummary(plan: PlanResult): { head: string; reason: string | null; shared: boolean } {
   const matched = plan.allocations.length > 0 && plan.status === "MATCHED";
-  if (matched && plan.producerCount >= 2) return { head: `${plan.producerCount}農家から仕入れて、受け取りは1か所`, reason: "同じ場所・時間でまとめて受け取れます" };
-  return { head: "受け取りは1か所です", reason: matched ? "1農家で必要な量を確保できます" : null };
+  // 複数の農家で揃う案：理由（なぜ1か所か）は、下の「共通の受け渡し条件」で場所・日時と一緒に示す
+  if (matched && plan.producerCount >= 2) return { head: `${plan.producerCount}農家から仕入れて、受け取りは1か所`, reason: null, shared: true };
+  return { head: "受け取りは1か所です", reason: matched ? "1農家で必要な量を確保できます" : null, shared: false };
 }
 const optionAmount = (o: PlanOption) => (o.status === "MATCHED" ? `${o.fulfilledKg}kg確保` : `${o.fulfilledKg}kgまで（${o.shortageKg}kg不足）`);
 
@@ -181,7 +182,7 @@ export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, o
             </p>
           )}
           {hasPlan && <Bundle plan={plan} stale={stale} />}
-          {hasPlan && plan.slot && (
+          {hasPlan && plan.slot && !pickup.shared && (
             <p className="answer-meta">
               <span><Icon name="calendar" size={20} />{formatDateJa(jstDateOf(plan.slot.startAt))} {jstTimeOf(plan.slot.startAt)}〜{jstTimeOf(plan.slot.endAt)}</span>
               <span><Icon name="pin" size={20} />{plan.slot.placeName}{kindLabel && <span className="place-kind">{kindLabel}</span>}</span>
@@ -193,6 +194,17 @@ export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, o
               <b>{pickup.head}</b>
               {pickup.reason && <span className="pickup-reason">{pickup.reason}</span>}
             </p>
+          )}
+          {/* なぜ1か所で受け取れるか：選んだ農家すべての受け渡しの場所・時間が重なっている（計算に使った回そのもの） */}
+          {hasPlan && plan.slot && pickup.shared && (
+            <section className="shared-pickup" aria-labelledby="shared-pickup-title">
+              <h3 className="shared-pickup-title" id="shared-pickup-title">共通の受け渡し条件</h3>
+              <dl className="shared-pickup-rows">
+                <div><dt><Icon name="pin" size={18} />場所</dt><dd>{plan.slot.placeName}{kindLabel && <span className="place-kind">{kindLabel}</span>}</dd></div>
+                <div><dt><Icon name="calendar" size={18} />日時</dt><dd>{formatDateJa(jstDateOf(plan.slot.startAt))} {jstTimeOf(plan.slot.startAt)}〜{jstTimeOf(plan.slot.endAt)}</dd></div>
+              </dl>
+              <p className="shared-pickup-note"><Icon name="check" size={18} strokeWidth={2.4} />{plan.producerCount}農家すべて、この場所・時間で受け渡し可能です</p>
+            </section>
           )}
           {currentOption && options && options.length > 1 && <p className="pickup-picked">受け取れる場所 {options.length}か所の中から、おすすめの案を選びました</p>}
           {hasPlan && <p className="answer-tag"><Icon name="info" size={16} />注文前の案・在庫は未確保</p>}
