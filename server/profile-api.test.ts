@@ -208,17 +208,21 @@ describe("飲食店のプロフィール更新", () => {
 
 describe("生産者のプロフィール更新", () => {
   const current = async () => (await (await get(profileApi, P)).json()).profile;
-  it("作物・受渡枠を変更：新しく選んだ枠はこれからの回にも参加。外した枠の、予定済みの回への参加は残す", async () => {
+  it("作物・受渡枠を変更：新しく選んだ枠はこれからの回にも参加。前から参加している枠は外さない（古い内容で保存しても消えない）", async () => {
     const res = await patch({ ...(await current()), farmName: "みどり農園", itemIds: ["i-onion"], seriesIds: ["s-b"], contactEmail: "farm@example.com" }, P);
     expect(res.status).toBe(200);
     expect(mem.state.producers[0]).toMatchObject({ farmName: "みどり農園", contactEmail: "farm@example.com", ownerUserId: "u-p" });
     expect(mem.state.producerItems.filter((x) => x.producerId === "p-1")).toEqual([{ producerId: "p-1", itemId: "i-onion" }]);
-    expect(mem.state.seriesParticipants.filter((x) => x.producerId === "p-1")).toEqual([{ seriesId: "s-b", producerId: "p-1" }]);
+    expect(mem.state.seriesParticipants.filter((x) => x.producerId === "p-1").map((x) => x.seriesId).sort()).toEqual(["s-b", "s-old"]);
     expect(mem.state.slotParticipants.filter((x) => x.producerId === "p-1").map((x) => x.slotId).sort()).toEqual(["slot-b-next", "slot-old-1"]);
     expect(mem.state.users.find((u) => u.id === "u-p")!.displayName).toBe("みどり農園");
     // ほかの生産者のデータは変わらない
     expect(mem.state.producers[1]).toMatchObject({ farmName: "別の農園" });
     expect(mem.state.seriesParticipants.filter((x) => x.producerId === "p-2")).toEqual([{ seriesId: "s-a", producerId: "p-2" }]);
+  });
+  it("受け渡しの場所がなくても保存できる。参加はそのまま", async () => {
+    expect((await patch({ ...(await current()), seriesIds: [] }, P)).status).toBe(200);
+    expect(mem.state.seriesParticipants.filter((x) => x.producerId === "p-1").map((x) => x.seriesId)).toEqual(["s-old"]);
   });
   it("止めた枠でも、参加中ならそのまま残せる", async () => {
     expect((await patch({ ...(await current()), seriesIds: ["s-old", "s-a"] }, P)).status).toBe(200);
@@ -227,7 +231,6 @@ describe("生産者のプロフィール更新", () => {
   it.each([
     ["止めた枠に新しく参加", { seriesIds: ["s-off"] }, "seriesIds"],
     ["存在しない枠", { seriesIds: ["s-x"] }, "seriesIds"],
-    ["受渡枠が空", { seriesIds: [] }, "seriesIds"],
     ["品目マスタにない作物", { itemIds: ["i-x"] }, "itemIds"],
     ["作物が空", { itemIds: [] }, "itemIds"],
     ["連絡先をどちらも消す", { contactPhone: "", contactEmail: "" }, "contactPhone"],

@@ -82,7 +82,7 @@ describe("入力の確認の細かい規則", () => {
     expect(checkProducer({ ...p, contactEmail: "a@b.jp" }).ok).toBe(true);
     expect(checkProducer({ ...p, contactEmail: "a@b.jp", salesChannels: [] }).ok).toBe(true); // 販売先は任意
     expect(checkProducer({ ...p, contactEmail: "a@b.jp", itemIds: [] }).ok).toBe(false); // 主な作物は1つ以上
-    expect(checkProducer({ ...p, contactEmail: "a@b.jp", seriesIds: [] }).ok).toBe(false); // 受渡枠は1つ以上
+    expect(checkProducer({ ...p, contactEmail: "a@b.jp", seriesIds: [] }).ok).toBe(true); // 受け渡しの場所は任意（はじめての出品のときに聞く）
     expect(checkProducer({ ...p, contactPhone: "06-1234-5678" }).ok).toBe(true);
     expect(checkProducer({ ...p }).ok).toBe(false);
     expect(checkProducer({ ...p, contactPhone: "12" }).ok).toBe(false);

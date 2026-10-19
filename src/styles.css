@@ -949,11 +949,41 @@ a.inline-link { display: inline-flex; align-items: center; min-height: var(--tap
 .alt-place b { font-size: 16px; }
 .alt-when, .alt-farms { color: var(--color-muted); overflow-wrap: anywhere; }
 .alt-sum { font-weight: 700; }
-/* 生産者のマイページ：受け渡し可能地点 */
-.pickup-points { display: grid; gap: 12px; }
-.pickup-list { list-style: none; margin: 0; padding: 0; display: grid; }
-.pickup-item { display: grid; gap: 2px; padding: 12px 0; border-bottom: 1px solid var(--color-line); font-size: 15px; min-width: 0; }
-.pickup-item:last-child { border-bottom: 0; }
-.pickup-name b { font-size: 17px; }
-.pickup-address, .pickup-note { color: var(--color-muted); overflow-wrap: anywhere; }
-.pickup-when { font-weight: 700; }
+/* 生産者：いつもの受け渡し場所（大きな押しやすいボタンで、1画面に1つの質問） */
+.pickup-setup { display: grid; gap: 14px; min-width: 0; }
+.ps-title { margin: 0; font-size: 22px; line-height: 1.4; }
+.ps-lead { margin: 0; font-size: 16px; color: var(--color-muted); }
+.ps-choices { display: grid; gap: 10px; }
+.ps-choice { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 60px; padding: 0 16px; border: 1.5px solid var(--color-line-strong); border-radius: var(--r-btn); background: var(--color-page); color: var(--color-text); font-size: 18px; font-weight: 700; text-align: left; }
+.ps-choice:active, .ps-weekday:active { background: var(--color-producer-tint); }
+.ps-places { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.ps-place { display: grid; gap: 8px; padding: 14px 16px; border: 1.5px solid var(--color-line); border-radius: var(--r-input); min-width: 0; }
+.ps-place-name { font-size: 18px; overflow-wrap: anywhere; }
+.ps-place-address { display: flex; gap: 4px; align-items: flex-start; color: var(--color-muted); font-size: 15px; overflow-wrap: anywhere; }
+.ps-form { display: grid; gap: 12px; }
+.ps-where-picked { display: flex; gap: 6px; align-items: center; margin: 0; font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
+.ps-weekdays { border: 0; margin: 0; padding: 0; min-width: 0; }
+.ps-weekday-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.ps-weekday { min-height: 56px; border: 1.5px solid var(--color-line-strong); border-radius: var(--r-btn); background: var(--color-page); color: var(--color-text); font-size: 20px; font-weight: 700; }
+.ps-weekday.on { background: var(--color-producer-dark); border-color: var(--color-producer-dark); color: #fff; }
+.ps-times { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ps-times input { font-size: 18px; }
+.ps-back { justify-self: start; display: inline-flex; align-items: center; gap: 4px; }
+.usual-places { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 10px; }
+.usual-place { display: grid; gap: 4px; padding: 14px 16px; border-radius: var(--r-input); background: var(--color-zone); min-width: 0; }
+.usual-place-name { display: flex; gap: 6px; align-items: center; font-size: 18px; overflow-wrap: anywhere; }
+.usual-place-when { font-size: 16px; font-weight: 700; }
+.usual-status { margin: 0 0 8px; font-size: 16px; }
+/* 出品：はじめての出品の前の質問と、受け渡し（いつもの場所・いちばん近い日時） */
+.first-place { display: grid; gap: 12px; padding: 16px; border: 1.5px solid var(--color-producer); border-radius: var(--r-zone); }
+.first-place-lead { margin: 0; font-size: 16px; font-weight: 700; color: var(--color-producer-ink); }
+.pickup-choice { display: grid; gap: 8px; }
+.pickup-current { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; padding: 12px 14px; border-radius: var(--r-input); background: var(--color-zone); min-width: 0; }
+.pickup-current-place { display: flex; gap: 6px; align-items: center; font-size: 17px; overflow-wrap: anywhere; }
+.pickup-current-place .icon:last-child, .pickup-current-place svg:last-child { color: var(--color-restaurant); }
+.pickup-current-when { grid-column: 1; font-size: 16px; }
+.pickup-current .text-btn { grid-column: 2; grid-row: 1 / span 2; }
+.pickup-change { display: grid; gap: 10px; }
+.pickup-options { display: grid; gap: 8px; }
+.pickup-option { min-height: 52px; padding: 8px 14px; border: 1.5px solid var(--color-line-strong); border-radius: var(--r-btn); background: var(--color-page); color: var(--color-text); font-size: 16px; font-weight: 700; text-align: left; }
+.pickup-option.on { border-color: var(--color-producer-dark); background: var(--color-producer-tint); }

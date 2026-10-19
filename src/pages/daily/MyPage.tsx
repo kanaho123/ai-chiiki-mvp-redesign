@@ -7,14 +7,13 @@ import { Icon } from "../../components/Icon";
 import {
   BUSINESS_TYPES, checkProducer, checkRestaurant, DIRECT_TRADE_EXPERIENCES, FIRST_TIME_POLICIES, IRREGULAR_POLICIES, labelOf, LIMITS, PICKUP_TIMES,
   PRIORITY_MAX, PRODUCER_CAPABILITIES, producerStyle, PRODUCTION_STYLES, PURCHASE_FREQUENCIES, PURCHASE_PRIORITIES, PURCHASE_VOLUMES,
-  restaurantStyle, SALES_CHANNELS, seriesWhen, stepErrors, type ProducerForm, type RestaurantForm,
+  restaurantStyle, SALES_CHANNELS, stepErrors, type ProducerForm, type RestaurantForm,
 } from "../../lib/onboarding";
 import { useMe, useSession } from "../../routes/session";
 import { ChoiceGroup, focusFirstError, MultiChoiceGroup, PrefectureField, StyleText, TextField } from "../onboarding/parts";
 import { ErrorRetry } from "./ErrorRetry";
 import { ListingsSummary } from "./ListingsSummary";
-import { PickupPointsSection } from "./PickupPoints";
-import { placeKindLabel, seriesSub } from "../../lib/pickup";
+import { UsualPlacesSection } from "./PickupPoints";
 
 // マイページ：閲覧ではまとめて読みやすく表示し、「編集」を押した区切りだけを変更する（一度に1つの区切りだけ）。
 // 保存はサーバーで初回登録と同じ確認をする。ログイン用メールアドレス・パスワードの変更は扱わない。
@@ -35,7 +34,8 @@ const R_SECTIONS = {
 const P_SECTIONS = {
   farm: { title: "農園", fields: ["farmName", "producerName", "prefecture", "city"] },
   crops: { title: "作っているもの・販売", fields: ["itemIds", "otherCrops", "productionStyle", "salesChannels", "directTradeExperience"] },
-  ability: { title: "できること・受渡枠", fields: ["capabilities", "seriesIds"] },
+  // 受け渡しの場所は「いつもの受け渡し場所」で扱う（ここでは聞かない。保存時は今の選択をそのまま送る）
+  ability: { title: "できること", fields: ["capabilities"] },
   contact: { title: "飲食店に伝える連絡先", fields: ["contactPhone", "contactEmail"] },
 } as const;
 
@@ -212,12 +212,12 @@ export default function MyPage() {
   const p = view.profile;
   const f = form as ProducerForm;
   const itemName = (id: string) => view.items.find((i) => i.id === id)?.name ?? "";
-  const seriesText = (id: string) => { const s = view.series.find((x) => x.id === id); return s ? `${s.placeName}${placeKindLabel(s.placeKind) ? `［${placeKindLabel(s.placeKind)}］` : ""}（${seriesWhen(s)}）${s.active ? "" : "・受付終了"}` : ""; };
   return (
     <main className="screen">
       <h1 className="display">マイページ</h1>
       {message && <div className={`alert ${message.tone}`} role={message.tone === "bad" ? "alert" : "status"}><Icon name={message.tone === "ok" ? "check" : "alert"} />{message.text}</div>}
       <ListingsSummary />
+      <UsualPlacesSection onChanged={() => setLoadTick((t) => t + 1)} />
       <section className="style-card" aria-label="あなたの販売スタイル">
         <span className="eyebrow">あなたの販売スタイル</span>
         <StyleText text={producerStyle(p)} />
@@ -248,14 +248,9 @@ export default function MyPage() {
       </Section>
       <Section {...sectionProps("ability")} form={<>
         <MultiChoiceGroup name="capabilities" legend="対応できること" optional options={PRODUCER_CAPABILITIES} value={f.capabilities} note="選ばなくても保存できます" onChange={(v) => set({ capabilities: v })} error={errors.capabilities} />
-        <MultiChoiceGroup name="seriesIds" legend="参加する受渡枠"
-          options={view.series.map((s) => ({ value: s.id, label: s.placeName, sub: `${seriesSub(s, seriesWhen(s))}${s.active ? "" : "・受付終了（参加中のまま残せます）"}` }))}
-          value={f.seriesIds} note="1つ以上選んでください。外した受渡枠でも、すでに予定に入っている回への参加はそのまま残ります" onChange={(v) => set({ seriesIds: v })} error={errors.seriesIds} />
       </>}>
         <Row label="対応できること">{list(p.capabilities.map((v) => labelOf(PRODUCER_CAPABILITIES, v)))}</Row>
-        <Row label="受渡枠">{p.seriesIds.map((id) => <span key={id} className="summary-line">{seriesText(id)}</span>)}</Row>
       </Section>
-      <PickupPointsSection onChanged={() => setLoadTick((t) => t + 1)} />
       <Section {...sectionProps("contact")} form={<>
         <p className="contact-note"><Icon name="info" size={18} />この連絡先は、あなたが「対応できます」と返事をした飲食店だけに表示されます。電話番号かメールアドレスの、どちらか1つは必要です。</p>
         <TextField name="contactPhone" label="電話番号" optional noTag type="tel" inputMode="tel" value={f.contactPhone} onChange={(v) => set({ contactPhone: v })} error={errors.contactPhone} maxLength={LIMITS.phone} />

@@ -134,7 +134,8 @@ export const repo = {
   async producerSlots(producerId: string) {
     const rows = await prisma.slotParticipant.findMany({ where: { producerId }, include: { slot: { include: { place: true } } }, orderBy: { slot: { startAt: "asc" } } });
     return rows.map((r) => ({
-      id: r.slot.id, label: r.slot.label, placeName: r.slot.place.name, startAt: r.slot.startAt.toISOString(), endAt: r.slot.endAt.toISOString(),
+      id: r.slot.id, label: r.slot.label, placeId: r.slot.placeId, placeName: r.slot.place.name, placeAddress: r.slot.place.address, placeKind: r.slot.place.kind,
+      startAt: r.slot.startAt.toISOString(), endAt: r.slot.endAt.toISOString(),
       participationConfirmed: r.confirmed,
     }));
   },

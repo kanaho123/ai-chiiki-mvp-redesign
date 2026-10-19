@@ -254,7 +254,6 @@ describe("生産者の初回登録", () => {
     ["作物が空", { itemIds: [] }, "itemIds"],
     ["運営が止めている受渡枠", { seriesIds: ["series-off"] }, "seriesIds"],
     ["存在しない受渡枠", { seriesIds: ["series-a", "series-x"] }, "seriesIds"],
-    ["受渡枠が空", { seriesIds: [] }, "seriesIds"],
     ["連絡先がどちらもない", { contactPhone: "", contactEmail: " " }, "contactPhone"],
     ["メールの形式", { contactPhone: "", contactEmail: "farm@" }, "contactEmail"],
     ["生産スタイルが選択肢にない", { productionStyle: "huge" }, "productionStyle"],

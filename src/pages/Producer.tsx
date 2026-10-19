@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Me } from "../App";
 import { formatJstDateTime, jstTimeOf } from "../lib/dates.js";
 import { Icon } from "../components/Icon";
+import { useSession } from "../routes/session";
+import { PickupSetup, usePickupData } from "./daily/PickupPoints";
 
 // 生産者本人の供給一覧。主な操作は「数量を変更」「価格を変更」と「公開停止／再開」。
 // どの変更でも version が上がり、その在庫を使った仕入れ案・相談は「条件が変わりました」になる（サーバーの既存の判定）。
@@ -22,13 +24,11 @@ type Supply = {
   version: number;
   updatedAt: string;
 };
-type Slot = { id: string; label: string; placeName: string; startAt: string; endAt: string; participationConfirmed: boolean };
+type Slot = { id: string; label: string; placeId?: string; placeName: string; placeAddress?: string; placeKind?: string | null; startAt: string; endAt: string; participationConfirmed: boolean };
 type Item = { id: string; name: string; varieties: { id: string; name: string }[] };
 type Data = { supplies: Supply[]; slots: Slot[]; items: Item[]; prefectures: string[] };
 
 const yen = (n: number) => `¥${n.toLocaleString("ja-JP")}`;
-const slotText = (s: { label: string; placeName: string; startAt: string; endAt: string }) =>
-  `${s.label}：${formatJstDateTime(s.startAt)}〜${jstTimeOf(s.endAt)}／${s.placeName}`;
 
 async function send(url: string, method: string, body: unknown) {
   try {
@@ -67,6 +67,12 @@ export default function ProducerPage({ me }: { me: Me }) {
     reload();
   }, [reload]);
 
+  // これからの受け渡しの回（受け渡しの場所と日時）。はじめての出品で1つもなければ、場所を聞く
+  const { appMode, demoNow } = useSession();
+  const general = appMode === "general";
+  const now = demoNow ? new Date(demoNow) : new Date();
+  const upcoming = (data?.slots ?? []).filter((s) => new Date(s.startAt).getTime() > now.getTime()).sort((a, b) => a.startAt.localeCompare(b.startAt));
+
   return (
     <main className="screen">
       <h1 className="display">今日出せる量</h1>
@@ -90,8 +96,9 @@ export default function ProducerPage({ me }: { me: Me }) {
       </ul>
       {data && data.supplies.length === 0 && <p className="muted">まだ供給は登録されていません。</p>}
 
-
-      {data && <NewSupply data={data} defaultOrigin={me.producer?.originPrefecture ?? ""} onCreated={reload} />}
+      {/* はじめての出品で、まだ渡せる場所がない（一般向けの環境）：その場で「普段、野菜をどこで渡せますか？」を1回だけ聞いてから出品へ進む */}
+      {data && general && upcoming.length === 0 && <FirstPlaceSetup onDone={reload} />}
+      {data && (!general || upcoming.length > 0) && <NewSupply data={{ ...data, slots: upcoming }} defaultOrigin={me.producer?.originPrefecture ?? ""} onCreated={reload} openFirst={data.supplies.length === 0} />}
     </main>
   );
 }
@@ -220,9 +227,64 @@ type NewForm = {
   availableKg: string; priceYenPerKg: string; minKg: string; slotId: string; published: "" | "yes" | "no";
 };
 
-function NewSupply({ data, defaultOrigin, onCreated }: { data: Data; defaultOrigin: string; onCreated: () => void }) {
+/** はじめての出品の前に、普段の受け渡しの場所を1回だけ聞く */
+function FirstPlaceSetup({ onDone }: { onDone: () => void }) {
+  const { data, error } = usePickupData();
+  return (
+    <section className="first-place" aria-label="はじめての出品の前に">
+      <p className="first-place-lead">はじめての出品です。最初に一度だけ教えてください。</p>
+      {error && <p className="alert bad" role="alert">{error}</p>}
+      {!data && !error && <p className="muted" aria-busy="true">読み込み中…</p>}
+      {data && <PickupSetup candidates={data.candidates} onDone={onDone} />}
+    </section>
+  );
+}
+
+/**
+ * 受け渡し：いつもの場所と、いちばん近い日時を最初から選んでおく（毎回入力させない）。必要なときだけ「変更」。
+ * slots はこれからの回（日時の早い順）
+ */
+function PickupChoice({ slots, value, onChange }: { slots: Slot[]; value: string; onChange: (slotId: string) => void }) {
+  const [changing, setChanging] = useState(false);
+  const current = slots.find((s) => s.id === value) ?? slots[0];
+  if (!current) return null;
+  const keyOf = (s: Slot) => s.placeId ?? s.placeName;
+  const places = slots.filter((s, i) => slots.findIndex((x) => keyOf(x) === keyOf(s)) === i);
+  const dates = slots.filter((s) => keyOf(s) === keyOf(current)).slice(0, 6);
+  const when = (s: Slot) => `${formatJstDateTime(s.startAt)}〜${jstTimeOf(s.endAt)}`;
+  return (
+    <div className="field pickup-choice" data-field="slotId">
+      <span className="label">受け渡し</span>
+      <div className="pickup-current">
+        <b className="pickup-current-place"><Icon name="pin" size={20} />いつもの{current.placeName}<Icon name="check" size={20} strokeWidth={2.6} /></b>
+        <span className="pickup-current-when">{when(current)}</span>
+        {!changing && (places.length > 1 || dates.length > 1) && <button type="button" className="text-btn" onClick={() => setChanging(true)}>変更</button>}
+      </div>
+      {changing && (
+        <div className="pickup-change">
+          {places.length > 1 && (
+            <div className="pickup-options" role="group" aria-label="場所">
+              {places.map((p) => <button key={keyOf(p)} type="button" className={`pickup-option ${keyOf(p) === keyOf(current) ? "on" : ""}`} aria-pressed={keyOf(p) === keyOf(current)} onClick={() => onChange(p.id)}>{p.placeName}</button>)}
+            </div>
+          )}
+          <div className="pickup-options" role="group" aria-label="日時">
+            {dates.map((s) => <button key={s.id} type="button" className={`pickup-option ${s.id === current.id ? "on" : ""}`} aria-pressed={s.id === current.id} onClick={() => onChange(s.id)}>{when(s)}</button>)}
+          </div>
+          <button type="button" className="btn-secondary btn-block" onClick={() => setChanging(false)}>これにする</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NewSupply({ data, defaultOrigin, onCreated, openFirst = false }: { data: Data; defaultOrigin: string; onCreated: () => void; openFirst?: boolean }) {
   const empty: NewForm = { itemId: "", varietyId: "", grade: "regular", irregularReason: "", originPrefecture: defaultOrigin, availableKg: "", priceYenPerKg: "", minKg: "1", slotId: "", published: "" };
   const [f, setF] = useState<NewForm>(empty);
+  // 受け渡しは、いつもの場所のいちばん近い日時を最初から選んでおく
+  const defaultSlot = data.slots[0]?.id ?? "";
+  useEffect(() => {
+    if (!f.slotId || !data.slots.some((s) => s.id === f.slotId)) setF((x) => ({ ...x, slotId: defaultSlot }));
+  }, [f.slotId, data.slots, defaultSlot]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
   const set = <K extends keyof NewForm>(k: K, v: NewForm[K]) => setF((x) => ({ ...x, [k]: v }));
@@ -244,7 +306,7 @@ function NewSupply({ data, defaultOrigin, onCreated }: { data: Data; defaultOrig
   }
 
   return (
-    <details className="more">
+    <details className="more" open={openFirst || undefined}>
       <summary>
         <span>新しい在庫を登録する</span>
         <Icon name="chevronDown" />
@@ -312,14 +374,7 @@ function NewSupply({ data, defaultOrigin, onCreated }: { data: Data; defaultOrig
           <span className="label">最低販売量</span>
           <span className="with-unit"><input type="number" inputMode="numeric" min={1} max={100} step={1} value={f.minKg} onChange={(e) => set("minKg", e.target.value)} /><em>kg</em></span>
         </label>
-        <label className="field">
-          <span className="label">受け取り時間と場所（参加登録済みのものから選ぶ）</span>
-          <select value={f.slotId} onChange={(e) => set("slotId", e.target.value)} aria-required="true">
-            <option value="">選択</option>
-            {data.slots.map((s) => <option key={s.id} value={s.id}>{slotText(s)}{s.participationConfirmed ? "" : "（参加確認待ち）"}</option>)}
-          </select>
-          <span className="hint">受け渡しの場所・時間・費用は、ここで選んだものに決まります（自由入力はできません）。</span>
-        </label>
+        <PickupChoice slots={data.slots} value={f.slotId} onChange={(id) => set("slotId", id)} />
         <div className="field">
           <span className="label" id="pub-title">すぐに公開する？</span>
           <div className="seg" role="radiogroup" aria-labelledby="pub-title">

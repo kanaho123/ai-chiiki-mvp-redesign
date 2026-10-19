@@ -97,9 +97,9 @@ export async function updateProducerProfile(db: Db, userId: string, p: ProducerP
     await tx.producerItem.deleteMany({ where: { producerId: producer.id } });
     await tx.producerItem.createMany({ data: p.itemIds.map((itemId) => ({ producerId: producer.id, itemId })) });
 
+    // 受け渡しの場所は「いつもの受け渡し場所」（/api/pickup-points）で登録する。プロフィールの保存では参加を外さない
+    // （別の画面で場所を足した後に、前に読み込んだ内容で保存しても、その参加が消えないように）
     const added = p.seriesIds.filter((id) => !joined.has(id));
-    const removed = [...joined].filter((id) => !p.seriesIds.includes(id));
-    if (removed.length > 0) await tx.slotSeriesParticipant.deleteMany({ where: { producerId: producer.id, seriesId: { in: removed } } });
     if (added.length > 0) {
       await tx.slotSeriesParticipant.createMany({ data: added.map((seriesId) => ({ seriesId, producerId: producer.id })), skipDuplicates: true });
       const slots = await tx.handoverSlot.findMany({ where: { seriesId: { in: added }, confirmDeadlineAt: { gt: now } }, select: { id: true } });

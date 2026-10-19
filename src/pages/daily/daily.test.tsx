@@ -34,8 +34,21 @@ const supplyRow = (over: Record<string, unknown> = {}) => ({
   updatedAt: "2026-10-20T03:00:00.000Z", slot: { label: "梅田・火", placeName: "梅田", startAt: "2026-10-27T01:00:00.000Z", endAt: "2026-10-27T02:00:00.000Z" }, ...over,
 });
 let supplyRows: ReturnType<typeof supplyRow>[] = [];
+type SlotMock = { id: string; label: string; placeId?: string; placeName: string; startAt: string; endAt: string; participationConfirmed?: boolean };
+const umedaSlot: SlotMock = { id: "sl1", label: "梅田・火", placeId: "pl-umeda", placeName: "梅田エリア受渡所（仮）", startAt: "2099-10-27T01:00:00.000Z", endAt: "2099-10-27T02:00:00.000Z", participationConfirmed: true };
+let slots: SlotMock[] = [];
+const usualUmeda = { placeId: "pl-umeda", name: "梅田エリア受渡所（仮）", address: "大阪市北区", kind: null, times: [{ seriesId: "s-umeda", weekday: 2, startTime: "10:00", endTime: "11:00", active: true }] };
+let pickup: { usual: unknown[]; candidates: { placeId: string; name: string; address: string; kind: string | null }[] } = { usual: [], candidates: [] };
 beforeEach(() => {
   supplyRows = [supplyRow()];
+  slots = [umedaSlot];
+  pickup = {
+    usual: [usualUmeda],
+    candidates: [
+      { placeId: "pl-umeda", name: "梅田エリア受渡所（仮）", address: "大阪市北区", kind: null },
+      { placeId: "pl-store", name: "南区ふれあい直売所", address: "大阪府堺市南区1-2-3", kind: "direct_store" },
+    ],
+  };
   mode = "general";
   contact = { contactPhone: "000-0000-0001", contactEmail: "a-farm@example.invalid" };
   requests = [];
@@ -67,10 +80,16 @@ beforeEach(() => {
       const r = requests.find((x) => x.id === decodeURIComponent(one[1]));
       return r?.status === "approved" ? json({ contact: { contactPhone: "000-0000-0001", contactEmail: "a-farm@example.invalid" } }) : json({ error: "まだ連絡先は見られません" }, 403);
     }
-    if (url === "/api/supplies") return json({
-      supplies: supplyRows,
-      slots: [{ id: "sl1", label: "梅田・火", placeName: "梅田エリア受渡所（仮）", startAt: "2099-10-27T01:00:00.000Z", endAt: "2099-10-27T02:00:00.000Z" }],
-    });
+    if (url === "/api/supplies") return json({ supplies: supplyRows, slots, items: [{ id: "i-tomato", name: "トマト", varieties: [] }], prefectures: ["大阪府"] });
+    if (url === "/api/pickup-points" && method === "GET") return json({ points: [], ...pickup });
+    if (url === "/api/pickup-points" && method === "POST") {
+      const b = body as { placeId?: string; name?: string; weekday: number; startTime: string; endTime: string };
+      const name = b.placeId ? pickup.candidates.find((c) => c.placeId === b.placeId)!.name : b.name!;
+      const added = { placeId: b.placeId ?? "pl-new", name, address: "", kind: null, times: [{ seriesId: "s-new", weekday: b.weekday, startTime: b.startTime, endTime: b.endTime, active: true }] };
+      pickup = { ...pickup, usual: [...pickup.usual, added] };
+      slots = [{ id: "sl-new", label: "", placeId: added.placeId, placeName: name, startAt: "2099-10-30T07:00:00.000Z", endAt: "2099-10-30T09:00:00.000Z", participationConfirmed: true }];
+      return json({ created: {}, points: [], usual: pickup.usual }, 201);
+    }
     if (url === "/api/profile" && method === "GET") return profile ? json(profile) : json({ error: "なし" }, 404);
     if (url === "/api/profile" && method === "PATCH") {
       profile = { ...profile!, profile: body };
@@ -347,7 +366,7 @@ describe("マイページ", () => {
     profile = producerProfile();
     await open("/producer/mypage");
     expect($(".style-text")?.textContent).toBe("少量対応 × 直接取引の経験あり × 少量多品目");
-    for (const t of ["山田 花子", "大阪府堺市南区", "トマト", "かぼちゃ", "少量多品目", "経験あり", "少量対応", "梅田エリア受渡所（仮）（毎週火曜日 10:00〜11:00）", "000-0000-9999"]) expect(text()).toContain(t);
+    for (const t of ["山田 花子", "大阪府堺市南区", "トマト", "かぼちゃ", "少量多品目", "経験あり", "少量対応", "000-0000-9999"]) expect(text()).toContain(t);
     await click(el.querySelector('button[aria-label="飲食店に伝える連絡先を編集する"]'));
     const phone = $<HTMLInputElement>('input[name="contactPhone"]')!;
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(phone, "");
@@ -423,5 +442,120 @@ describe("デモ用の環境のマイページ（連絡先だけ編集できる�
     await open("/restaurant/mypage");
     expect(text()).not.toContain("飲食店に伝える連絡先");
     expect(calls.some((c) => c.url.includes("view=contact"))).toBe(false);
+  });
+});
+
+describe("生産者：いつもの受け渡し場所（物流の言葉を使わず、3つの質問で登録）", () => {
+  beforeEach(() => { me = producer; });
+  const typeInto = async (name: string, value: string) => {
+    const input = $<HTMLInputElement>(`input[name="${name}"]`)!;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+    await act(async () => { input.dispatchEvent(new Event("input", { bubbles: true })); });
+  };
+  const posted = () => calls.filter((c) => c.url === "/api/pickup-points" && c.method === "POST").map((c) => c.body);
+
+  it("ホーム：未登録なら「いつもの受け渡し場所：未登録」、登録済みなら場所の名前（受渡枠という言葉は出さない）", async () => {
+    slots = [];
+    await open("/producer/home");
+    expect($(".usual-status")?.textContent).toContain("いつもの受け渡し場所：未登録");
+    expect(text()).not.toContain("受渡枠");
+    act(() => root?.unmount()); el.remove();
+    slots = [umedaSlot];
+    await open("/producer/home");
+    expect($(".usual-status")?.textContent).toBe("いつもの受け渡し場所：梅田エリア受渡所（仮）");
+    expect(text()).toContain("次の受け渡し");
+  });
+  it("デモ用の環境のホームは、いつもの受け渡し場所を出さない", async () => {
+    mode = "demo";
+    await open("/producer/home");
+    expect($(".usual-status")).toBeNull();
+    expect($(".next-slot")?.textContent).toContain("梅田エリア受渡所（仮）");
+  });
+
+  it("マイページ：いつもの場所をカードで出し、すでにある場所で「ここで渡せる」→ 曜日と時間 → 登録", async () => {
+    profile = producerProfile();
+    await open("/producer/mypage");
+    const card = $(".usual-place")!;
+    expect(card.textContent).toContain("梅田エリア受渡所（仮）");
+    expect(card.textContent).toContain("火曜日 10:00〜11:00");
+    await click(button("場所を追加する"));
+    expect($(".ps-title")?.textContent).toBe("普段、野菜をどこで渡せますか？");
+    await click(button("いつもの直売所"));
+    // 直売所の候補だけ（運営の場所は「その他」に出る）
+    expect([...el.querySelectorAll(".ps-place-name")].map((x) => x.textContent)).toEqual(["南区ふれあい直売所"]);
+    await click(button("ここで渡せる"));
+    expect($(".ps-title")?.textContent).toBe("いつ渡せますか？");
+    await click(button("この場所を登録する"));
+    expect(posted()).toHaveLength(0);
+    expect(text()).toContain("渡せる曜日を選んでください");
+    await click([...el.querySelectorAll(".ps-weekday")].find((b) => b.textContent === "金")!);
+    expect($(".ps-weekday.on")?.getAttribute("aria-pressed")).toBe("true");
+    await typeInto("startTime", "16:00");
+    await typeInto("endTime", "15:00");
+    await click(button("この場所を登録する"));
+    expect(text()).toContain("終わりの時刻は、始まりより後にしてください");
+    await typeInto("endTime", "18:00");
+    await click(button("この場所を登録する"));
+    expect(posted()).toEqual([{ placeId: "pl-store", weekday: 5, startTime: "16:00", endTime: "18:00" }]);
+    expect(text()).toContain("いつもの受け渡し場所を登録しました");
+    expect(text()).toContain("金曜日 16:00〜18:00");
+  });
+
+  it("はじめての出品（一般向け・場所がない）：出品の前に場所を聞き、ここにない場所も入れられる。終わると出品へ進む", async () => {
+    supplyRows = [];
+    slots = [];
+    pickup = { ...pickup, usual: [] };
+    await open("/producer/listings");
+    expect($(".first-place")).not.toBeNull();
+    expect($(".ps-title")?.textContent).toBe("普段、野菜をどこで渡せますか？");
+    expect($("form")).toBeNull(); // 出品の入力はまだ出さない
+    await click(button("その他"));
+    expect([...el.querySelectorAll(".ps-place-name")].map((x) => x.textContent)).toEqual(["梅田エリア受渡所（仮）"]);
+    await click(button("ここにない場所を入れる"));
+    await click(button("次へ"));
+    expect(text()).toContain("場所の名前を入れてください");
+    await typeInto("name", "山田農園の作業場");
+    await typeInto("address", "大阪府堺市南区9-9");
+    await click(button("次へ"));
+    await click([...el.querySelectorAll(".ps-weekday")].find((b) => b.textContent === "土")!);
+    await typeInto("startTime", "08:00");
+    await typeInto("endTime", "10:00");
+    await click(button("この場所を登録する"));
+    await flush();
+    expect(posted()).toEqual([{ name: "山田農園の作業場", address: "大阪府堺市南区9-9", kind: "other", weekday: 6, startTime: "08:00", endTime: "10:00" }]);
+    expect($(".first-place")).toBeNull();
+    // 出品の入力が開いていて、受け渡しはいつもの場所が選ばれている
+    expect($("details.more")?.hasAttribute("open")).toBe(true);
+    expect($(".pickup-current-place")?.textContent).toBe("いつもの山田農園の作業場");
+    expect($('[data-field="slotId"] select')).toBeNull();
+  });
+
+  it("2回目からの出品：受け渡しは「いつもの〇〇 ✓」と日時を最初から選んでおき、「変更」で選び直せる", async () => {
+    slots = [umedaSlot, { ...umedaSlot, id: "sl2", startAt: "2099-11-03T01:00:00.000Z", endAt: "2099-11-03T02:00:00.000Z" }];
+    await open("/producer/listings");
+    expect($(".first-place")).toBeNull();
+    expect($(".pickup-current-place")?.textContent).toBe("いつもの梅田エリア受渡所（仮）");
+    expect(el.querySelector(".pickup-current svg:last-child, .pickup-current-place .icon:last-child")).not.toBeNull();
+    expect(text()).not.toContain("参加登録済み");
+    await click($(".pickup-current .text-btn"));
+    const dates = [...el.querySelectorAll('[aria-label="日時"] .pickup-option')];
+    expect(dates).toHaveLength(2);
+    expect(dates[0].getAttribute("aria-pressed")).toBe("true");
+    await click(dates[1]);
+    expect(el.querySelectorAll('[aria-label="日時"] .pickup-option')[1].getAttribute("aria-pressed")).toBe("true");
+    await click(button("これにする"));
+    expect($(".pickup-change")).toBeNull();
+  });
+
+  it("場所が1か所・日時が1つなら「変更」は出さない。デモ用の環境では場所を聞かない", async () => {
+    await open("/producer/listings");
+    expect($(".pickup-current-place")).not.toBeNull();
+    expect($(".pickup-current .text-btn")).toBeNull();
+    act(() => root?.unmount()); el.remove();
+    mode = "demo";
+    slots = [];
+    await open("/producer/listings");
+    expect($(".first-place")).toBeNull();
+    expect(calls.some((c) => c.url === "/api/pickup-points")).toBe(false);
   });
 });

@@ -3,15 +3,14 @@ import { Navigate, useNavigate, useParams } from "react-router";
 import { Icon } from "../../components/Icon";
 import {
   checkProducer, DIRECT_TRADE_EXPERIENCES, EMPTY_PRODUCER, labelOf, LIMITS, PRODUCER_CAPABILITIES, PRODUCER_STEPS, producerStyle, PRODUCTION_STYLES,
-  SALES_CHANNELS, seriesWhen, stepErrors, type ProducerField, type ProducerForm,
+  SALES_CHANNELS, stepErrors, type ProducerField, type ProducerForm,
 } from "../../lib/onboarding";
 import { homeOf, PATHS } from "../../routes/paths";
 import { useMe, useSession } from "../../routes/session";
-import { seriesSub } from "../../lib/pickup";
-import { ChoiceGroup, FieldError, focusFirstError, MultiChoiceGroup, PrefectureField, StepFrame, StyleText, SummaryRow, TextField, useDraft, WELCOME_KEY } from "./parts";
+import { ChoiceGroup, focusFirstError, MultiChoiceGroup, PrefectureField, StepFrame, StyleText, SummaryRow, TextField, useDraft, WELCOME_KEY } from "./parts";
 
-// 生産者の初回登録：1 農園について → 2 作っているもの・販売 → 3 できること・受渡 → 4 連絡先と確認（あなたの販売スタイル）。
-// 品目と受渡枠は運営が用意したもの（/api/onboarding/master）から選ぶ。内部の ID は画面に出さない。
+// 生産者の初回登録：1 農園について → 2 作っているもの・販売 → 3 できること → 4 連絡先と確認（あなたの販売スタイル）。
+// 品目はマスタ（/api/onboarding/master）から選ぶ。受け渡しの場所は聞かない（はじめて出品するときに1回だけ聞く）。内部の ID は画面に出さない。
 
 const BASE = PATHS.onboarding.producer;
 const TOTAL = PRODUCER_STEPS.length;
@@ -135,22 +134,14 @@ export default function ProducerOnboarding() {
   );
 
   if (step === 3) return (
-    <StepFrame {...common} title="できることと受け渡し" cta="次へ" onNext={next}>
+    // 受け渡しの場所はここでは聞かない（はじめて出品するときに「普段、野菜をどこで渡せますか？」と1回だけ聞く）
+    <StepFrame {...common} title="できること" cta="次へ" onNext={next}>
       <MultiChoiceGroup name="capabilities" legend="対応できること" optional options={PRODUCER_CAPABILITIES} value={form.capabilities}
         note="当てはまるものを選んでください。選ばなくても登録できます" onChange={(v) => update({ capabilities: v })} error={errors.capabilities} />
-      {masterNote}
-      {master && (
-        <MultiChoiceGroup name="seriesIds" legend="参加する受渡枠"
-          options={master.series.map((s) => ({ value: s.id, label: s.placeName, sub: seriesSub(s, seriesWhen(s)) }))}
-          value={form.seriesIds} note="飲食店への受け渡しは、運営が用意した受渡枠で行います。1つ以上選んでください"
-          onChange={(v) => update({ seriesIds: v })} error={errors.seriesIds} />
-      )}
-      {master && master.series.length === 0 && <p className="muted">いま参加できる受渡枠がありません。運営までお問い合わせください。</p>}
     </StepFrame>
   );
 
   const itemNames = form.itemIds.map((id) => master?.items.find((i) => i.id === id)?.name).filter(Boolean).join("・");
-  const seriesNames = form.seriesIds.map((id) => master?.series.find((s) => s.id === id)).filter(Boolean).map((s) => `${s!.placeName}（${seriesWhen(s!)}）`);
   return (
     <StepFrame {...common} title="連絡先と確認" cta="この内容ではじめる" ctaBusy={busy} onNext={submit}>
       <section className="contact-block" aria-labelledby="contact-title">
@@ -171,9 +162,7 @@ export default function ProducerOnboarding() {
         <SummaryRow label="主な作物" onEdit={() => go(2)}>{itemNames}{form.otherCrops && <><br />その他：{form.otherCrops}</>}</SummaryRow>
         <SummaryRow label="販売" onEdit={() => go(2)}>{[labelOf(PRODUCTION_STYLES, form.productionStyle), ...form.salesChannels.map((v) => labelOf(SALES_CHANNELS, v))].join("・")}</SummaryRow>
         <SummaryRow label="対応できること" onEdit={() => go(3)}>{form.capabilities.length ? form.capabilities.map((v) => labelOf(PRODUCER_CAPABILITIES, v)).join("・") : "選んでいません"}</SummaryRow>
-        <SummaryRow label="受渡枠" onEdit={() => go(3)}>{seriesNames.map((n) => <span key={n} className="summary-line">{n}</span>)}</SummaryRow>
       </dl>
-      <FieldError id="onb-p-series" text={errors.seriesIds} />
       {submitError && <div className="alert bad" role="alert"><Icon name="alert" />{submitError}</div>}
     </StepFrame>
   );

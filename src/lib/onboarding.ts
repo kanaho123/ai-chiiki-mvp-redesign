@@ -112,7 +112,8 @@ export type ProducerField = keyof ProducerForm;
 export const PRODUCER_STEPS: { title: string; fields: ProducerField[] }[] = [
   { title: "農園について", fields: ["farmName", "producerName", "prefecture", "city"] },
   { title: "作っているもの・販売", fields: ["itemIds", "otherCrops", "productionStyle", "salesChannels", "directTradeExperience"] },
-  { title: "できること・受渡", fields: ["capabilities", "seriesIds"] },
+  // 受け渡しの場所は初回登録では聞かない（はじめて出品するときに「普段、野菜をどこで渡せますか？」と1回だけ聞く）
+  { title: "できること", fields: ["capabilities"] },
   { title: "連絡先と確認", fields: ["contactPhone", "contactEmail"] },
 ];
 
@@ -200,8 +201,7 @@ export function checkProducer(body: unknown): Checked<ProducerField, ProducerPro
   if (!allOf(values(SALES_CHANNELS), channels)) set("salesChannels", "販売先を選び直してください");
   set("directTradeExperience", oneOf(values(DIRECT_TRADE_EXPERIENCES), experience) ? null : "飲食店との直接取引の経験を選んでください");
   if (!allOf(values(PRODUCER_CAPABILITIES), capabilities)) set("capabilities", "対応できることを選び直してください");
-  if (seriesIds === null || seriesIds.some((x) => !x || x.length > 64) || seriesIds.length > LIMITS.arrayMax) set("seriesIds", "受渡枠を選び直してください");
-  else if (seriesIds.length === 0) set("seriesIds", "参加する受渡枠を1つ以上選んでください");
+  if (seriesIds === null || seriesIds.some((x) => !x || x.length > 64) || seriesIds.length > LIMITS.arrayMax) set("seriesIds", "受け渡しの場所を選び直してください");
   if (phone === null || email === null) set("contactPhone", "連絡先の形式が正しくありません");
   else if (!phone && !email) set("contactPhone", "電話番号かメールアドレスのどちらかを入力してください");
   else {

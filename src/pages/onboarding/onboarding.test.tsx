@@ -268,7 +268,7 @@ describe("飲食店の初回登録（4 STEP）", () => {
 describe("生産者の初回登録（4 STEP）", () => {
   beforeEach(() => { me = { id: "u-p", role: "producer", displayName: "（未設定）", producer: null, onboarded: false }; });
 
-  it("入力 → 受渡枠を選ぶ → 連絡先 → 完了 → ホーム", async () => {
+  it("入力 → できること → 連絡先 → 完了 → ホーム（受け渡しの場所は、はじめての出品のときに聞く）", async () => {
     await open("/onboarding/producer");
     expect(path).toBe("/onboarding/producer/1");
     expect($(".bottom-nav")).toBeNull();
@@ -292,16 +292,12 @@ describe("生産者の初回登録（4 STEP）", () => {
     await next();
     expect(path).toBe("/onboarding/producer/3");
 
-    // 受渡枠は人が読める形で表示し、内部の ID は出さない
-    expect(el.textContent).toContain("梅田エリア受渡所（仮）");
-    expect(el.textContent).toContain("毎週火曜日 10:00〜11:00・受渡料金 800円");
-    expect(el.textContent).not.toContain("s-umeda");
-    await next();
-    expect(errorsShown()).toContain("参加する受渡枠を1つ以上選んでください");
+    // 受け渡しの場所はここでは聞かない（物流の言葉も出さない）
+    expect(el.textContent).not.toContain("梅田エリア受渡所（仮）");
+    expect(el.textContent).not.toContain("受渡枠");
     await pick("capabilities", "少量対応");
     await pick("capabilities", "規格外品");
     await pick("capabilities", "飲食店との直接相談");
-    await pick("seriesIds", "梅田エリア受渡所（仮）");
     await next();
     expect(path).toBe("/onboarding/producer/4");
 
@@ -319,13 +315,13 @@ describe("生産者の初回登録（4 STEP）", () => {
     await flush(4);
     expect(posted).toHaveLength(1);
     expect(posted[0].url).toBe("/api/onboarding/producer");
-    expect(posted[0].body).toMatchObject({ farmName: "みどり農園", itemIds: ["i-tomato", "i-eggplant"], seriesIds: ["s-umeda"], contactEmail: "midori@example.com", contactPhone: "" });
+    expect(posted[0].body).toMatchObject({ farmName: "みどり農園", itemIds: ["i-tomato", "i-eggplant"], seriesIds: [], contactEmail: "midori@example.com", contactPhone: "" });
     expect(path).toBe("/producer/home");
     expect($(".bottom-nav")).not.toBeNull();
     expect($("[role=status]")?.textContent).toContain("登録が完了しました");
   });
 
-  it("販売先・対応できることは選ばなくても登録できる。作物・受渡枠・連絡先は必須のまま", async () => {
+  it("販売先・対応できること・受け渡しの場所は選ばなくても登録できる。作物・連絡先は必須のまま", async () => {
     sessionStorage.setItem("ai-chiiki:onboarding:v1:u-p:producer", JSON.stringify({ farmName: "農園", producerName: "名", prefecture: "奈良県", city: "奈良市" }));
     await open("/onboarding/producer/2");
     await pick("productionStyle", "特定品目中心");
@@ -336,27 +332,25 @@ describe("生産者の初回登録（4 STEP）", () => {
     await pick("itemIds", "トマト");
     await next();
     expect(path).toBe("/onboarding/producer/3");
-    await next();
-    expect(errorsShown()).toEqual(["参加する受渡枠を1つ以上選んでください"]); // 対応できることは誤りにならない
-    await pick("seriesIds", "天王寺エリア受渡所（仮）");
-    await next();
+    await next(); // 対応できることは誤りにならない
+    expect(errorsShown()).toEqual([]);
     await type("contactPhone", "090-0000-0000");
     expect($(".style-text")?.textContent).toBe("直接取引の経験あり × 特定品目中心");
     await next();
     await flush(4);
-    expect(posted[0].body).toMatchObject({ salesChannels: [], capabilities: [], itemIds: ["i-tomato"], seriesIds: ["s-tennoji"] });
+    expect(posted[0].body).toMatchObject({ salesChannels: [], capabilities: [], itemIds: ["i-tomato"], seriesIds: [] });
     expect(path).toBe("/producer/home");
   });
 
-  it("戻っても選んだ作物・受渡枠は残る", async () => {
+  it("戻っても選んだ作物・できることは残る", async () => {
     sessionStorage.setItem("ai-chiiki:onboarding:v1:u-p:producer", JSON.stringify({
       farmName: "農園", producerName: "名", prefecture: "奈良県", city: "奈良市", itemIds: ["i-onion"], productionStyle: "seasonal",
-      salesChannels: ["ja"], directTradeExperience: "never", seriesIds: ["s-tennoji"],
+      salesChannels: ["ja"], directTradeExperience: "never", capabilities: ["small_lot"],
     }));
     await open("/onboarding/producer/4");
     expect(path).toBe("/onboarding/producer/4");
     await back();
-    expect(checked("seriesIds")).toEqual(["天王寺エリア受渡所（仮）"]);
+    expect(checked("capabilities")).toEqual(["少量対応"]);
     await back();
     expect(checked("itemIds")).toEqual(["玉ねぎ"]);
   });

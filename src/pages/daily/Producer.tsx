@@ -24,7 +24,7 @@ function RequestBody({ r }: { r: Confirmation }) {
       <p className="request-what">{r.itemName} {r.quantityKg}kg</p>
       {c && c.requestedKg !== r.quantityKg && <p className="farm-detail">飲食店が必要な量 {c.requestedKg}kg のうち、あなたへの相談は {r.quantityKg}kg</p>}
       {c && <p className="farm-detail">希望日：{formatDateJa(c.desiredDate)}</p>}
-      <p className="farm-detail">{yen(r.priceYenPerKg)}/kg・商品代 {yen(r.subtotalYen)}（税込・受渡費別）</p>
+      <p className="farm-detail">{yen(r.priceYenPerKg)}/kg・商品代 {yen(r.subtotalYen)}（税込・受け渡し費用は別）</p>
       <p className="farm-detail">{whenText(r.pickupStartAt, r.pickupEndAt)}・{r.pickupPlace}</p>
       {c && conditionChips(c).length > 0 && (
         <ul className="request-conds" aria-label="飲食店の仕入れ条件">
@@ -37,7 +37,7 @@ function RequestBody({ r }: { r: Confirmation }) {
 
 export function ProducerHome() {
   const me = useMe();
-  const { demoNow } = useSession();
+  const { demoNow, appMode } = useSession();
   const requests = useConfirmations();
   const supplies = useSupplies();
   const pending = requests.data ? classifyRequests(requests.data).pending : null;
@@ -93,8 +93,12 @@ export function ProducerHome() {
       </section>
 
       <section aria-labelledby="slot-title">
-        <h2 className="section-title" id="slot-title">次の受渡枠</h2>
-        {supplies.data && !nextSlot && <p className="empty-note">予定している受渡枠はありません</p>}
+        <h2 className="section-title" id="slot-title">次の受け渡し</h2>
+        {/* 一般向け：いつもの受け渡し場所が未登録なら、はじめての出品のときに聞く（ここでは状態だけ知らせる） */}
+        {supplies.data && !nextSlot && (appMode === "general"
+          ? <p className="usual-status"><b>いつもの受け渡し場所：未登録</b><br /><span className="muted">はじめて出品するときに登録できます。</span></p>
+          : <p className="empty-note">予定している受け渡しはありません</p>)}
+        {nextSlot && appMode === "general" && <p className="usual-status"><b>いつもの受け渡し場所：{nextSlot.placeName}</b></p>}
         {nextSlot && <p className="next-slot"><b>{whenText(nextSlot.startAt, nextSlot.endAt)}</b><br />{nextSlot.placeName}</p>}
       </section>
 
