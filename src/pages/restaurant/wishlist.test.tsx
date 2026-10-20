@@ -89,7 +89,7 @@ const typeInto = async (input: HTMLInputElement, value: string) => {
   await act(async () => { input.dispatchEvent(new Event("input", { bubbles: true })); });
 };
 const rows = () => [...el.querySelectorAll<HTMLLIElement>(".wish-row")];
-const row = (i: number) => ({ li: rows()[i], name: rows()[i].querySelector<HTMLInputElement>('input[list="wish-item-options"]')!, kg: rows()[i].querySelector<HTMLInputElement>('input[type="number"]')! });
+const row = (i: number) => ({ li: rows()[i], name: rows()[i].querySelector<HTMLInputElement>('input.wish-item')!, kg: rows()[i].querySelector<HTMLInputElement>('input[type="number"]')! });
 const fillRow = async (i: number, name: string, kg: string) => { await typeInto(row(i).name, name); await typeInto(row(i).kg, kg); };
 const stored = () => JSON.parse(localStorage.getItem(wishStorageKey(me.id)) ?? "null");
 const waitSuggest = async () => { await act(async () => { await new Promise((r) => setTimeout(r, SUGGEST_DELAY_MS + 100)); }); await flush(); };
@@ -100,7 +100,10 @@ describe("欲しい食材の一覧（一般向けの環境）", () => {
   it("トマト 10kg・きゅうり 5kg・万願寺とうがらし 2kg を「＋ 食材を追加」で並べ、ブラウザに保存する（開き直しても残る）", async () => {
     await open();
     expect(el.querySelector(".wish-card")).toBeTruthy();
-    expect([...el.querySelectorAll("#wish-item-options option")].map((o) => o.getAttribute("value"))).toEqual(items.map((i) => i.name));
+    // 品目は普通の文字入力（登録品目の一覧・▼は出さない）
+    expect(el.querySelector("datalist")).toBeNull();
+    expect(row(0).name.getAttribute("list")).toBeNull();
+    expect(row(0).name.placeholder).toBe("例：キャベツ、万願寺とうがらし");
     await fillRow(0, "トマト", "10");
     await click(button("食材を追加"));
     await fillRow(1, "きゅうり", "5");
@@ -134,7 +137,7 @@ describe("欲しい食材の一覧（一般向けの環境）", () => {
     await fillRow(1, "きゅうり", "5");
     await click(button("仕入れ案を見る", row(1).li));
     expect(text()).toContain("この内容で合っていますか？");
-    expect(el.querySelector<HTMLInputElement>('input[list="plan-item-options"]')?.value ?? "").toBe(""); // 品目は決まっているのでタイル
+    expect(el.querySelector<HTMLInputElement>('input.item-text')?.value ?? "").toBe(""); // 品目は決まっているのでタイル
     expect(text()).toContain("きゅうり");
     expect(text()).toContain("5kg");
     const chips = () => [...el.querySelectorAll(".wish-switch .wish-chip")];
@@ -183,13 +186,16 @@ describe("登録されていない品目：近い食材の候補（いま出品�
     expect(calls.filter((c) => c.method !== "GET").map((c) => c.url)).toEqual(["/api/item-suggestions"]);
   });
 
-  it("受け取り日の条件を外して見つけた候補（widened）には「受け取り可否は選択後に確認します」と添える。押すまで変えない", async () => {
-    suggestReply = () => ({ status: 200, body: { match: null, suggestions: [{ id: "i-nasu", name: "なす" }], ai: "ok", widened: true } });
+  it("希望の受け取り条件では出品がない候補（conditionAvailable: false）にだけ「受け取り可否は選択後に確認します」と添える。押すまで変えない", async () => {
+    suggestReply = () => ({ status: 200, body: { match: null, ai: "ok", suggestions: [{ id: "i-kyuri", name: "きゅうり", conditionAvailable: true }, { id: "i-nasu", name: "なす", conditionAvailable: false }] } });
     await open();
     await fillRow(0, "キャベツ", "2");
     await waitSuggest();
     expect(row(0).li.textContent).toContain("キャベツは現在ありません");
-    expect(row(0).li.querySelector(".item-alts-note")?.textContent).toBe("受け取り可否は選択後に確認します");
+    const chip = (n: string) => [...row(0).li.querySelectorAll(".item-alts-chips button")].find((b) => b.textContent?.startsWith(n))!;
+    expect(chip("なす").querySelector(".item-alts-note")?.textContent).toBe("受け取り可否は選択後に確認します");
+    expect(chip("きゅうり").querySelector(".item-alts-note")).toBeNull(); // 条件内の候補は通常の表示
+    expect(row(0).li.querySelectorAll(".item-alts-note")).toHaveLength(1);
     expect(row(0).name.value).toBe("キャベツ");
     await click(button("なす", row(0).li));
     expect(text()).toContain("この内容で合っていますか？");
@@ -217,14 +223,14 @@ describe("登録されていない品目：近い食材の候補（いま出品�
     await act(async () => { ta.dispatchEvent(new Event("input", { bubbles: true })); });
     await click(button("条件を整理する"));
     expect(text()).toContain("この内容で合っていますか？");
-    const input = el.querySelector<HTMLInputElement>('input[list="plan-item-options"]')!;
+    const input = el.querySelector<HTMLInputElement>('input.item-text')!;
     expect(input.value).toBe("黒キャベツ"); // 書いた内容が消えない
     expect(text()).not.toContain("一覧から選んでください");
     await waitSuggest();
     expect(text()).toContain("黒キャベツは現在ありません");
     expect(input.value).toBe("黒キャベツ");
     await click(button("きゅうり"));
-    expect(el.querySelector<HTMLInputElement>('input[list="plan-item-options"]')!.value).toBe("きゅうり");
+    expect(el.querySelector<HTMLInputElement>('input.item-text')!.value).toBe("きゅうり");
     expect(text()).not.toContain("黒キャベツは現在ありません");
     expect(planCalls()).toEqual([]); // 品目を選んだだけでは計算しない（今までどおり「仕入れ案を見る」で）
   });
@@ -232,7 +238,7 @@ describe("登録されていない品目：近い食材の候補（いま出品�
   it("候補を取れない（AI の失敗など）：「いま、この品目の出品はありません」だけで、画面は壊れない", async () => {
     await open();
     await click(button("項目で入力"));
-    await typeInto(el.querySelector<HTMLInputElement>('input[list="plan-item-options"]')!, "黒キャベツ");
+    await typeInto(el.querySelector<HTMLInputElement>('input.item-text')!, "黒キャベツ");
     await waitSuggest();
     expect(text()).toContain("いま、この品目の出品はありません");
     expect(text()).not.toContain("近い食材");
@@ -264,8 +270,11 @@ describe("条件の確認：品目は候補つきの文字入力（登録済み�
   it("書いた名前を登録済みの品目に照らす。ない品目は「いま、この品目の出品はありません」で、品目は未選択のまま", async () => {
     await open();
     await click(button("項目で入力"));
-    const input = el.querySelector<HTMLInputElement>('input[list="plan-item-options"]')!;
+    const input = el.querySelector<HTMLInputElement>('input.item-text')!;
     expect(input).toBeTruthy();
+    expect(input.getAttribute("list")).toBeNull();
+    expect(el.querySelector("datalist")).toBeNull();
+    expect(input.placeholder).toBe("例：キャベツ、万願寺とうがらし");
     await typeInto(input, "黒キャベツ");
     await waitSuggest();
     expect(text()).toContain("いま、この品目の出品はありません");
@@ -284,7 +293,7 @@ describe("デモ用の環境は今までどおり", () => {
     expect(el.querySelector(".wish-card")).toBeNull();
     await click(button("項目で入力"));
     expect(el.querySelector('select[aria-label="品目"]')).toBeTruthy();
-    expect(el.querySelector('input[list="plan-item-options"]')).toBeNull();
+    expect(el.querySelector('input.item-text')).toBeNull();
     expect(localStorage.getItem(wishStorageKey(me.id))).toBeNull();
     expect(suggestCalls()).toEqual([]);
   });

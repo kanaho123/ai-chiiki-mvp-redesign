@@ -27,7 +27,6 @@ export function WishListCard({ list, items, cond, onChange, onOpen }: {
     <section className="wish-card" aria-labelledby="wish-title">
       <h2 className="wish-title" id="wish-title">欲しい食材</h2>
       <p className="item-help">品目と必要量を並べておけます。仕入れ案は1品目ずつ見られます。</p>
-      <datalist id="wish-item-options">{(items ?? []).map((i) => <option key={i.id} value={i.name} />)}</datalist>
       <ul className="wish-rows">
         {list.rows.map((w, n) => {
           const item = items ? wishItem(w, items) : null;
@@ -38,7 +37,7 @@ export function WishListCard({ list, items, cond, onChange, onOpen }: {
               <div className="wish-inputs">
                 <label className="wish-name">
                   <span className="sr-only">品目（{n + 1}行目）</span>
-                  <input list="wish-item-options" value={w.name} maxLength={ITEM_NAME_MAX} placeholder="品目（例：トマト）" autoComplete="off"
+                  <input type="text" className="wish-item" value={w.name} maxLength={ITEM_NAME_MAX} placeholder="例：キャベツ、万願寺とうがらし" autoComplete="off"
                     onChange={(e) => setRow(w.id, { name: e.target.value })} />
                 </label>
                 <label className="with-unit wish-kg">

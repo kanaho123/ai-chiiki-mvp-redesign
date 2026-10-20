@@ -1041,4 +1041,5 @@ a.inline-link { display: inline-flex; align-items: center; min-height: var(--tap
 .item-alts { display: grid; gap: 6px; }
 .item-alts-title { margin: 0; font-size: 14px; font-weight: 700; }
 .item-alts-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.item-alts-note { margin: 0; font-size: 13px; color: var(--color-muted); }
+.item-alt.off-condition { flex-direction: column; align-items: flex-start; justify-content: center; min-height: 52px; padding: 6px 14px; border-radius: 16px; text-align: left; }
+.item-alts-note { margin: 0; font-size: 12px; font-weight: 400; color: var(--color-muted); }

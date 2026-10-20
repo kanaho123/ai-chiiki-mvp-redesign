@@ -10,6 +10,8 @@ import { upcomingOccurrences } from "./service-time.js";
 // すでに作った回・参加者はそのまま残す（自動で削除・取り消ししない）。active は seed で上書きしない（運営が DB で切り替える）。
 
 export const GENERAL_ITEMS = ["トマト", "なす", "きゅうり", "葉物", "根菜", "玉ねぎ"] as const;
+/** GENERAL_ITEMS のうち、具体的な食材ではなく大分類の名前（飲食店への代替候補には出さない） */
+export const GENERAL_ITEM_CATEGORIES = ["葉物", "根菜"] as const;
 export const DEFAULT_VARIETY = "指定なし";
 
 export const GENERAL_PLACES = [

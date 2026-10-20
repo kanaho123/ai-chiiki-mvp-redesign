@@ -68,9 +68,9 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, in
         <>
           {autoSlot ? (
             <>
-              <input list="plan-item-options" value={itemText} onChange={(e) => onItemText(e.target.value)} maxLength={ITEM_NAME_MAX}
-                placeholder="品目（例：トマト）" autoComplete="off" aria-label="品目" aria-required="true" />
-              <datalist id="plan-item-options">{catalog.items.map((i) => <option key={i.id} value={i.name} />)}</datalist>
+              {/* 普通の文字入力（登録品目の一覧は出さない）。登録済みの品目との照合は内部で行う */}
+              <input type="text" className="item-text" value={itemText} onChange={(e) => onItemText(e.target.value)} maxLength={ITEM_NAME_MAX}
+                placeholder="例：キャベツ、万願寺とうがらし" autoComplete="off" aria-label="品目" aria-required="true" />
               {itemText.trim() && !typedItem && (
                 <NoListing name={itemText} desiredDate={form.desiredDate || null} slotId={form.slotId || null} onPick={(i) => onItemText(i.name)} />
               )}

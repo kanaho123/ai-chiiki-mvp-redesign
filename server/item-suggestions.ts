@@ -1,42 +1,49 @@
 import { findItemByName, itemKey } from "../src/lib/items.js";
 import { openAiConfig, SUGGEST_MAX, suggestItemsWithOpenAi, type OpenAiConfig } from "./ai/openai.js";
 import { prisma } from "./db.js";
+import { GENERAL_ITEM_CATEGORIES } from "./general-master.js";
 
 // 飲食店が書いた品目名が登録されていないとき、いま出品されている品目の中から近いものを最大3件出す（一般向けの環境だけ）。
 // ・登録済みの品目との照合は通常の処理（findItemByName）。一致すれば AI は呼ばない
 // ・AI に渡すのは、いま出品されている品目の一覧だけ。返せるのはその id だけで、ここでも一覧にない id・重複を捨てる
-// ・2段階で探す：受け取り日・受け取りの回が決まっていれば、まずその条件で出品がある品目から（仕入れ案の「おまかせ」と同じ読み取りの条件）。
-//   そこで近いものがなければ、条件を外して、いま出品中の全品目（1段目で近くないと判断した品目を除く）からもう一度探す（widened）。
+// ・AI は1回の問い合わせにつき1回だけ呼ぶ。いま出品中の具体的な品目をまとめて渡し、受け取り日・回が決まっていれば、
+//   各品目にその条件で出品があるか（conditionAvailable。仕入れ案の「おまかせ」と同じ読み取りの条件）を付ける。
+//   AI は条件内の品目を優先し、近いものがなければ条件外（別の日なら出品あり）から選ぶ。
 //   その日に実際に仕入れられるかは、候補を選んだあとに今までどおり /api/plan-options・/api/plan で判定する
+// ・「葉物」「根菜」のような大分類の名前は候補にしない（具体的な食材だけ。マスタの品目自体はそのまま）
 // ・DB には書き込まない（品目も作らない）。AI が使えない・失敗したときは候補なし
 
 export type ItemRef = { id: string; name: string };
+/** conditionAvailable=false：希望の受け取り日・回では出品がない（別の日なら出品あり）。画面で「受け取り可否は選択後に確認します」と添える */
+export type Suggestion = ItemRef & { conditionAvailable: boolean };
 export type SuggestCondition = { desiredDate: string | null; slotId: string | null };
-/** widened：受け取り日・回の条件を外して見つけた候補（画面で「受け取り可否は選択後に確認します」と添える） */
-export type SuggestResult = { match: ItemRef | null; suggestions: ItemRef[]; ai: "skipped" | "ok" | "unavailable" | "failed"; widened: boolean };
+export type SuggestResult = { match: ItemRef | null; suggestions: Suggestion[]; ai: "skipped" | "ok" | "unavailable" | "failed" };
 
 export const SUGGEST_CANDIDATES_MAX = 60;
 const CACHE_TTL_MS = 10 * 60_000;
 const CACHE_MAX = 300;
 const cache = new Map<string, { at: number; ids: string[] }>();
 
-/** いま出品されている品目：公開中・販売できる量あり・確認締切前の受け渡しの回。受け取り日（日本時間）・回が決まっていればその条件で */
+const CATEGORY_KEYS = new Set<string>(GENERAL_ITEM_CATEGORIES.map(itemKey));
+
+/** いま出品されている具体的な品目：公開中・販売できる量あり・確認締切前の受け渡しの回（大分類の名前は除く）。受け取り日（日本時間）・回が決まっていればその条件で */
 export async function listedItems(cond: SuggestCondition, now: Date): Promise<ItemRef[]> {
   const start = cond.desiredDate ? new Date(`${cond.desiredDate}T00:00:00+09:00`) : null;
   const slot = cond.slotId ? { id: cond.slotId } : start ? { startAt: { gte: start, lt: new Date(start.getTime() + 24 * 3600e3) } } : {};
-  return prisma.item.findMany({
-    where: { supplies: { some: { published: true, availableKg: { gt: 0 }, slot: { confirmDeadlineAt: { gt: now }, ...slot } } } },
+  const items = await prisma.item.findMany({
+    where: { name: { notIn: [...GENERAL_ITEM_CATEGORIES] }, supplies: { some: { published: true, availableKg: { gt: 0 }, slot: { confirmDeadlineAt: { gt: now }, ...slot } } } },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
     take: SUGGEST_CANDIDATES_MAX,
   });
+  return items.filter((i) => !CATEGORY_KEYS.has(itemKey(i.name))); // 表記の違い（全角・半角など）も除く
 }
 
 /** AI の出力から、候補一覧にある id だけを、重複なく最大3件 */
-export function pickSuggestions(raw: unknown, listed: ItemRef[]): ItemRef[] | null {
+export function pickSuggestions<T extends ItemRef>(raw: unknown, listed: T[]): T[] | null {
   const ids = (raw as { itemIds?: unknown } | null)?.itemIds;
   if (!Array.isArray(ids)) return null;
-  const out: ItemRef[] = [];
+  const out: T[] = [];
   for (const id of ids) {
     const hit = listed.find((i) => i.id === id);
     if (hit && !out.includes(hit)) out.push(hit);
@@ -53,54 +60,36 @@ export async function suggestItems(
 ): Promise<SuggestResult | "rate_limited"> {
   const all = await prisma.item.findMany({ select: { id: true, name: true } });
   const match = findItemByName(name, all);
-  if (match) return { match: { id: match.id, name: match.name }, suggestions: [], ai: "skipped", widened: false };
-  const none = (ai: SuggestResult["ai"]): SuggestResult => ({ match: null, suggestions: [], ai, widened: false });
+  if (match) return { match: { id: match.id, name: match.name }, suggestions: [], ai: "skipped" };
+  const none = (ai: SuggestResult["ai"]): SuggestResult => ({ match: null, suggestions: [], ai });
+
+  // いま出品中の具体的な品目。受け取り日・回が決まっていれば、その条件で出品がある品目を先に並べ、ほかは条件外として印を付ける
+  const listed = await listedItems({ desiredDate: null, slotId: null }, now);
+  const inCond = cond.desiredDate || cond.slotId ? new Set((await listedItems(cond, now)).map((i) => i.id)) : null;
+  const candidates: Suggestion[] = listed
+    .map((i) => ({ ...i, conditionAvailable: inCond ? inCond.has(i.id) : true }))
+    .sort((a, b) => Number(b.conditionAvailable) - Number(a.conditionAvailable));
+  if (candidates.length === 0) return none("skipped");
   const cfg = deps.cfg === undefined ? openAiConfig() : deps.cfg;
-
-  // 候補一覧から AI に選ばせる（結果は名前と候補一覧ごとに使い回す）。連打防止は1回の問い合わせにつき1回だけ数える
-  let gated = false;
-  const ask = async (listed: ItemRef[], ai: OpenAiConfig): Promise<ItemRef[] | null | "rate_limited"> => {
-    const key = `${itemKey(name)}|${listed.map((i) => i.id).join(",")}`;
-    const hit = cache.get(key);
-    if (hit && now.getTime() - hit.at < CACHE_TTL_MS) return hit.ids.map((id) => listed.find((i) => i.id === id)!).filter(Boolean);
-    if (!gated) {
-      if (deps.allowAi && !deps.allowAi()) return "rate_limited";
-      gated = true;
-    }
-    let picked: ItemRef[] | null;
-    try {
-      picked = pickSuggestions(await (deps.ai ?? suggestItemsWithOpenAi)(name, listed, ai), listed);
-    } catch {
-      picked = null;
-    }
-    if (!picked) return null;
-    if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value!);
-    cache.set(key, { at: now.getTime(), ids: picked.map((i) => i.id) });
-    return picked;
-  };
-
-  // 1段目：受け取り日・回の条件に合う出品中の品目から
-  const narrowed = !!(cond.desiredDate || cond.slotId);
-  let judged: ItemRef[] = [];
-  if (narrowed) {
-    const listed = await listedItems(cond, now);
-    if (listed.length > 0) {
-      if (!cfg) return none("unavailable");
-      const r = await ask(listed, cfg);
-      if (r === "rate_limited") return r;
-      if (r === null) return none("failed"); // 失敗したら2段目は呼ばない
-      if (r.length > 0) return { match: null, suggestions: r, ai: "ok", widened: false };
-      judged = listed;
-    }
-  }
-  // 2段目（条件がなければこれだけ）：いま出品中の全品目から。1段目で近くないと判断した品目は除く
-  const listed = (await listedItems({ desiredDate: null, slotId: null }, now)).filter((i) => !judged.some((j) => j.id === i.id));
-  if (listed.length === 0) return none(judged.length ? "ok" : "skipped");
   if (!cfg) return none("unavailable");
-  const r = await ask(listed, cfg);
-  if (r === "rate_limited") return r;
-  if (r === null) return none("failed");
-  return { match: null, suggestions: r, ai: "ok", widened: narrowed && r.length > 0 };
+
+  const key = `${itemKey(name)}|${candidates.map((c) => `${c.id}:${c.conditionAvailable ? 1 : 0}`).join(",")}`;
+  const hit = cache.get(key);
+  if (hit && now.getTime() - hit.at < CACHE_TTL_MS) {
+    return { match: null, suggestions: hit.ids.map((id) => candidates.find((c) => c.id === id)!).filter(Boolean), ai: "ok" };
+  }
+  if (deps.allowAi && !deps.allowAi()) return "rate_limited";
+
+  let picked: Suggestion[] | null;
+  try {
+    picked = pickSuggestions(await (deps.ai ?? suggestItemsWithOpenAi)(name, candidates, cfg), candidates);
+  } catch {
+    picked = null;
+  }
+  if (!picked) return none("failed");
+  if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value!);
+  cache.set(key, { at: now.getTime(), ids: picked.map((i) => i.id) });
+  return { match: null, suggestions: picked, ai: "ok" };
 }
 
 /** テスト用 */

@@ -11,7 +11,7 @@ import { IntervalLimiter } from "../rate-limit.js";
 
 // AI を呼ぶのは同じユーザーで1秒に1回まで（連打の防止。一致・出品なし・キャッシュのときは数えない）
 const aiLimiter = new IntervalLimiter(1000);
-const EMPTY = { match: null, suggestions: [], ai: "skipped", widened: false } as const;
+const EMPTY = { match: null, suggestions: [], ai: "skipped" } as const;
 
 export const POST = handle(async (request) => {
   const g = await requireRole(request, "restaurant");
