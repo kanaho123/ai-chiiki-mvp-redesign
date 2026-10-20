@@ -8,11 +8,14 @@ import { Icon, type IconName } from "../../components/Icon";
 import { useSession } from "../../routes/session";
 import { plainResolveNotice } from "./plain-text";
 import { NoListing } from "./ItemSuggest";
+import { ExtraWishRows } from "./WishList";
+import type { Wish, WishList } from "../../lib/wishlist.js";
 import type { CatalogData, ExtractResult } from "./types";
 
 // STEP 2：「この内容で合っていますか？」。AI の読み取り結果は必ず利用者が確認し、未確定の項目は利用者が選ぶ。
 // 送るのはこの画面の値だけ（AI の出力をそのまま計算に使わない）。
 // 表示：画面を開いた時点で未選択の項目は「選んでください」に入力欄ごと並べ、決まっている項目はタイル（押すとその場で修正）にする。
+// 一般向けの環境：品目・数量は上の「欲しい食材」に置く（1行目＝いま確認する食材。2行目以降はほかの食材）。AI の値はフォームに入れるだけで、別に並べない。
 
 const FIELD_LABEL: Record<DraftField, string> = {
   itemId: "品目", varietyId: "品種", quantityKg: "数量", desiredDate: "受け取りたい日", budget: "予算", originPrefectures: "産地",
@@ -32,11 +35,13 @@ function Seg({ name, value, onChange, yes, no, labelId }: { name: string; value:
 
 type Field = { key: string; label: string; icon: IconName; f: DraftField[]; value: string; wide?: boolean; editor: () => React.ReactNode };
 
-export function StepConfirm({ form, setForm, catalog, extraction, sourceText, initialItemText = "", aiFields, busy, error, notice, onSubmit, onBack }: {
+export function StepConfirm({ form, setForm, catalog, extraction, sourceText, initialItemText = "", aiFields, busy, error, notice, onSubmit, onBack, wishes = null, onWishes, onPickWish, onActiveWish }: {
   form: RequestForm; setForm: (f: RequestForm) => void; catalog: CatalogData; extraction: ExtractResult | null; sourceText: string;
   /** 文章から読み取った品目名で、登録された品目に一致しなかったもの（一般向けの環境：品目欄に残す） */
   initialItemText?: string;
   aiFields: DraftField[]; busy: boolean; error: string | null; notice: string | null; onSubmit: () => void; onBack: () => void;
+  /** 「欲しい食材」の一覧（一般向けの環境だけ）。active の行がこのフォームの品目・数量 */
+  wishes?: WishList | null; onWishes?: (l: WishList) => void; onPickWish?: (w: Wish) => void; onActiveWish?: (patch: Partial<Wish>) => void;
 }) {
   const set = <K extends keyof RequestForm>(k: K, v: RequestForm[K]) => setForm({ ...form, [k]: v });
   const item = catalog.items.find((i) => i.id === form.itemId);
@@ -56,6 +61,7 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, in
   const typedItem = itemText.trim() ? findItemByName(itemText, catalog.items) : null;
   const onItemText = (v: string) => {
     setItemText(v);
+    onActiveWish?.({ name: v });
     const hit = v.trim() ? findItemByName(v, catalog.items) : null;
     if ((hit?.id ?? "") !== form.itemId) setForm({ ...form, itemId: hit?.id ?? "", varietyId: "" });
   };
@@ -95,7 +101,7 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, in
       key: "qty", label: "数量", icon: "weight", f: ["quantityKg"], value: form.quantityKg ? `${form.quantityKg}kg` : "",
       editor: () => (
         <span className="with-unit">
-          <input type="number" inputMode="numeric" min={1} max={100} step={1} value={form.quantityKg} onChange={(e) => set("quantityKg", e.target.value)} placeholder="10" aria-label="数量（kg）" aria-required="true" />
+          <input type="number" inputMode="numeric" min={1} max={100} step={1} value={form.quantityKg} onChange={(e) => { set("quantityKg", e.target.value); onActiveWish?.({ kg: e.target.value }); }} placeholder="10" aria-label="数量（kg）" aria-required="true" />
           <em>kg</em>
         </span>
       ),
@@ -214,12 +220,19 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, in
   ];
 
   const isMissing = (x: Field) => x.f.some((f) => missing.includes(f));
+  const wishMode = autoSlot && !!wishes;
+  const wishFields = wishMode ? fields.filter((x) => x.key === "item" || x.key === "qty") : [];
+  const condFields = fields.filter((x) => !wishFields.includes(x));
   // 画面を開いた時点で未選択だった項目は「選んでください」に固定する（入力中に場所が動かないように）
-  const [needKeys] = useState(() => fields.filter(isMissing).map((x) => x.key));
+  const [needKeys] = useState(() => condFields.filter(isMissing).map((x) => x.key));
   const [open, setOpen] = useState<string | null>(null);
-  const needList = fields.filter((x) => needKeys.includes(x.key));
-  const tiles = fields.filter((x) => !needKeys.includes(x.key));
+  const needList = condFields.filter((x) => needKeys.includes(x.key));
+  const tiles = condFields.filter((x) => !needKeys.includes(x.key));
   const readCount = fields.filter((x) => x.f.some((f) => aiFields.includes(f)) && !isMissing(x)).length;
+  // 仕入れ案は1品目ずつ。ほかの食材があるときは、どの品目の案を見るのかをボタンに書く
+  const itemName = item?.name ?? itemText.trim();
+  const hasOthers = wishMode && wishes!.rows.some((w) => w.id !== wishes!.active && w.name.trim());
+  const cta = !autoSlot ? "この条件で仕入れ案を見る" : hasOthers && itemName ? `${itemName}の仕入れ案を見る` : "仕入れ案を見る";
 
   return (
     <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }} aria-labelledby="step2-title" style={{ display: "grid", gap: "var(--gap)" }}>
@@ -228,7 +241,9 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, in
       {/* まとめ：読み取れた数と、残りの数（「読み取り済み」はここで1回だけ示す） */}
       <div className="summary-card">
         <div className="summary-line">
-          {extraction ? <span className="read-count"><b className="num">{readCount}</b>項目を読み取りました</span> : <span className="read-count">項目を選んでください</span>}
+          {extraction
+            ? autoSlot ? <span className="read-count">AIが入力内容を整理しました。必要なら修正できます。</span> : <span className="read-count"><b className="num">{readCount}</b>項目を読み取りました</span>
+            : <span className="read-count">項目を選んでください</span>}
           {missing.length > 0 ? <span className="left-count">あと<b className="num">{missing.length}</b>項目</span> : <span className="done-count">すべて入力済み</span>}
         </div>
         {sourceText && (
@@ -241,6 +256,24 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, in
       {/* 一般向けの環境では、品目が見つからないことは品目欄で知らせる（近い食材の候補つき） */}
       {extraction?.notices.filter((n) => !(autoSlot && n === "ITEM_NOT_FOUND")).map((n) => <div className="alert warn" key={n} role="status"><Icon name="alert" />{plainResolveNotice(n)}</div>)}
       {required && <div className="alert warn" role="status"><Icon name="alert" />農家を必ず指定することは、今回はできません。優先したい場合は「優先したい農家」で選んでください。</div>}
+
+      {/* 一般向けの環境：欲しい食材。1行目（いま確認する食材）は品目・数量の入力欄そのもの */}
+      {wishMode && (
+        <section className="need-card wish-section" aria-labelledby="wish-title">
+          <h2 className="need-title" id="wish-title">欲しい食材</h2>
+          {wishes!.rows.length > 1 && <p className="wish-note">仕入れ案は1品目ずつ確認します</p>}
+          {wishFields.map((x) => (
+            <div key={x.key} className={`need-row ${isMissing(x) ? "need" : "filled"}`}>
+              <div className="need-head">
+                <Icon name={x.icon} size={22} />
+                <span className="need-label" id={`lbl-${x.key}`}>{x.label}</span>
+              </div>
+              {x.editor()}
+            </div>
+          ))}
+          <ExtraWishRows list={wishes!} onChange={(l) => onWishes?.(l)} onPick={(w) => onPickWish?.(w)} />
+        </section>
+      )}
 
       {/* 未選択の項目：最初から入力・選択できる状態で先に見せる */}
       {needList.length > 0 && (
@@ -294,7 +327,7 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, in
           </p>
         )}
         <button type="submit" className="btn-primary btn-block" disabled={busy || missing.length > 0} aria-busy={busy}>
-          {busy ? <><span className="spinner" aria-hidden="true" />計算中…</> : <>この条件で仕入れ案を見る<Icon name="arrowRight" /></>}
+          {busy ? <><span className="spinner" aria-hidden="true" />計算中…</> : <>{cta}<Icon name="arrowRight" /></>}
         </button>
       </BottomBar>
     </form>

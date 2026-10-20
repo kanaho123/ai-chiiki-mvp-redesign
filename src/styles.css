@@ -266,6 +266,9 @@ details.fold { border-top: 1px solid var(--color-line); }
 .ai-note { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--color-muted); margin-top: -12px; }
 .ai-note svg { color: var(--color-restaurant); }
 .manual-btn { margin-right: -12px; }
+/* 一般向け：入力例（「例文を入力」で文章欄に入れる） */
+.example-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; margin: 0; padding: 0 6px 0 20px; font-size: 15px; color: var(--color-muted); }
+.example-line .example-fill { min-height: 40px; }
 
 /* 読み取り中 */
 .loading { display: grid; gap: 16px; padding: 24px 0; }
@@ -1020,11 +1023,13 @@ a.inline-link { display: inline-flex; align-items: center; min-height: var(--tap
 .supply-item-line { display: grid; }
 
 /* 飲食店：「欲しい食材」の一覧（品目＋必要量。仕入れ案は1品目ずつ） */
-.wish-card { display: grid; gap: 10px; min-width: 0; }
-.wish-title { font-size: 20px; font-weight: 800; margin: 0; }
+/* 確認の画面の上：1行目（いま確認する食材）は品目・数量の入力欄、2行目以降はほかの食材 */
+.wish-section { background: var(--color-restaurant-tint); min-width: 0; }
+.wish-section .need-title { color: var(--color-text); }
+.wish-section .wish-note { margin-top: -8px; }
+.wish-section .wish-row { background: var(--color-page); }
 .wish-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .wish-row { display: grid; gap: 8px; padding: 12px; border: 1.5px solid var(--color-line); border-radius: var(--r-input); background: var(--color-page); min-width: 0; }
-.wish-row.active { border-color: var(--accent); }
 .wish-inputs { display: grid; grid-template-columns: minmax(0, 1fr) 7.5em; gap: 8px; }
 .wish-name input { width: 100%; }
 .wish-kg input { width: 100%; }

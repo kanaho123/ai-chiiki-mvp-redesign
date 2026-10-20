@@ -6,17 +6,19 @@ import { Icon, type IconName } from "../../components/Icon";
 // STEP 1：仕入れたい内容を普段の言葉で入力。項目を選んで入力することもできる（自然文入力を強制しない）。
 // 読み取り中は1画面の待機表示（実際の進み具合は示さない控えめな演出）。
 
-// 何を書けばいいかを目で示す4つの手がかり（押すと入力欄に加わる）。品目・量・産地・受け取り日
+// 何を書けばいいかを目で示す4つの手がかり（押すと入力欄に加わる）。品目・量・産地・受け取り日（デモ用の環境）
 const HINTS: { icon: IconName; word: string; label: string }[] = [
   { icon: "basket", word: "トマト", label: "品目" },
   { icon: "weight", word: "10kg", label: "量" },
   { icon: "pin", word: "大阪産", label: "産地" },
   { icon: "calendar", word: "10/23 午前", label: "受け取り" },
 ];
+// 一般向けの環境：例は1つの例文だけ（チェックの表示はしない）。押すと例文全体が入力欄に入る
+export const EXAMPLE_TEXT = "トマト10kg 大阪産 10/23午前";
 
-export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable, error, emptyHint, children }: {
+export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable, error, emptyHint, general = false }: {
   text: string; onText: (t: string) => void; onExtract: () => void; onManual: () => void; busy: boolean;
-  aiAvailable: boolean | null; error: string | null; emptyHint: boolean; children?: React.ReactNode;
+  aiAvailable: boolean | null; error: string | null; emptyHint: boolean; general?: boolean;
 }) {
   if (busy) {
     return (
@@ -44,19 +46,26 @@ export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable
           <textarea rows={4} maxLength={REQUEST_TEXT_MAX} value={text} onChange={(e) => onText(e.target.value)}
             placeholder="ここに書いてください" aria-describedby="step1-note" />
         </label>
-        <div className="hint-tiles" role="group" aria-label="書く内容の例（押すと入力欄に加わります）">
-          {HINTS.map((h) => (
-            <button key={h.word} type="button" className={`hint-tile example-chip ${text.includes(h.word) ? "used" : ""}`}
-              onClick={() => onText(text.includes(h.word) ? text : text.trim() ? `${text.trim()} ${h.word}` : h.word)}>
-              <Icon name={text.includes(h.word) ? "check" : h.icon} size={20} /><span className="hint-word">{h.word}</span><span className="sr-only">（{h.label}）</span>
-            </button>
-          ))}
-        </div>
+        {general ? (
+          <p className="example-line">
+            <span>入力例：{EXAMPLE_TEXT}</span>
+            <button type="button" className="text-btn example-fill" onClick={() => onText(EXAMPLE_TEXT)}>例文を入力</button>
+          </p>
+        ) : (
+          <div className="hint-tiles" role="group" aria-label="書く内容の例（押すと入力欄に加わります）">
+            {HINTS.map((h) => (
+              <button key={h.word} type="button" className={`hint-tile example-chip ${text.includes(h.word) ? "used" : ""}`}
+                onClick={() => onText(text.includes(h.word) ? text : text.trim() ? `${text.trim()} ${h.word}` : h.word)}>
+                <Icon name={text.includes(h.word) ? "check" : h.icon} size={20} /><span className="hint-word">{h.word}</span><span className="sr-only">（{h.label}）</span>
+              </button>
+            ))}
+          </div>
+        )}
         <p className="ai-note" id="step1-note">AIが品目・数量・日付を読み取ります</p>
         {text.length > REQUEST_TEXT_MAX * 0.8 && <span className="count">{text.length.toLocaleString("ja-JP")}/{REQUEST_TEXT_MAX.toLocaleString("ja-JP")}</span>}
       </div>
 
-      {emptyHint && <div className="alert warn" role="status"><Icon name="info" />文章が空です。上の例を押すか、「項目で入力」を使ってください。</div>}
+      {emptyHint && <div className="alert warn" role="status"><Icon name="info" />文章が空です。{general ? "「例文を入力」を押す" : "上の例を押す"}か、「項目で入力」を使ってください。</div>}
       {aiOff && <div className="alert info" role="status"><Icon name="info" />AIによる読み取りは現在使えません。項目を選んで入力してください（計算結果は同じです）。</div>}
       {error && (
         <div className="alert bad" role="alert">
@@ -70,9 +79,6 @@ export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable
           </div>
         </div>
       )}
-
-      {/* 「欲しい食材」の一覧（一般向けの環境だけ） */}
-      {children}
 
       <BottomBar>
         {aiOff ? (

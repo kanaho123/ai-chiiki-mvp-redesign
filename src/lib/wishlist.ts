@@ -1,4 +1,4 @@
-import { ITEM_NAME_MAX } from "./items.js";
+import { ITEM_NAME_MAX, itemKey } from "./items.js";
 import { QUANTITY_KG_MAX, QUANTITY_KG_MIN } from "./allocate.js";
 
 // 飲食店の「欲しい食材」の一覧（品目＋必要量）。DB には保存せず、ブラウザ（localStorage）に店ごとに保持する。
@@ -54,4 +54,23 @@ export function wishKgError(kg: string): string | null {
   if (!kg.trim()) return null;
   const n = Number(kg);
   return Number.isInteger(n) && n >= QUANTITY_KG_MIN && n <= QUANTITY_KG_MAX ? null : `必要量は${QUANTITY_KG_MIN}〜${QUANTITY_KG_MAX}kgの整数で入力してください`;
+}
+
+/**
+ * 確認の画面で「いま確認する食材」（1行目）を決める。AI が読み取った食材・入力中の食材（name・kg）を1行目にして active にする。
+ * 同じ品目（照合の鍵が同じ）の行があればそれを使い、空の行があればそれに入れ、なければ先頭に足す（上限なら先頭を置き換える）。
+ */
+export function activateFirst(list: WishList | null, name: string, kg: string): WishList {
+  const rows = list?.rows ?? [];
+  const key = name.trim() ? itemKey(name) : null;
+  const same = key ? rows.find((w) => w.name.trim() && itemKey(w.name) === key) : undefined;
+  const empty = rows.find((w) => !w.name.trim() && !w.kg.trim());
+  const target = same ?? empty;
+  if (target) {
+    const updated = { ...target, name: name.trim() ? name : target.name, kg: kg || target.kg };
+    return { rows: [updated, ...rows.filter((w) => w.id !== target.id)], active: updated.id };
+  }
+  const fresh = newWish(name, kg);
+  const rest = rows.length >= WISH_MAX ? rows.slice(1) : rows;
+  return { rows: [fresh, ...rest], active: fresh.id };
 }
