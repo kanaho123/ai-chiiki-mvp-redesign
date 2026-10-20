@@ -45,3 +45,20 @@ npx tsx scripts/prod-ops/general-demo-kale.mts verify --target production --ids 
 トマトのデモデータを先に消すと、ケールの出品は一緒に消えますが、品目「ケール」が残ります。そのときは、ケールの delete をあとから実行すると品目だけを片付けます。
 
 本番の件数の比較には、本物の利用者の操作による増減が混ざることがあります。ケールに関係する行（品目・品種・出品・相談・やり取り）を見て判断してください。
+
+## 一般向け Production DB の migration（承認を得てから）
+
+- `general-prod.prisma.config.mjs`：一般向け Production DB 専用の Prisma 設定。`.env.general.production.local` だけを読み、接続先が `ep-bitter-credit…` でなければ起動しません。
+- `general-prod-migration-check.mts`：読み取りのみ。適用済み・未適用・失敗の migration、全テーブルの件数、相談とデモの出品の中身（ハッシュ）、Neon で戻すための時点（日時・LSN・timeline）を記録し、前の記録と比べます。
+
+```
+# 1. 適用前の確認と記録（読み取りだけ）
+npx tsx scripts/prod-ops/general-prod-migration-check.mts <data>/../migration/before.json
+npx prisma migrate status --config scripts/prod-ops/general-prod.prisma.config.mjs
+
+# 2. 未適用が想定の1件だけ・失敗0件なら適用
+npx prisma migrate deploy --config scripts/prod-ops/general-prod.prisma.config.mjs
+
+# 3. 適用後の確認（読み取りだけ。前の記録と比べる）
+npx tsx scripts/prod-ops/general-prod-migration-check.mts <data>/../migration/after.json --compare <data>/../migration/before.json
+```
