@@ -173,6 +173,7 @@ describe("登録されていない品目：近い食材の候補（いま出品�
     expect(row(0).li.textContent).toContain("黒キャベツは現在ありません");
     expect([...row(0).li.querySelectorAll(".item-alts-chips button")].map((b) => b.textContent)).toEqual(["なす", "きゅうり"]);
     expect(row(0).name.value).toBe("黒キャベツ"); // 勝手に置き換えない
+    expect(row(0).li.textContent).not.toContain("受け取り可否は選択後に確認します"); // 条件に合う品目から見つけた候補には添えない
     expect(planCalls()).toEqual([]);
     await click(button("なす", row(0).li));
     expect(text()).toContain("この内容で合っていますか？");
@@ -180,6 +181,19 @@ describe("登録されていない品目：近い食材の候補（いま出品�
     expect(text()).toContain("3kg");
     expect(stored().rows[0]).toMatchObject({ name: "なす", kg: "3" });
     expect(calls.filter((c) => c.method !== "GET").map((c) => c.url)).toEqual(["/api/item-suggestions"]);
+  });
+
+  it("受け取り日の条件を外して見つけた候補（widened）には「受け取り可否は選択後に確認します」と添える。押すまで変えない", async () => {
+    suggestReply = () => ({ status: 200, body: { match: null, suggestions: [{ id: "i-nasu", name: "なす" }], ai: "ok", widened: true } });
+    await open();
+    await fillRow(0, "キャベツ", "2");
+    await waitSuggest();
+    expect(row(0).li.textContent).toContain("キャベツは現在ありません");
+    expect(row(0).li.querySelector(".item-alts-note")?.textContent).toBe("受け取り可否は選択後に確認します");
+    expect(row(0).name.value).toBe("キャベツ");
+    await click(button("なす", row(0).li));
+    expect(text()).toContain("この内容で合っていますか？");
+    expect(planCalls()).toEqual([]); // 仕入れられるかは、今までどおり条件の確認のあとに計算する
   });
 
   it("登録済みの品目（キュウリ）は候補を探さない（AI を呼ばない）", async () => {

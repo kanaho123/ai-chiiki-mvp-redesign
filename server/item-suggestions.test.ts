@@ -7,7 +7,8 @@ const ALL = [
   { id: "i-tomato", name: "トマト" }, { id: "i-nasu", name: "なす" }, { id: "i-kyuri", name: "きゅうり" },
   { id: "i-leaf", name: "葉物" }, { id: "i-root", name: "根菜" }, { id: "i-onion", name: "玉ねぎ" },
 ];
-const mem = vi.hoisted(() => ({ listed: [] as { id: string; name: string }[], wheres: [] as unknown[], dbCalls: 0, userId: "u-r" }));
+// listed：条件なし（いま出品中の全品目）、narrow：受け取り日・回の条件つき（null なら listed と同じ）
+const mem = vi.hoisted(() => ({ listed: [] as { id: string; name: string }[], narrow: null as { id: string; name: string }[] | null, wheres: [] as unknown[], dbCalls: 0, userId: "u-r" }));
 
 vi.mock("./db.js", () => {
   const item = {
@@ -15,7 +16,8 @@ vi.mock("./db.js", () => {
       mem.dbCalls++;
       if (!args?.where) return ALL;
       mem.wheres.push(args.where);
-      return mem.listed;
+      const slot = (args.where as { supplies: { some: { slot: Record<string, unknown> } } }).supplies.some.slot;
+      return (slot.startAt || slot.id) && mem.narrow ? mem.narrow : mem.listed;
     },
   };
   // item.findMany 以外（作成・更新・削除・ほかのテーブル）は呼ばれたら失敗
@@ -39,7 +41,7 @@ const post = async (body: unknown) => {
 let t = 0;
 beforeEach(() => {
   mem.listed = [ALL[0], ALL[2], ALL[3]]; // トマト・きゅうり・葉物が出品中
-  mem.wheres = []; mem.dbCalls = 0; mem.userId = `u-r-${t}`;
+  mem.narrow = null; mem.wheres = []; mem.dbCalls = 0; mem.userId = `u-r-${t}`;
   clearSuggestCache();
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
@@ -54,7 +56,7 @@ afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.useRealTimers();
 describe("近い食材の候補（飲食店・一般向けの環境）", () => {
   it("登録済みの品目（表記の違いも）なら、AI は呼ばずにその品目を返す", async () => {
     const r = await post({ name: "キュウリ" });
-    expect(r).toEqual({ status: 200, data: { match: { id: "i-kyuri", name: "きゅうり" }, suggestions: [], ai: "skipped" } });
+    expect(r).toEqual({ status: 200, data: { match: { id: "i-kyuri", name: "きゅうり" }, suggestions: [], ai: "skipped", widened: false } });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -63,7 +65,7 @@ describe("近い食材の候補（飲食店・一般向けの環境）", () => {
     fetchMock.mockResolvedValueOnce(aiResponse({ itemIds: ["i-leaf", "i-made-up", "i-leaf", "i-kyuri", "i-root", "i-tomato"] }));
     const r = await post({ name: "黒キャベツ" });
     expect(r.status).toBe(200);
-    expect(r.data).toEqual({ match: null, suggestions: [{ id: "i-leaf", name: "葉物" }, { id: "i-kyuri", name: "きゅうり" }, { id: "i-root", name: "根菜" }], ai: "ok" });
+    expect(r.data).toEqual({ match: null, suggestions: [{ id: "i-leaf", name: "葉物" }, { id: "i-kyuri", name: "きゅうり" }, { id: "i-root", name: "根菜" }], ai: "ok", widened: false });
     const sent = JSON.parse(String(fetchMock.mock.calls[0][1]!.body));
     expect(sent.store).toBe(false);
     expect(sent.text.format.schema.properties.itemIds.items.enum).toEqual(["i-tomato", "i-kyuri", "i-leaf", "i-root"]);
@@ -72,23 +74,66 @@ describe("近い食材の候補（飲食店・一般向けの環境）", () => {
   });
 
   it("候補は、締切前の回で公開中・残りありの出品がある品目。受け取り日・回が決まっていればその条件で絞る", async () => {
-    fetchMock.mockResolvedValue(aiResponse({ itemIds: [] }));
+    fetchMock.mockImplementation(async () => aiResponse({ itemIds: [] }));
+    const later = () => vi.setSystemTime(new Date(Date.now() + 2000)); // 1秒の連打防止に掛からないように
     await post({ name: "黒キャベツ" });
+    later();
     await post({ name: "ケール", desiredDate: "2026-10-27" });
+    later();
     await post({ name: "小松菜", desiredDate: "2026-10-27", slotId: "slot-1" });
     const some = (w: unknown) => (w as { supplies: { some: Record<string, unknown> } }).supplies.some;
     expect(some(mem.wheres[0])).toMatchObject({ published: true, availableKg: { gt: 0 }, slot: { confirmDeadlineAt: { gt: expect.any(Date) } } });
     expect((some(mem.wheres[0]).slot as Record<string, unknown>).startAt).toBeUndefined();
     expect((some(mem.wheres[1]).slot as { startAt: { gte: Date; lt: Date } }).startAt).toEqual({ gte: new Date("2026-10-26T15:00:00Z"), lt: new Date("2026-10-27T15:00:00Z") });
-    expect(some(mem.wheres[2]).slot).toMatchObject({ id: "slot-1" });
+    expect((some(mem.wheres[2]).slot as Record<string, unknown>).startAt).toBeUndefined(); // 2段目は条件なし
+    expect(some(mem.wheres[3]).slot).toMatchObject({ id: "slot-1" });
+    expect(mem.wheres).toHaveLength(5);
+  });
+
+  it("2段階：受け取り日の条件に合う品目に近いものがあれば、それだけ（条件を外して探さない）", async () => {
+    mem.narrow = [ALL[3]]; mem.listed = [ALL[0], ALL[3]];
+    fetchMock.mockResolvedValueOnce(aiResponse({ itemIds: ["i-leaf"] }));
+    const r = await post({ name: "キャベツ", desiredDate: "2026-10-27" });
+    expect(r.data).toEqual({ match: null, suggestions: [{ id: "i-leaf", name: "葉物" }], ai: "ok", widened: false });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("2段階：条件に合う品目に近いものがなければ、いま出品中の全品目（1段目で判断した品目を除く）から探す（widened）。連打防止は1回として数える", async () => {
+    mem.narrow = [ALL[0]]; mem.listed = [ALL[0], ALL[2], ALL[3]];
+    fetchMock.mockResolvedValueOnce(aiResponse({ itemIds: [] })).mockResolvedValueOnce(aiResponse({ itemIds: ["i-leaf"] }));
+    const r = await post({ name: "キャベツ", desiredDate: "2026-10-27" });
+    expect(r).toEqual({ status: 200, data: { match: null, suggestions: [{ id: "i-leaf", name: "葉物" }], ai: "ok", widened: true } });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const enumOf = (i: number) => JSON.parse(String(fetchMock.mock.calls[i][1]!.body)).text.format.schema.properties.itemIds.items.enum;
+    expect(enumOf(0)).toEqual(["i-tomato"]);
+    expect(enumOf(1)).toEqual(["i-kyuri", "i-leaf"]); // トマトは1段目で近くないと判断済み
+  });
+
+  it("2段階：条件に合う出品が0件なら、AI を1回だけ呼んで全品目から探す", async () => {
+    mem.narrow = []; mem.listed = [ALL[3]];
+    fetchMock.mockResolvedValueOnce(aiResponse({ itemIds: ["i-leaf"] }));
+    expect((await post({ name: "キャベツ", slotId: "slot-9" })).data).toEqual({ match: null, suggestions: [{ id: "i-leaf", name: "葉物" }], ai: "ok", widened: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("2段階：どちらにも近いものがなければ候補なし。1段目で AI が失敗したら2段目は呼ばない", async () => {
+    mem.narrow = [ALL[0]]; mem.listed = [ALL[0], ALL[2]];
+    fetchMock.mockResolvedValueOnce(aiResponse({ itemIds: [] })).mockResolvedValueOnce(aiResponse({ itemIds: [] }));
+    expect((await post({ name: "キャベツ", desiredDate: "2026-10-27" })).data).toEqual({ match: null, suggestions: [], ai: "ok", widened: false });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(new Response("err", { status: 500 }));
+    vi.setSystemTime(new Date(Date.now() + 5000));
+    expect((await post({ name: "ケール", desiredDate: "2026-10-27" })).data).toEqual({ match: null, suggestions: [], ai: "failed", widened: false });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("近いものがない・AI が失敗・時間切れ・おかしな出力：候補なし（画面は「いま、この品目の出品はありません」）", async () => {
     fetchMock.mockResolvedValueOnce(aiResponse({ itemIds: [] }));
-    expect((await post({ name: "黒キャベツ" })).data).toEqual({ match: null, suggestions: [], ai: "ok" });
+    expect((await post({ name: "黒キャベツ" })).data).toEqual({ match: null, suggestions: [], ai: "ok", widened: false });
     fetchMock.mockResolvedValueOnce(new Response("err", { status: 500 }));
     vi.setSystemTime(new Date(Date.now() + 5000));
-    expect((await post({ name: "ケール" })).data).toEqual({ match: null, suggestions: [], ai: "failed" });
+    expect((await post({ name: "ケール" })).data).toEqual({ match: null, suggestions: [], ai: "failed", widened: false });
     fetchMock.mockResolvedValueOnce(aiResponse({ wrong: true }));
     vi.setSystemTime(new Date(Date.now() + 5000));
     expect((await post({ name: "小松菜" })).data).toMatchObject({ suggestions: [], ai: "failed" });
@@ -99,21 +144,21 @@ describe("近い食材の候補（飲食店・一般向けの環境）", () => {
 
   it("出品中の品目がなければ・AI の設定がなければ、AI を呼ばずに候補なし", async () => {
     mem.listed = [];
-    expect((await post({ name: "黒キャベツ" })).data).toEqual({ match: null, suggestions: [], ai: "skipped" });
+    expect((await post({ name: "黒キャベツ" })).data).toEqual({ match: null, suggestions: [], ai: "skipped", widened: false });
     mem.listed = [ALL[3]];
     vi.stubEnv("OPENAI_MODEL", "");
-    expect((await post({ name: "黒キャベツ" })).data).toEqual({ match: null, suggestions: [], ai: "unavailable" });
+    expect((await post({ name: "黒キャベツ" })).data).toEqual({ match: null, suggestions: [], ai: "unavailable", widened: false });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("品目名の形でない入力は、DB も AI も使わずに候補なし", async () => {
-    for (const name of ["", "<script>", "あ".repeat(21), 123]) expect((await post({ name })).data).toEqual({ match: null, suggestions: [], ai: "skipped" });
+    for (const name of ["", "<script>", "あ".repeat(21), 123]) expect((await post({ name })).data).toEqual({ match: null, suggestions: [], ai: "skipped", widened: false });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(mem.dbCalls).toBe(0);
   });
 
   it("同じ名前・同じ候補なら結果を使い回す。AI の呼び出しは1秒に1回まで（超えたら 429）", async () => {
-    fetchMock.mockResolvedValue(aiResponse({ itemIds: ["i-leaf"] }));
+    fetchMock.mockImplementation(async () => aiResponse({ itemIds: ["i-leaf"] }));
     await post({ name: "黒キャベツ" });
     expect((await post({ name: "黒キャベツ" })).data.suggestions).toEqual([{ id: "i-leaf", name: "葉物" }]);
     expect(fetchMock).toHaveBeenCalledTimes(1);

@@ -1041,3 +1041,4 @@ a.inline-link { display: inline-flex; align-items: center; min-height: var(--tap
 .item-alts { display: grid; gap: 6px; }
 .item-alts-title { margin: 0; font-size: 14px; font-weight: 700; }
 .item-alts-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.item-alts-note { margin: 0; font-size: 13px; color: var(--color-muted); }
