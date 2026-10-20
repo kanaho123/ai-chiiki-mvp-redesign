@@ -11,5 +11,7 @@
     "isolatedModules": true,
     "skipLibCheck": true
   },
-  "include": ["api", "server", "src/lib", "prisma/seed.ts", "scripts"]
+  "include": ["api", "server", "src/lib", "prisma/seed.ts", "scripts"],
+  // 運用用のツール（tsx で直接実行する。アプリ・Functions の型チェック対象外）
+  "exclude": ["scripts/prod-ops"]
 }

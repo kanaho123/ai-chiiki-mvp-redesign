@@ -20,3 +20,8 @@ dist/
 
 # デザイン確認用のスクリーンショット（Git には含めない）
 /screenshots/
+
+# 運用ツールの記録（ID・ログイン情報）。既定ではリポジトリの外（~/.ai-chiiki-ops）に保存するが、念のため
+scripts/prod-ops/demo-data/
+*.restaurant-login.local
+*.farm-a-login.local
