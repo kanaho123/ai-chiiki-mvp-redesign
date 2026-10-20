@@ -79,3 +79,18 @@ npx tsx scripts/prod-ops/general-demo-approvals.mts inspect --target production 
 # 2. inspect で示された ID を明示して消す
 npx tsx scripts/prod-ops/general-demo-approvals.mts delete --target production --ids <data>/<日時>.ids.json --expect-ids <id1,id2,id3> --confirm GENERAL_PRODUCTION_DEMO_APPROVALS_DELETE
 ```
+
+## デモ A農園（架空）をログインできるようにする（general-demo-farm-login.mts）
+
+用途：ライブデモで、飲食店の仕入れ相談に「デモ A農園（架空）」として返事をし、やり取りを見せるため。今までの認証方式（メール＋パスワード）のまま、A農園のユーザーの `passwordHash` だけを設定します（ほかの行・列は変えません）。
+
+- 対象の生産者・ユーザー・メール・役割・ID をデモの記録で確かめ、想定と違えば何も変えません。今の値が想定と違うときも止まります。
+- パスワードは十分に長いランダムな値で、画面には出しません。ログイン情報（`<日時>.farm-a-login.local`）と、元に戻すための記録（`<日時>.farm-a-login.before.json`）は、Git の外（記録の保存先）に、本人だけが読める権限で置きます。Git やチャットに出さないでください。
+- デモのあと、必要なら rollback で認証情報だけを変更前（ログインできない状態）に戻します。設定した値のままのときだけ戻し、2回目は何もしません。
+- ログインのセッションは DB に保存しないため、rollback のあとも、ログイン中のブラウザは最長8時間ログインしたままになります。rollback の前に、A農園でログイン中のブラウザでログアウトしておいてください。
+
+```
+npx tsx scripts/prod-ops/general-demo-farm-login.mts inspect --target production --ids <data>/<日時>.ids.json
+npx tsx scripts/prod-ops/general-demo-farm-login.mts set --target production --ids <data>/<日時>.ids.json --confirm GENERAL_PRODUCTION_DEMO_FARM_A_LOGIN_SET
+npx tsx scripts/prod-ops/general-demo-farm-login.mts rollback --target production --ids <data>/<日時>.ids.json --before <data>/<日時>.farm-a-login.before.json --confirm GENERAL_PRODUCTION_DEMO_FARM_A_LOGIN_ROLLBACK
+```
