@@ -1037,3 +1037,7 @@ a.inline-link { display: inline-flex; align-items: center; min-height: var(--tap
 .wish-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .wish-chip-list { min-height: 40px; }
 .no-listing { color: var(--color-text); }
+/* 登録されていない品目：近い食材の候補（押したときだけ、その品目にする） */
+.item-alts { display: grid; gap: 6px; }
+.item-alts-title { margin: 0; font-size: 14px; font-weight: 700; }
+.item-alts-chips { display: flex; flex-wrap: wrap; gap: 8px; }

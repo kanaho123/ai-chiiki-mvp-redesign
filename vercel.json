@@ -23,6 +23,7 @@
     { "source": "/api/inventory-version", "destination": "/api/purchase?__path=/api/inventory-version" },
     { "source": "/api/plan", "destination": "/api/purchase?__path=/api/plan" },
     { "source": "/api/plan-options", "destination": "/api/purchase?__path=/api/plan-options" },
+    { "source": "/api/item-suggestions", "destination": "/api/purchase?__path=/api/item-suggestions" },
     { "source": "/((?!api(?:/|$)|assets/).*)", "destination": "/index.html" }
   ],
   "headers": [

@@ -7,6 +7,7 @@ import { AppRoutes } from "../../App";
 import { EMPTY_FORM, toPlanBody, type RequestForm } from "../../lib/request-form.js";
 import { wishStorageKey } from "../../lib/wishlist.js";
 import { SessionProvider, type Me } from "../../routes/session";
+import { clearSuggestionCache, SUGGEST_DELAY_MS } from "./ItemSuggest";
 
 // 飲食店の「欲しい食材」の一覧（品目＋必要量・ブラウザに保存）と、条件の確認の品目の文字入力。
 // 仕入れ案は1品目ずつ今までの流れ（/api/plan-options → /api/plan）。ブラウザから見た API の応答だけを差し替える。
@@ -37,7 +38,14 @@ const tomatoForm: RequestForm = {
 
 let mode: "general" | "demo" = "general";
 let calls: { url: string; method: string; body?: unknown }[] = [];
+// 近い食材の候補（POST /api/item-suggestions）の応答。既定は失敗（500）
+let suggestReply: (body: { name: string }) => { status: number; body: unknown } = () => ({ status: 500, body: { error: "x" } });
+// AI の読み取り（POST /api/extract）の応答
+let extractReply: unknown = null;
 beforeEach(() => {
+  clearSuggestionCache();
+  suggestReply = () => ({ status: 500, body: { error: "x" } });
+  extractReply = null;
   localStorage.clear();
   mode = "general";
   calls = [];
@@ -51,6 +59,8 @@ beforeEach(() => {
     if (url === "/api/inbox") return json({ producerRequests: 0 });
     if (url === "/api/catalog") return json(catalog);
     if (url === "/api/plan-options") return json({ options: [] });
+    if (url === "/api/item-suggestions") { const r = suggestReply(body as { name: string }); return json(r.body, r.status); }
+    if (url === "/api/extract" && extractReply) return json(extractReply);
     return json({ error: "not found" }, 404);
   }));
 });
@@ -82,6 +92,8 @@ const rows = () => [...el.querySelectorAll<HTMLLIElement>(".wish-row")];
 const row = (i: number) => ({ li: rows()[i], name: rows()[i].querySelector<HTMLInputElement>('input[list="wish-item-options"]')!, kg: rows()[i].querySelector<HTMLInputElement>('input[type="number"]')! });
 const fillRow = async (i: number, name: string, kg: string) => { await typeInto(row(i).name, name); await typeInto(row(i).kg, kg); };
 const stored = () => JSON.parse(localStorage.getItem(wishStorageKey(me.id)) ?? "null");
+const waitSuggest = async () => { await act(async () => { await new Promise((r) => setTimeout(r, SUGGEST_DELAY_MS + 100)); }); await flush(); };
+const suggestCalls = () => calls.filter((c) => c.url === "/api/item-suggestions");
 const planCalls = () => calls.filter((c) => c.url === "/api/plan-options" || c.url === "/api/plan");
 
 describe("欲しい食材の一覧（一般向けの環境）", () => {
@@ -105,10 +117,11 @@ describe("欲しい食材の一覧（一般向けの環境）", () => {
   it("出品のない品目（黒キャベツ）は「いま、この品目の出品はありません」を通常の表示で出し、仕入れ案は開けない。品目を作る通信もしない", async () => {
     await open();
     await fillRow(0, "黒キャベツ", "3");
+    await waitSuggest(); // 近い食材の候補を取れなかった（既定は失敗）
     expect(row(0).li.textContent).toContain("いま、この品目の出品はありません");
     expect(el.querySelector(".alert.bad")).toBeNull(); // エラーの表示にしない
     expect(button("仕入れ案を見る", row(0).li)!.disabled).toBe(true);
-    expect(calls.filter((c) => c.method !== "GET")).toEqual([]);
+    expect(calls.filter((c) => c.method !== "GET").map((c) => c.url)).toEqual(["/api/item-suggestions"]); // 読み取りだけ（品目は作らない）
     await typeInto(row(0).name, "ナス"); // 表記の違いは登録済みの品目
     expect(row(0).li.textContent).toContain("「なす」で探します");
     expect(button("仕入れ案を見る", row(0).li)!.disabled).toBe(false);
@@ -147,6 +160,72 @@ describe("欲しい食材の一覧（一般向けの環境）", () => {
   });
 });
 
+describe("登録されていない品目：近い食材の候補（いま出品されている品目から・押したときだけ切り替える）", () => {
+  const near = () => ({ status: 200, body: { match: null, suggestions: [{ id: "i-nasu", name: "なす" }, { id: "i-kyuri", name: "きゅうり" }], ai: "ok" } });
+
+  it("一覧の行：「黒キャベツは現在ありません」と近い食材。押すまで書いた名前は変わらず、押すとその品目で仕入れ案の流れへ", async () => {
+    suggestReply = near;
+    await open();
+    await fillRow(0, "黒キャベツ", "3");
+    expect(row(0).li.textContent).toContain("近い食材を探しています");
+    await waitSuggest();
+    expect(suggestCalls().map((c) => c.body)).toEqual([{ name: "黒キャベツ", desiredDate: null, slotId: null }]);
+    expect(row(0).li.textContent).toContain("黒キャベツは現在ありません");
+    expect([...row(0).li.querySelectorAll(".item-alts-chips button")].map((b) => b.textContent)).toEqual(["なす", "きゅうり"]);
+    expect(row(0).name.value).toBe("黒キャベツ"); // 勝手に置き換えない
+    expect(planCalls()).toEqual([]);
+    await click(button("なす", row(0).li));
+    expect(text()).toContain("この内容で合っていますか？");
+    expect(text()).toContain("なす");
+    expect(text()).toContain("3kg");
+    expect(stored().rows[0]).toMatchObject({ name: "なす", kg: "3" });
+    expect(calls.filter((c) => c.method !== "GET").map((c) => c.url)).toEqual(["/api/item-suggestions"]);
+  });
+
+  it("登録済みの品目（キュウリ）は候補を探さない（AI を呼ばない）", async () => {
+    await open();
+    await fillRow(0, "キュウリ", "5");
+    await waitSuggest();
+    expect(suggestCalls()).toEqual([]);
+    expect(button("仕入れ案を見る", row(0).li)!.disabled).toBe(false);
+  });
+
+  it("文章入力：「黒キャベツ」と書いた内容は確認の画面の品目欄に残り、「一覧から選んでください」で止まらず、近い食材を出す", async () => {
+    suggestReply = near;
+    extractReply = {
+      extracted: { itemText: "黒キャベツ", varietyText: null, quantityKg: 3, dateText: null, budgetYen: null, budgetIncludesHandoverFee: null, budgetUnlimited: null, originText: null, handoverText: null, preferredProducerText: null, producerRequired: null, allowFirstTime: null, allowIrregular: null, allowMixedVarieties: null, allowMixedGrades: null },
+      draft: { itemId: null, varietyId: null, quantityKg: 3, desiredDate: null, budget: null, originPrefectures: [], slotId: null, allowFirstTime: null, allowIrregular: null, allowMixedVarieties: null, allowMixedGrades: null, preferredProducerId: null },
+      unresolvedFields: ["itemId"], candidateMatches: {}, notices: ["ITEM_NOT_FOUND"],
+    };
+    await open();
+    const ta = el.querySelector("textarea")!;
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(ta, "黒キャベツを3kg");
+    await act(async () => { ta.dispatchEvent(new Event("input", { bubbles: true })); });
+    await click(button("条件を整理する"));
+    expect(text()).toContain("この内容で合っていますか？");
+    const input = el.querySelector<HTMLInputElement>('input[list="plan-item-options"]')!;
+    expect(input.value).toBe("黒キャベツ"); // 書いた内容が消えない
+    expect(text()).not.toContain("一覧から選んでください");
+    await waitSuggest();
+    expect(text()).toContain("黒キャベツは現在ありません");
+    expect(input.value).toBe("黒キャベツ");
+    await click(button("きゅうり"));
+    expect(el.querySelector<HTMLInputElement>('input[list="plan-item-options"]')!.value).toBe("きゅうり");
+    expect(text()).not.toContain("黒キャベツは現在ありません");
+    expect(planCalls()).toEqual([]); // 品目を選んだだけでは計算しない（今までどおり「仕入れ案を見る」で）
+  });
+
+  it("候補を取れない（AI の失敗など）：「いま、この品目の出品はありません」だけで、画面は壊れない", async () => {
+    await open();
+    await click(button("項目で入力"));
+    await typeInto(el.querySelector<HTMLInputElement>('input[list="plan-item-options"]')!, "黒キャベツ");
+    await waitSuggest();
+    expect(text()).toContain("いま、この品目の出品はありません");
+    expect(text()).not.toContain("近い食材");
+    expect(el.querySelector(".alert.bad")).toBeNull();
+  });
+});
+
 describe("今までの保存データ・壊れた保存データでも画面が壊れない", () => {
   it("条件の確認の途中だった保存データ（一覧なし）：そのまま確認の画面を開き、一覧は入力中の品目から作る", async () => {
     localStorage.setItem(formKey, JSON.stringify({ step: "confirm", text: "トマト10kg", form: tomatoForm, shown: null }));
@@ -174,12 +253,13 @@ describe("条件の確認：品目は候補つきの文字入力（登録済み�
     const input = el.querySelector<HTMLInputElement>('input[list="plan-item-options"]')!;
     expect(input).toBeTruthy();
     await typeInto(input, "黒キャベツ");
+    await waitSuggest();
     expect(text()).toContain("いま、この品目の出品はありません");
     expect(text()).toContain("あと"); // 品目は未選択のまま
     await typeInto(input, "万願寺とうがらし");
     expect(text()).not.toContain("いま、この品目の出品はありません");
     await typeInto(input, "トマト");
-    expect(calls.filter((c) => c.method !== "GET")).toEqual([]);
+    expect(calls.filter((c) => c.method !== "GET").map((c) => c.url)).toEqual(["/api/item-suggestions"]); // 読み取りだけ（品目は作らない）
   });
 });
 
@@ -192,5 +272,23 @@ describe("デモ用の環境は今までどおり", () => {
     expect(el.querySelector('select[aria-label="品目"]')).toBeTruthy();
     expect(el.querySelector('input[list="plan-item-options"]')).toBeNull();
     expect(localStorage.getItem(wishStorageKey(me.id))).toBeNull();
+    expect(suggestCalls()).toEqual([]);
+  });
+  it("文章入力で品目が見つからないときも、今までどおり「一覧から選んでください」と選択肢（候補は探さない）", async () => {
+    mode = "demo";
+    extractReply = {
+      extracted: { itemText: "黒キャベツ", varietyText: null, quantityKg: 3, dateText: null, budgetYen: null, budgetIncludesHandoverFee: null, budgetUnlimited: null, originText: null, handoverText: null, preferredProducerText: null, producerRequired: null, allowFirstTime: null, allowIrregular: null, allowMixedVarieties: null, allowMixedGrades: null },
+      draft: { itemId: null, varietyId: null, quantityKg: 3, desiredDate: null, budget: null, originPrefectures: [], slotId: null, allowFirstTime: null, allowIrregular: null, allowMixedVarieties: null, allowMixedGrades: null, preferredProducerId: null },
+      unresolvedFields: ["itemId"], candidateMatches: {}, notices: ["ITEM_NOT_FOUND"],
+    };
+    await open();
+    const ta = el.querySelector("textarea")!;
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(ta, "黒キャベツを3kg");
+    await act(async () => { ta.dispatchEvent(new Event("input", { bubbles: true })); });
+    await click(button("条件を整理する"));
+    expect(text()).toContain("品目が登録データに見つかりませんでした。一覧から選んでください");
+    expect(el.querySelector('select[aria-label="品目"]')).toBeTruthy();
+    await waitSuggest();
+    expect(suggestCalls()).toEqual([]);
   });
 });

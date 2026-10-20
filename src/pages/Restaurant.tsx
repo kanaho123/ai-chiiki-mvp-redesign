@@ -15,7 +15,7 @@ import { useSession } from "../routes/session";
 // 飲食店の仕入れ案：STEP 1 希望を入力 → STEP 2 条件を確認 → STEP 3 仕入れ案を見る。
 // AI は STEP 1→2 で条件の候補を読み取るだけ。計算は確定した条件で /api/plan（通常ロジック）が行う。
 
-type Saved = { step: Step; text: string; form: RequestForm; shown: Shown | null };
+type Saved = { step: Step; text: string; form: RequestForm; shown: Shown | null; itemText?: string };
 
 // 画面の状態は店（ログインユーザー）ごとに保持する。保存した案は「保存済みプラン」ではなく、再表示時は必ず最新か確認する
 const storageKey = (userId: string) => `ai-chiiki:restaurant:v4:${userId}`;
@@ -73,12 +73,15 @@ export default function RestaurantPage({ me }: { me: Me }) {
   // 「欲しい食材」の一覧（一般向けの環境だけ・ブラウザに保存）。null は読み込み前
   const wishOn = autoSlot;
   const [wishes, setWishes] = useState<WishList | null>(null);
+  // 文章から読み取った品目名で、登録された品目に一致しなかったもの（確認の画面の品目欄に残す・一般向けの環境だけ）
+  const [itemText, setItemText] = useState("");
 
   useEffect(() => {
     const saved = load(me.id);
     if (saved) {
       setText(saved.text ?? "");
       setForm({ ...EMPTY_FORM, ...saved.form });
+      setItemText(typeof saved.itemText === "string" ? saved.itemText.slice(0, 40) : "");
       setShown(saved.shown);
       setStep(saved.shown && saved.step === "result" ? "result" : saved.step === "confirm" ? "confirm" : "input");
       setFreshness("checking"); // 保存していた案は、最新の版と照合できるまで有効扱いしない
@@ -92,8 +95,8 @@ export default function RestaurantPage({ me }: { me: Me }) {
   }, [me.id]);
 
   useEffect(() => {
-    if (restored) save(me.id, { step, text, form, shown });
-  }, [step, text, form, shown, restored, me.id]);
+    if (restored) save(me.id, { step, text, form, shown, itemText });
+  }, [step, text, form, shown, itemText, restored, me.id]);
 
   // 一覧がまだない（今までの保存データ・初めて）：入力中の品目があればそれを1行目にする。なければ空の1行
   useEffect(() => {
@@ -157,6 +160,7 @@ export default function RestaurantPage({ me }: { me: Me }) {
         return;
       }
       const next = formFromDraft(d.draft);
+      setItemText(wishOn && !next.itemId && typeof d.extracted?.itemText === "string" ? d.extracted.itemText : "");
       setWishes((l) => l && { ...l, active: null });
       setExtraction(d);
       setForm(next);
@@ -176,6 +180,7 @@ export default function RestaurantPage({ me }: { me: Me }) {
   function manual() {
     extractAbort.current?.abort(); // 読み取り中なら中断し、後から結果で上書きしない
     setWishes((l) => l && { ...l, active: null });
+    setItemText("");
     setExtraction(null);
     setAiFields([]);
     setError(null);
@@ -264,6 +269,7 @@ export default function RestaurantPage({ me }: { me: Me }) {
     });
     setExtraction(null);
     setAiFields([]);
+    setItemText("");
     setNotice(s ? `「${s.label}」を反映しました。内容を確認して「この条件で仕入れ案を見る」を押してください。` : null);
     setStep("confirm");
     top();
@@ -281,7 +287,8 @@ export default function RestaurantPage({ me }: { me: Me }) {
     setForm(form.itemId === item.id
       ? { ...form, quantityKg: kg || form.quantityKg }
       : { ...form, itemId: item.id, varietyId: "", quantityKg: kg, budgetMode: "", budgetYen: "" });
-    setWishes({ ...wishes, active: w.id });
+    setWishes((l) => l && { ...l, active: w.id });
+    setItemText("");
     setPlanOptions(null);
     setExtraction(null);
     setAiFields([]);
@@ -318,12 +325,13 @@ export default function RestaurantPage({ me }: { me: Me }) {
       {step === "input" && (
         <StepInput text={text} onText={(t) => { setText(t); setEmptyHint(false); }} onExtract={extract} onManual={manual} busy={extracting}
           aiAvailable={catalog ? catalog.aiAvailable : null} error={error} emptyHint={emptyHint}>
-          {wishOn && wishes && <WishListCard list={wishes} items={catalog?.items ?? null} onChange={setWishes} onOpen={openWish} />}
+          {wishOn && wishes && <WishListCard list={wishes} items={catalog?.items ?? null} cond={{ desiredDate: form.desiredDate || null, slotId: form.slotId || null }}
+            onChange={setWishes} onOpen={openWish} />}
         </StepInput>
       )}
 
       {step === "confirm" && catalog && (
-        <StepConfirm key={wishes?.active ?? ""} form={form} setForm={setForm} catalog={catalog} extraction={extraction} sourceText={text} aiFields={aiFields}
+        <StepConfirm key={wishes?.active ?? ""} form={form} setForm={setForm} catalog={catalog} extraction={extraction} sourceText={text} initialItemText={itemText} aiFields={aiFields}
           busy={busy} error={error} notice={notice} onSubmit={submitConditions} onBack={() => { setError(null); setStep("input"); top(); }} />
       )}
 

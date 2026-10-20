@@ -7,7 +7,7 @@ import { BottomBar } from "../../components/BottomBar";
 import { Icon, type IconName } from "../../components/Icon";
 import { useSession } from "../../routes/session";
 import { plainResolveNotice } from "./plain-text";
-import { NO_LISTING } from "./WishList";
+import { NoListing } from "./ItemSuggest";
 import type { CatalogData, ExtractResult } from "./types";
 
 // STEP 2：「この内容で合っていますか？」。AI の読み取り結果は必ず利用者が確認し、未確定の項目は利用者が選ぶ。
@@ -32,8 +32,10 @@ function Seg({ name, value, onChange, yes, no, labelId }: { name: string; value:
 
 type Field = { key: string; label: string; icon: IconName; f: DraftField[]; value: string; wide?: boolean; editor: () => React.ReactNode };
 
-export function StepConfirm({ form, setForm, catalog, extraction, sourceText, aiFields, busy, error, notice, onSubmit, onBack }: {
+export function StepConfirm({ form, setForm, catalog, extraction, sourceText, initialItemText = "", aiFields, busy, error, notice, onSubmit, onBack }: {
   form: RequestForm; setForm: (f: RequestForm) => void; catalog: CatalogData; extraction: ExtractResult | null; sourceText: string;
+  /** 文章から読み取った品目名で、登録された品目に一致しなかったもの（一般向けの環境：品目欄に残す） */
+  initialItemText?: string;
   aiFields: DraftField[]; busy: boolean; error: string | null; notice: string | null; onSubmit: () => void; onBack: () => void;
 }) {
   const set = <K extends keyof RequestForm>(k: K, v: RequestForm[K]) => setForm({ ...form, [k]: v });
@@ -50,7 +52,7 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, ai
   const required = extraction?.extracted.producerRequired === true;
   const yn = (v: YesNo, no: string, yes: string) => (v === "yes" ? yes : v === "no" ? no : "");
   // 一般向けの環境：品目は候補つきの文字入力。登録済みの品目（表記の違いも同じ品目）だけを選べ、ここから品目は作らない
-  const [itemText, setItemText] = useState(item?.name ?? "");
+  const [itemText, setItemText] = useState(item?.name ?? (autoSlot ? initialItemText : ""));
   const typedItem = itemText.trim() ? findItemByName(itemText, catalog.items) : null;
   const onItemText = (v: string) => {
     setItemText(v);
@@ -69,7 +71,9 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, ai
               <input list="plan-item-options" value={itemText} onChange={(e) => onItemText(e.target.value)} maxLength={ITEM_NAME_MAX}
                 placeholder="品目（例：トマト）" autoComplete="off" aria-label="品目" aria-required="true" />
               <datalist id="plan-item-options">{catalog.items.map((i) => <option key={i.id} value={i.name} />)}</datalist>
-              {itemText.trim() && !typedItem && <span className="item-help no-listing" role="status">{NO_LISTING}</span>}
+              {itemText.trim() && !typedItem && (
+                <NoListing name={itemText} desiredDate={form.desiredDate || null} slotId={form.slotId || null} onPick={(i) => onItemText(i.name)} />
+              )}
               {typedItem && typedItem.name !== itemText.trim() && <span className="item-help">「{typedItem.name}」で探します</span>}
             </>
           ) : (
@@ -234,7 +238,8 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, ai
           </details>
         )}
       </div>
-      {extraction?.notices.map((n) => <div className="alert warn" key={n} role="status"><Icon name="alert" />{plainResolveNotice(n)}</div>)}
+      {/* 一般向けの環境では、品目が見つからないことは品目欄で知らせる（近い食材の候補つき） */}
+      {extraction?.notices.filter((n) => !(autoSlot && n === "ITEM_NOT_FOUND")).map((n) => <div className="alert warn" key={n} role="status"><Icon name="alert" />{plainResolveNotice(n)}</div>)}
       {required && <div className="alert warn" role="status"><Icon name="alert" />農家を必ず指定することは、今回はできません。優先したい場合は「優先したい農家」で選んでください。</div>}
 
       {/* 未選択の項目：最初から入力・選択できる状態で先に見せる */}

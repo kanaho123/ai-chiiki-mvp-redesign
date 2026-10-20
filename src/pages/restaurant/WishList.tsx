@@ -1,20 +1,22 @@
 import { findItemByName, ITEM_NAME_MAX } from "../../lib/items.js";
 import { newWish, WISH_MAX, wishKgError, type Wish, type WishList } from "../../lib/wishlist.js";
 import { Icon } from "../../components/Icon";
+import { NoListing } from "./ItemSuggest";
 import type { CatalogData } from "./types";
 
 // 「欲しい食材」の一覧（一般向けの環境だけ）。行は品目＋必要量だけ。各行の「仕入れ案を見る」で、その品目の今までの流れへ進む。
 // 品目はカタログ（登録済みの品目）から探すだけで、ここから品目を作ることはない。見つからなければ通常の状態として知らせる。
 
-export const NO_LISTING = "いま、この品目の出品はありません";
+export { NO_LISTING } from "./ItemSuggest";
 
 type Items = CatalogData["items"];
 
 /** 行の品目名を登録済みの品目に照らす（表記の違いは同じ品目） */
 export const wishItem = (w: Wish, items: Items) => (w.name.trim() ? findItemByName(w.name, items) : null);
 
-export function WishListCard({ list, items, onChange, onOpen }: {
-  list: WishList; items: Items | null; onChange: (l: WishList) => void; onOpen: (w: Wish) => void;
+export function WishListCard({ list, items, cond, onChange, onOpen }: {
+  list: WishList; items: Items | null; cond: { desiredDate: string | null; slotId: string | null };
+  onChange: (l: WishList) => void; onOpen: (w: Wish) => void;
 }) {
   const setRow = (id: string, patch: Partial<Wish>) => onChange({ ...list, rows: list.rows.map((w) => (w.id === id ? { ...w, ...patch } : w)) });
   const remove = (id: string) => {
@@ -46,7 +48,9 @@ export function WishListCard({ list, items, onChange, onOpen }: {
                   <em>kg</em>
                 </label>
               </div>
-              {none && <p className="wish-note" role="status">{NO_LISTING}</p>}
+              {/* 登録されていない品目：近い食材の候補（押したときだけ、その品目に書き換えて仕入れ案へ進む） */}
+              {none && <NoListing name={w.name} desiredDate={cond.desiredDate} slotId={cond.slotId}
+                onPick={(i) => { setRow(w.id, { name: i.name }); onOpen({ ...w, name: i.name }); }} />}
               {item && item.name !== w.name.trim() && <p className="wish-note">「{item.name}」で探します</p>}
               {kgError && <p className="wish-note bad" role="status">{kgError}</p>}
               <div className="wish-actions">
