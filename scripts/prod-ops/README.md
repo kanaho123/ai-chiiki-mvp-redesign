@@ -62,3 +62,20 @@ npx prisma migrate deploy --config scripts/prod-ops/general-prod.prisma.config.m
 # 3. 適用後の確認（読み取りだけ。前の記録と比べる）
 npx tsx scripts/prod-ops/general-prod-migration-check.mts <data>/../migration/after.json --compare <data>/../migration/before.json
 ```
+
+## デモの店から送った返事待ちの相談だけを整理する（general-demo-approvals.mts）
+
+用途：デモの店（デモ 食堂（架空））からデモの農家へ送った、特定の「返事待ち」の相談だけを消します。例えば、以前の確認で送ったトマト10kg の相談が残っていて、デモで「仕入れ相談する」のボタンが出ないとき（2026-10-20 に本番で3件を整理）。
+
+- 消すのは ApprovalRequest だけです（出品・品目・生産者・店・場所・回は変えません）。
+- 対象は、ID の記録で確かめたデモの店・デモの農家・デモの出品の相談だけです。名前では探しません。
+- 返事待ち（pending）・受け取り完了なし・やり取り0件のものだけを消します。同じ仕入れ案の相談は全部まとめて指定します（一部だけは消しません）。1件でも合わなければ何も消しません。
+- 2回目の実行では、指定した相談がもうないので何もしません。
+
+```
+# 1. 一覧と、消してよい相談の ID を確かめる（読み取りだけ）
+npx tsx scripts/prod-ops/general-demo-approvals.mts inspect --target production --ids <data>/<日時>.ids.json [--kale <data>/<日時>.kale.json]
+
+# 2. inspect で示された ID を明示して消す
+npx tsx scripts/prod-ops/general-demo-approvals.mts delete --target production --ids <data>/<日時>.ids.json --expect-ids <id1,id2,id3> --confirm GENERAL_PRODUCTION_DEMO_APPROVALS_DELETE
+```
