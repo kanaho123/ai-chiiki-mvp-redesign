@@ -1018,3 +1018,22 @@ a.inline-link { display: inline-flex; align-items: center; min-height: var(--tap
 .supply-new-row-status svg { flex: none; margin-top: 2px; }
 .supply-add-row { gap: 6px; }
 .supply-item-line { display: grid; }
+
+/* 飲食店：「欲しい食材」の一覧（品目＋必要量。仕入れ案は1品目ずつ） */
+.wish-card { display: grid; gap: 10px; min-width: 0; }
+.wish-title { font-size: 20px; font-weight: 800; margin: 0; }
+.wish-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.wish-row { display: grid; gap: 8px; padding: 12px; border: 1.5px solid var(--color-line); border-radius: var(--r-input); background: var(--color-page); min-width: 0; }
+.wish-row.active { border-color: var(--accent); }
+.wish-inputs { display: grid; grid-template-columns: minmax(0, 1fr) 7.5em; gap: 8px; }
+.wish-name input { width: 100%; }
+.wish-kg input { width: 100%; }
+.wish-note { margin: 0; font-size: 14px; color: var(--color-muted); }
+.wish-note.bad { color: var(--color-error); font-weight: 700; }
+.wish-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wish-actions .btn-secondary { flex: 1; }
+.wish-switch { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.wish-chip { min-height: 40px; padding: 0 14px; border: 1.5px solid var(--color-line-strong); border-radius: 999px; background: var(--color-page); color: var(--color-text); font-size: 15px; font-weight: 700; display: inline-flex; align-items: center; }
+.wish-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.wish-chip-list { min-height: 40px; }
+.no-listing { color: var(--color-text); }

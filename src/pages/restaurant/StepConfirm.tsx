@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { formatDateJa, jstDate, jstDateOf, jstTimeOf, formatJstDateTime } from "../../lib/dates.js";
+import { findItemByName, ITEM_NAME_MAX } from "../../lib/items.js";
 import { missingFields, type RequestForm, type YesNo } from "../../lib/request-form.js";
 import type { DraftField } from "../../lib/resolve.js";
 import { BottomBar } from "../../components/BottomBar";
 import { Icon, type IconName } from "../../components/Icon";
 import { useSession } from "../../routes/session";
 import { plainResolveNotice } from "./plain-text";
+import { NO_LISTING } from "./WishList";
 import type { CatalogData, ExtractResult } from "./types";
 
 // STEP 2：「この内容で合っていますか？」。AI の読み取り結果は必ず利用者が確認し、未確定の項目は利用者が選ぶ。
@@ -47,6 +49,14 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, ai
   const slot = catalog.slots.find((s) => s.id === form.slotId);
   const required = extraction?.extracted.producerRequired === true;
   const yn = (v: YesNo, no: string, yes: string) => (v === "yes" ? yes : v === "no" ? no : "");
+  // 一般向けの環境：品目は候補つきの文字入力。登録済みの品目（表記の違いも同じ品目）だけを選べ、ここから品目は作らない
+  const [itemText, setItemText] = useState(item?.name ?? "");
+  const typedItem = itemText.trim() ? findItemByName(itemText, catalog.items) : null;
+  const onItemText = (v: string) => {
+    setItemText(v);
+    const hit = v.trim() ? findItemByName(v, catalog.items) : null;
+    if ((hit?.id ?? "") !== form.itemId) setForm({ ...form, itemId: hit?.id ?? "", varietyId: "" });
+  };
 
   const fields: Field[] = [
     {
@@ -54,10 +64,20 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, ai
       value: item ? `${item.name}${form.varietyId ? `（${item.varieties.find((v) => v.id === form.varietyId)?.name ?? ""}）` : ""}` : "",
       editor: () => (
         <>
-          <select value={form.itemId} onChange={(e) => setForm({ ...form, itemId: e.target.value, varietyId: "" })} aria-label="品目" aria-required="true">
-            <option value="">品目を選ぶ</option>
-            {catalog.items.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
-          </select>
+          {autoSlot ? (
+            <>
+              <input list="plan-item-options" value={itemText} onChange={(e) => onItemText(e.target.value)} maxLength={ITEM_NAME_MAX}
+                placeholder="品目（例：トマト）" autoComplete="off" aria-label="品目" aria-required="true" />
+              <datalist id="plan-item-options">{catalog.items.map((i) => <option key={i.id} value={i.name} />)}</datalist>
+              {itemText.trim() && !typedItem && <span className="item-help no-listing" role="status">{NO_LISTING}</span>}
+              {typedItem && typedItem.name !== itemText.trim() && <span className="item-help">「{typedItem.name}」で探します</span>}
+            </>
+          ) : (
+            <select value={form.itemId} onChange={(e) => setForm({ ...form, itemId: e.target.value, varietyId: "" })} aria-label="品目" aria-required="true">
+              <option value="">品目を選ぶ</option>
+              {catalog.items.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+            </select>
+          )}
           {item && item.varieties.length > 1 && (
             <select value={form.varietyId} onChange={(e) => set("varietyId", e.target.value)} aria-label="品種">
               <option value="">品種の指定なし（同じ品種どうしで組みます）</option>

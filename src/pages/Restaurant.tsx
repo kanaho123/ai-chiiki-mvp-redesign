@@ -7,6 +7,8 @@ import type { Suggestion } from "../lib/suggest.js";
 import { PlanView } from "./restaurant/PlanView";
 import { StepConfirm } from "./restaurant/StepConfirm";
 import { StepInput } from "./restaurant/StepInput";
+import { WishListCard, WishSwitch, wishItem } from "./restaurant/WishList";
+import { loadWishList, newWish, saveWishList, type Wish, type WishList } from "../lib/wishlist.js";
 import type { CatalogData, ExtractResult, Freshness, PlanOption, Shown, Step } from "./restaurant/types";
 import { useSession } from "../routes/session";
 
@@ -68,6 +70,9 @@ export default function RestaurantPage({ me }: { me: Me }) {
   // 受け取り場所を「おまかせ」にしたときの、希望日に受け取れる場所ごとの案（おすすめ順）。表示中の案はその中の1つ
   const [planOptions, setPlanOptions] = useState<PlanOption[] | null>(null);
   const autoSlot = useSession().appMode === "general"; // 「おまかせ」は一般向けの環境だけ
+  // 「欲しい食材」の一覧（一般向けの環境だけ・ブラウザに保存）。null は読み込み前
+  const wishOn = autoSlot;
+  const [wishes, setWishes] = useState<WishList | null>(null);
 
   useEffect(() => {
     const saved = load(me.id);
@@ -78,6 +83,7 @@ export default function RestaurantPage({ me }: { me: Me }) {
       setStep(saved.shown && saved.step === "result" ? "result" : saved.step === "confirm" ? "confirm" : "input");
       setFreshness("checking"); // 保存していた案は、最新の版と照合できるまで有効扱いしない
     }
+    setWishes(wishOn ? loadWishList(me.id) : null);
     setRestored(true);
     fetch("/api/catalog", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject()))
@@ -88,6 +94,18 @@ export default function RestaurantPage({ me }: { me: Me }) {
   useEffect(() => {
     if (restored) save(me.id, { step, text, form, shown });
   }, [step, text, form, shown, restored, me.id]);
+
+  // 一覧がまだない（今までの保存データ・初めて）：入力中の品目があればそれを1行目にする。なければ空の1行
+  useEffect(() => {
+    if (!wishOn || !restored || !catalog || wishes) return;
+    const item = catalog.items.find((i) => i.id === form.itemId);
+    const first = item ? newWish(item.name, form.quantityKg) : newWish();
+    setWishes({ rows: [first], active: item && step !== "input" ? first.id : null });
+  }, [wishOn, restored, catalog, wishes, form, step]);
+
+  useEffect(() => {
+    if (wishOn && wishes) saveWishList(me.id, wishes);
+  }, [wishOn, wishes, me.id]);
 
   // 表示中の案の計算後に供給・枠などが変わったら、その案を無効にする。
   // 結果画面を開いた（戻った）とき・タブに戻ったときに確認する（常時の通信はしない）
@@ -139,6 +157,7 @@ export default function RestaurantPage({ me }: { me: Me }) {
         return;
       }
       const next = formFromDraft(d.draft);
+      setWishes((l) => l && { ...l, active: null });
       setExtraction(d);
       setForm(next);
       setAiFields(aiFilledFields(next));
@@ -156,6 +175,7 @@ export default function RestaurantPage({ me }: { me: Me }) {
 
   function manual() {
     extractAbort.current?.abort(); // 読み取り中なら中断し、後から結果で上書きしない
+    setWishes((l) => l && { ...l, active: null });
     setExtraction(null);
     setAiFields([]);
     setError(null);
@@ -249,6 +269,28 @@ export default function RestaurantPage({ me }: { me: Me }) {
     top();
   }
 
+  /**
+   * 一覧の1行から、その品目の今までの流れ（条件の確認 → 仕入れ案）へ進む。品目をまとめた計算はしない。
+   * 同じ品目なら確認中の条件をそのまま使う。違う品目なら品目・必要量を入れ替え、品種と予算は選び直してもらう（受け取り日・産地などは引き継ぐ）
+   */
+  function openWish(w: Wish) {
+    if (!catalog || !wishes) return;
+    const item = wishItem(w, catalog.items);
+    if (!item) return;
+    const kg = w.kg.trim();
+    setForm(form.itemId === item.id
+      ? { ...form, quantityKg: kg || form.quantityKg }
+      : { ...form, itemId: item.id, varietyId: "", quantityKg: kg, budgetMode: "", budgetYen: "" });
+    setWishes({ ...wishes, active: w.id });
+    setPlanOptions(null);
+    setExtraction(null);
+    setAiFields([]);
+    setError(null);
+    setNotice(null);
+    setStep("confirm");
+    top();
+  }
+
   const busyLabel = <><span className="spinner" aria-hidden="true" />計算中…</>;
 
   const stepIndex = ["input", "confirm", "result"].indexOf(step);
@@ -266,15 +308,22 @@ export default function RestaurantPage({ me }: { me: Me }) {
         </div>
       )}
 
+      {wishOn && wishes && catalog && step !== "input" && (
+        <WishSwitch list={wishes} items={catalog.items} currentItemId={step === "result" && shown ? shown.request.itemId : form.itemId}
+          onOpen={openWish} onList={() => { setError(null); setStep("input"); top(); }} />
+      )}
+
       {catalogError && <div className="alert bad" role="alert"><Icon name="alert" />登録データを読み込めませんでした。再読み込みしてください。</div>}
 
       {step === "input" && (
         <StepInput text={text} onText={(t) => { setText(t); setEmptyHint(false); }} onExtract={extract} onManual={manual} busy={extracting}
-          aiAvailable={catalog ? catalog.aiAvailable : null} error={error} emptyHint={emptyHint} />
+          aiAvailable={catalog ? catalog.aiAvailable : null} error={error} emptyHint={emptyHint}>
+          {wishOn && wishes && <WishListCard list={wishes} items={catalog?.items ?? null} onChange={setWishes} onOpen={openWish} />}
+        </StepInput>
       )}
 
       {step === "confirm" && catalog && (
-        <StepConfirm form={form} setForm={setForm} catalog={catalog} extraction={extraction} sourceText={text} aiFields={aiFields}
+        <StepConfirm key={wishes?.active ?? ""} form={form} setForm={setForm} catalog={catalog} extraction={extraction} sourceText={text} aiFields={aiFields}
           busy={busy} error={error} notice={notice} onSubmit={submitConditions} onBack={() => { setError(null); setStep("input"); top(); }} />
       )}
 

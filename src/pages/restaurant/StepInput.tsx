@@ -14,9 +14,9 @@ const HINTS: { icon: IconName; word: string; label: string }[] = [
   { icon: "calendar", word: "10/23 午前", label: "受け取り" },
 ];
 
-export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable, error, emptyHint }: {
+export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable, error, emptyHint, children }: {
   text: string; onText: (t: string) => void; onExtract: () => void; onManual: () => void; busy: boolean;
-  aiAvailable: boolean | null; error: string | null; emptyHint: boolean;
+  aiAvailable: boolean | null; error: string | null; emptyHint: boolean; children?: React.ReactNode;
 }) {
   if (busy) {
     return (
@@ -70,6 +70,9 @@ export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable
           </div>
         </div>
       )}
+
+      {/* 「欲しい食材」の一覧（一般向けの環境だけ） */}
+      {children}
 
       <BottomBar>
         {aiOff ? (
