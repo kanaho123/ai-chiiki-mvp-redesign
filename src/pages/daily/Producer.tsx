@@ -9,6 +9,7 @@ import { useInbox } from "../../routes/inbox";
 import { PATHS } from "../../routes/paths";
 import { useMe, useSession } from "../../routes/session";
 import { ErrorRetry } from "./ErrorRetry";
+import { TradeChat } from "./TradeChat";
 import { WelcomeNotice } from "./WelcomeNotice";
 import { useConfirmations, useSupplies, whenText, yen } from "./data";
 
@@ -20,7 +21,9 @@ function RequestBody({ r }: { r: Confirmation }) {
   const c = r.conditions;
   return (
     <>
-      <div className="farm-head"><b>{r.restaurantName}</b><span className={`state-tag state-farm-${r.status}`}>{confirmationLabel[r.status]}</span></div>
+      <div className="farm-head"><b>{r.restaurantName}</b>{r.receivedAt
+        ? <span className="state-tag state-completed">取引完了</span>
+        : <span className={`state-tag state-farm-${r.status}`}>{confirmationLabel[r.status]}</span>}</div>
       <p className="request-what">{r.itemName} {r.quantityKg}kg</p>
       {c && c.requestedKg !== r.quantityKg && <p className="farm-detail">飲食店が必要な量 {c.requestedKg}kg のうち、あなたへの相談は {r.quantityKg}kg</p>}
       {c && <p className="farm-detail">希望日：{formatDateJa(c.desiredDate)}</p>}
@@ -171,7 +174,15 @@ export function ProducerRequests() {
           <section aria-labelledby="r-accepted">
             <h2 className="section-title" id="r-accepted">対応済（{groups.accepted.length}件）</h2>
             {groups.accepted.length === 0 ? <p className="empty-note">まだありません</p> : (
-              <ul className="request-list">{groups.accepted.map((r) => <li key={r.id} className="farm-row"><RequestBody r={r} /></li>)}</ul>
+              <ul className="request-list">{groups.accepted.map((r) => (
+                <li key={r.id} className="farm-row">
+                  <RequestBody r={r} />
+                  {r.receivedAt && <p className="trade-done-note" role="status"><Icon name="check" />取引完了：飲食店が受け取りを完了しました</p>}
+                  {r.established
+                    ? <TradeChat requestId={r.id} partnerName={r.restaurantName} completed={!!r.receivedAt} />
+                    : <p className="hint">この仕入れ案のほかの農家の返事がそろうと、飲食店とやり取りできるようになります。</p>}
+                </li>
+              ))}</ul>
             )}
           </section>
           <section aria-labelledby="r-declined">

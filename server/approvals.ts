@@ -7,7 +7,8 @@ import { loadPlanInputs } from "./plan-data.js";
 import { planFingerprint } from "./plan-fingerprint.js";
 import { serverNow } from "./clock.js";
 import { handle, json } from "./http.js";
-import type { Confirmation, Contact, RequestConditions } from "../src/lib/approvals.js";
+import { IntervalLimiter } from "./rate-limit.js";
+import { TRADE_DECLINED, type Confirmation, type Contact, type RequestConditions, type TradeMessage } from "../src/lib/approvals.js";
 
 export class ApprovalProblem extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -48,6 +49,17 @@ async function currentPlan(tx: Tx, raw: unknown, restaurantId: string, snapshots
   return { request, plan, version, fingerprint: planFingerprint(request, version, plan) };
 }
 
+/**
+ * 取引の成立：同じ仕入れ案（飲食店・fingerprint）の依頼が、すべて「対応できます」になったとき。
+ * 成立したら、それ以降は仕入れ案を計算し直さない（stale にしない）。保存済みの品目・数量・価格・小計・受け取りの日時と場所を、
+ * その取引で合意した内容として扱う。「対応できます」の行は変わらない（respond は返事済みの行を変えない）ので、成立は取り消されない。
+ * 成立までは、一部の農家だけが「対応できます」でも、今までどおり計算し直して stale を判定する。
+ */
+async function isEstablished(tx: Tx, restaurantId: string, fingerprint: string) {
+  const rows = await tx.approvalRequest.findMany({ where: { restaurantId, planFingerprint: fingerprint }, select: { status: true } });
+  return rows.length > 0 && rows.every((r) => r.status === "approved");
+}
+
 async function isCurrent(tx: Tx, row: ApprovalRequest, snapshots?: Snapshots) {
   try {
     const cur = await currentPlan(tx, row.planRequest, row.restaurantId, snapshots);
@@ -75,7 +87,7 @@ function requestConditions(raw: Prisma.JsonValue): RequestConditions | null {
   };
 }
 
-function view(row: Listed, current: boolean): Confirmation {
+function view(row: Listed, current: boolean, established = false): Confirmation {
   return {
     id: row.id, supplyId: row.supplyId, producerName: row.producer.farmName, restaurantName: row.restaurant.displayName,
     planFingerprint: row.planFingerprint, itemName: row.itemName, quantityKg: row.quantityKg,
@@ -83,6 +95,7 @@ function view(row: Listed, current: boolean): Confirmation {
     pickupStartAt: row.pickupStartAt.toISOString(), pickupEndAt: row.pickupEndAt.toISOString(), pickupPlace: row.pickupPlace,
     status: current ? row.status : "stale", createdAt: row.createdAt.toISOString(),
     conditions: requestConditions(row.planRequest),
+    established, receivedAt: row.receivedAt ? row.receivedAt.toISOString() : null,
   };
 }
 
@@ -119,12 +132,14 @@ export const approvals = {
         include: listInclude, orderBy: { createdAt: "desc" }, take: 100,
       });
       const freshness = new Map<string, boolean>();
+      const established = new Map<string, boolean>();
       const snapshots: Snapshots = new Map();
       const result: Confirmation[] = [];
       for (const row of rows) {
         const key = `${row.restaurantId}:${row.planFingerprint}`;
-        if (!freshness.has(key)) freshness.set(key, await isCurrent(tx, row, snapshots));
-        result.push(view(row, freshness.get(key)!));
+        if (!established.has(key)) established.set(key, await isEstablished(tx, row.restaurantId, row.planFingerprint));
+        if (!freshness.has(key)) freshness.set(key, established.get(key)! || await isCurrent(tx, row, snapshots));
+        result.push(view(row, freshness.get(key)!, established.get(key)!));
       }
       return result;
     }, { isolationLevel: "RepeatableRead", timeout: 30_000 });
@@ -157,10 +172,88 @@ export const approvals = {
       const row = await tx.approvalRequest.findUnique({ where: { id } });
       if (!row || row.restaurantId !== user.id) throw notFound();
       if (row.status !== "approved") throw new ApprovalProblem(403, "生産者が「対応できます」と返事をした後に、連絡先を確認できます");
-      if (!await isCurrent(tx, row)) throw conflict();
+      if (!await isEstablished(tx, row.restaurantId, row.planFingerprint) && !await isCurrent(tx, row)) throw conflict();
       const contact = await tx.producer.findUnique({ where: { id: row.producerId }, select: { contactPhone: true, contactEmail: true } });
       if (!contact) throw notFound();
       return contact;
+    });
+  },
+};
+
+// ---------------------------------------------------------------------------
+// 取引（成立後）：やり取り（テキストだけ）と受け取り完了
+// ---------------------------------------------------------------------------
+
+export const MESSAGE_MAX = 1000;
+const MESSAGE_LIST_MAX = 200;
+const messageLimiter = new IntervalLimiter(1000); // 連打の防止（同じユーザーは1秒に1通まで）
+
+/** その相談の飲食店か生産者だけ。取引が成立していなければ使えない */
+async function tradeRow(tx: Tx, user: SessionUser, id: string) {
+  const row = await tx.approvalRequest.findUnique({ where: { id }, include: listInclude });
+  const mine = row && (user.role === "restaurant" ? row.restaurantId === user.id : !!user.producer && row.producerId === user.producer.id);
+  if (!row || !mine) throw notFound();
+  if (row.status !== "approved" || !await isEstablished(tx, row.restaurantId, row.planFingerprint)) {
+    throw new ApprovalProblem(409, "全農家が「対応できます」と返事をして取引が成立してから、やり取りできます");
+  }
+  return row;
+}
+
+function messageView(row: Listed, m: { id: string; body: string; createdAt: Date; senderUserId: string }, me: SessionUser): TradeMessage {
+  const fromRestaurant = m.senderUserId === row.restaurantId;
+  return {
+    id: m.id, body: m.body, createdAt: m.createdAt.toISOString(), mine: m.senderUserId === me.id,
+    sender: fromRestaurant ? "restaurant" : "producer", senderName: fromRestaurant ? row.restaurant.displayName : row.producer.farmName,
+  };
+}
+
+/** 本文：文字列で、前後の空白を除いて1〜1000文字 */
+export function parseMessageBody(raw: unknown): string {
+  const text = typeof raw === "string" ? raw.trim() : "";
+  if (!text) throw new ApprovalProblem(400, "メッセージを入力してください");
+  if ([...text].length > MESSAGE_MAX) throw new ApprovalProblem(400, `メッセージは${MESSAGE_MAX}文字以内で入力してください`);
+  return text;
+}
+
+export const trades = {
+  async messages(user: SessionUser, id: string) {
+    return prisma.$transaction(async (tx) => {
+      const row = await tradeRow(tx, user, id);
+      const list = await tx.tradeMessage.findMany({
+        where: { approvalRequestId: id }, select: { id: true, body: true, createdAt: true, senderUserId: true },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: MESSAGE_LIST_MAX,
+      });
+      return { messages: list.reverse().map((m) => messageView(row, m, user)), completed: !!row.receivedAt };
+    });
+  },
+
+  async send(user: SessionUser, id: string, raw: unknown) {
+    const body = parseMessageBody(raw);
+    if (!messageLimiter.take(user.id)) throw new ApprovalProblem(429, "少し時間をおいてから送ってください");
+    return prisma.$transaction(async (tx) => {
+      const row = await tradeRow(tx, user, id);
+      if (row.receivedAt) throw new ApprovalProblem(409, "この取引は完了しています");
+      const m = await tx.tradeMessage.create({ data: { approvalRequestId: id, senderUserId: user.id, body }, select: { id: true, body: true, createdAt: true, senderUserId: true } });
+      return messageView(row, m, user);
+    });
+  },
+
+  /**
+   * 受け取り完了（＝取引完了）。飲食店が仕入れ案ごとに1回押す。同じ仕入れ案の「対応できます」の行すべてに、同じ時刻を1つのトランザクションで入れる。
+   * もう一度押しても同じ結果（すでに入っている時刻を使い、変えない）。取引が成立していなければ完了できない。
+   * MVP の判断：予定の受け取り日時より前でも押せる（早めの受け渡しも許す）。受け取り時刻の制御・キャンセルなどは将来の課題。
+   */
+  async received(user: SessionUser, fingerprint: unknown) {
+    if (user.role !== "restaurant") throw new ApprovalProblem(403, "依頼した飲食店のみ操作できます");
+    if (typeof fingerprint !== "string" || !/^[a-f0-9]{64}$/.test(fingerprint)) throw new ApprovalProblem(400, "相談の指定が不正です");
+    return serial(async (tx) => {
+      const rows = await tx.approvalRequest.findMany({ where: { restaurantId: user.id, planFingerprint: fingerprint }, include: listInclude, orderBy: { id: "asc" } });
+      if (rows.length === 0) throw notFound();
+      if (rows.some((r) => r.status === "rejected")) throw new ApprovalProblem(409, TRADE_DECLINED);
+      if (!rows.every((r) => r.status === "approved")) throw new ApprovalProblem(409, "まだ取引が成立していません。全農家の返事を待ってください");
+      const at = rows.find((r) => r.receivedAt)?.receivedAt ?? new Date();
+      await tx.approvalRequest.updateMany({ where: { restaurantId: user.id, planFingerprint: fingerprint, status: "approved", receivedAt: null }, data: { receivedAt: at } });
+      return rows.map((r) => view({ ...r, receivedAt: at }, true, true));
     });
   },
 };

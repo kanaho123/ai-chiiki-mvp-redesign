@@ -13,7 +13,9 @@
   "rewrites": [
     { "source": "/api/auth/:route", "destination": "/api/auth?__path=/api/auth/:route" },
     { "source": "/api/onboarding/:route", "destination": "/api/onboarding?__path=/api/onboarding/:route" },
+    { "source": "/api/approvals/received", "destination": "/api/approvals?__path=/api/approvals/received" },
     { "source": "/api/approvals/:id", "destination": "/api/approvals?__path=/api/approvals/:id" },
+    { "source": "/api/approvals/:id/messages", "destination": "/api/approvals?__path=/api/approvals/:id/messages" },
     { "source": "/api/supplies/:id", "destination": "/api/supplies?__path=/api/supplies/:id" },
     { "source": "/api/me", "destination": "/api/account?__path=/api/me" },
     { "source": "/api/inbox", "destination": "/api/account?__path=/api/inbox" },

@@ -42,8 +42,11 @@ type Json = (b: unknown, status?: number) => Response;
 const defaultSupplyPost = (b: Record<string, unknown>, json: Json) => json({ supply: { item: { name: (b.itemName as string) ?? ({ "i-tomato": "トマト", "i-nasu": "なす" } as Record<string, string>)[b.itemId as string] }, availableKg: Number(b.availableKg) } }, 201);
 let supplyPost: (b: Record<string, unknown>, json: Json) => Response = defaultSupplyPost;
 const usualUmeda = { placeId: "pl-umeda", name: "梅田エリア受渡所（仮）", address: "大阪市北区", kind: null, times: [{ seriesId: "s-umeda", weekday: 2, startTime: "10:00", endTime: "11:00", active: true }] };
+// 取引のやり取り（相談の id ごと）と受け取り完了
+let tradeMessages: Record<string, { id: string; body: string; createdAt: string; mine: boolean; sender: string; senderName: string }[]> = {};
 let pickup: { usual: unknown[]; candidates: { placeId: string; name: string; address: string; kind: string | null }[] } = { usual: [], candidates: [] };
 beforeEach(() => {
+  tradeMessages = {};
   supplyPost = defaultSupplyPost;
   supplyRows = [supplyRow()];
   slots = [umedaSlot];
@@ -75,6 +78,22 @@ beforeEach(() => {
     }
     if (url === "/api/inbox") return json({ producerRequests: me.role === "producer" ? requests.filter((r) => r.status === "pending").length : 0 });
     if (url === "/api/approvals" && method === "GET") return json({ requests });
+    const thread = /^\/api\/approvals\/([^/]+)\/messages$/.exec(url);
+    if (thread) {
+      const id = decodeURIComponent(thread[1]);
+      const list = (tradeMessages[id] ??= []);
+      if (method === "POST") {
+        const m = { id: `m${list.length + 1}`, body: (body as { body: string }).body, createdAt: "2026-10-22T03:00:00.000Z", mine: true, sender: me.role, senderName: "まちの食堂" };
+        list.push(m);
+        return json({ message: m }, 201);
+      }
+      return json({ messages: list, completed: requests.some((r) => r.id === id && r.receivedAt) });
+    }
+    if (url === "/api/approvals/received" && method === "POST") {
+      const fp = (body as { fingerprint: string }).fingerprint;
+      for (const r of requests) if (r.planFingerprint === fp && r.status === "approved") r.receivedAt ??= "2026-10-22T05:00:00.000Z";
+      return json({ requests });
+    }
     const one = /^\/api\/approvals\/(.+)$/.exec(url);
     if (one && method === "PATCH") {
       const r = requests.find((x) => x.id === decodeURIComponent(one[1]))!;
@@ -324,6 +343,77 @@ describe("生産者の「依頼」", () => {
     expect(calls.find((c) => c.method === "PATCH")?.body).toEqual({ status: "rejected" });
     expect($("main .alert.ok")?.textContent).toBe("まちの食堂の仕入れ相談に「今回は対応できません」と回答しました。");
     expect(text()).toContain("今回は難しい（1件）");
+  });
+});
+
+describe("取引：成立後のやり取り・受け取り完了（相談の詳細＝取引ページ）", () => {
+  const typeInto = async (input: HTMLTextAreaElement, value: string) => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(input, value);
+    await act(async () => { input.dispatchEvent(new Event("input", { bubbles: true })); });
+  };
+  it("飲食店：成立した1農家の取引でやり取り → 「受け取り完了」（確認つき・仕入れ案ごとに1回）→ 「取引が完了しました」", async () => {
+    me = restaurant;
+    requests = [req("a", "approved", { established: true, receivedAt: null })];
+    await open("/restaurant/consultations/fp-1");
+    expect($(".match-banner .match-title")?.textContent).toBe("🎉 マッチ成立");
+    const chat = $(".trade-chat")!;
+    expect(chat.closest("details")?.hasAttribute("open")).toBe(true); // 1農家なら最初から開く
+    expect(chat.closest("details")?.querySelector("summary")?.textContent).toContain("A農園とのやり取り");
+    expect(chat.textContent).toContain("まだメッセージはありません");
+    await typeInto(chat.querySelector("textarea")!, "当日はよろしくお願いします");
+    await click(chat.querySelector("button[type=submit]"));
+    expect(calls.find((c) => c.url === "/api/approvals/a/messages" && c.method === "POST")?.body).toEqual({ body: "当日はよろしくお願いします" });
+    expect([...el.querySelectorAll(".trade-message .trade-body")].map((b) => b.textContent)).toEqual(["当日はよろしくお願いします"]);
+    expect($(".trade-message.mine .trade-meta b")?.textContent).toBe("あなた");
+    // 受け取り完了：確認のあと1回だけ
+    await click(button("受け取り完了"));
+    expect($(".receive-confirm")?.textContent).toContain("商品を実際に受け取りましたか？完了するとこの取引は完了済みになります。");
+    expect(calls.some((c) => c.url === "/api/approvals/received")).toBe(false);
+    await click(button("受け取り完了にする"));
+    expect(calls.filter((c) => c.url === "/api/approvals/received").map((c) => c.body)).toEqual([{ fingerprint: "fp-1" }]);
+    expect($(".trade-done-title")?.textContent).toBe("取引が完了しました");
+    expect([...el.querySelectorAll(".trade-done-facts div")].map((d) => d.textContent)).toEqual([
+      "品目トマト", "合計数量5kg", "生産者A農園", "受け取り場所梅田エリア受渡所（仮）", `受け取り日時${$(".consult-when")!.textContent!.split("・")[0]}`,
+    ]);
+    expect($("main .state-tag")?.textContent).toBe("取引完了");
+    expect($(".match-banner")).toBeNull();
+    expect($(".receive-box")).toBeNull();
+    expect([...el.querySelectorAll(".progress-step")].map((x) => `${x.querySelector(".progress-label")?.textContent}:${x.className.replace("progress-step ", "")}`))
+      .toEqual(["相談送信済み:done", "生産者回答待ち:done", "マッチ成立:done", "受け渡し待ち:done", "取引完了:done"]);
+    expect($(".trade-chat textarea")).toBeNull(); // 完了後は読むだけ
+    expect($(".trade-chat")?.textContent).toContain("この取引は完了しています");
+  });
+  it("飲食店：成立前（返事待ち）はやり取りも受け取り完了も出さない。1農家が対応できないときは作り直しの案内", async () => {
+    me = restaurant;
+    requests = [req("a", "approved"), req("b", "pending", { producerName: "B農園" })];
+    await open("/restaurant/consultations/fp-1");
+    expect($(".trade-chat")).toBeNull();
+    expect($(".receive-box")).toBeNull();
+    act(() => root?.unmount()); el.remove();
+    requests = [req("a", "approved"), req("b", "rejected", { producerName: "B農園" })];
+    await open("/restaurant/consultations/fp-1");
+    expect($("main .alert.warn")?.textContent).toBe("1農家が対応できないため、この仕入れ案では取引できません。仕入れ案を作り直してください。");
+    expect($(".trade-chat")).toBeNull();
+    expect($(".receive-box")).toBeNull();
+    expect(calls.some((c) => c.url.includes("/messages"))).toBe(false);
+  });
+  it("生産者：成立前は案内だけ、成立後はやり取り、完了後は「取引完了」と読むだけのやり取り", async () => {
+    me = producer;
+    requests = [
+      req("a", "approved", { established: false, restaurantName: "成立前の店" }),
+      req("b", "approved", { established: true, restaurantName: "取引中の店" }),
+      req("c", "approved", { established: true, receivedAt: "2026-10-22T05:00:00.000Z", restaurantName: "完了した店" }),
+    ];
+    await open("/producer/requests");
+    const rows = [...el.querySelectorAll(".request-list .farm-row")];
+    const rowOf = (name: string) => rows.find((r) => r.textContent?.includes(name))!;
+    expect(rowOf("成立前の店").querySelector(".trade-chat")).toBeNull();
+    expect(rowOf("成立前の店").textContent).toContain("ほかの農家の返事がそろうと、飲食店とやり取りできるようになります");
+    expect(rowOf("取引中の店").querySelector(".trade-chat textarea")).not.toBeNull();
+    expect(rowOf("完了した店").querySelector(".state-tag")?.textContent).toBe("取引完了");
+    expect(rowOf("完了した店").textContent).toContain("取引完了：飲食店が受け取りを完了しました");
+    expect(rowOf("完了した店").querySelector(".trade-chat textarea")).toBeNull();
+    expect(calls.filter((c) => c.url.endsWith("/messages")).map((c) => c.url).sort()).toEqual(["/api/approvals/b/messages", "/api/approvals/c/messages"]);
   });
 });
 

@@ -3,7 +3,8 @@ import { Link, useParams } from "react-router";
 import { nameOf } from "../../components/AppShell";
 import { Icon } from "../../components/Icon";
 import {
-  STALE_RECHECK, confirmationLabel, consultationLabel, groupConsultations, isMatched, isOngoing, restaurantTodo, type Consultation, type Contact,
+  RECEIVE_CONFIRM, STALE_RECHECK, TRADE_DECLINED, confirmationLabel, consultationLabel, groupConsultations, isMatched, isOngoing, restaurantTodo,
+  type Consultation, type Contact,
 } from "../../lib/approvals";
 import { confirmationApi, friendlyError } from "../../lib/confirmation-api";
 import { MatchBanner } from "../restaurant/MatchBanner";
@@ -11,12 +12,14 @@ import { ProgressSteps } from "../restaurant/ProgressSteps";
 import { PATHS } from "../../routes/paths";
 import { useMe } from "../../routes/session";
 import { ErrorRetry } from "./ErrorRetry";
+import { TradeChat } from "./TradeChat";
 import { WelcomeNotice } from "./WelcomeNotice";
 import { useConfirmations, whenText, yen } from "./data";
 
 // 飲食店のホーム・相談一覧・相談の詳細。
 // 相談＝同じ仕入れ案で生産者に確認を依頼したもの。状態は「返事待ち／マッチ成立／一部対応できません／今回は対応できません」で表す。
 // マッチ成立は全農家が「対応できます」のときだけ。それまでは農家ごとの状態で見せる。
+// 相談の詳細は取引ページを兼ねる：マッチ成立（取引の成立）後は農家ごとのやり取りと「受け取り完了」（仕入れ案ごとに1回）、完了後は「取引が完了しました」。
 
 const consultationPath = (id: string) => `${PATHS.restaurant.consultations}/${id}`;
 
@@ -107,7 +110,7 @@ export function RestaurantConsultations() {
       {ended.length > 0 && (
         <section aria-labelledby="c-ended">
           <h2 className="section-title" id="c-ended">終わった相談（{ended.length}件）</h2>
-          <p className="hint">全員が対応できなかった相談や、在庫・条件が変わった相談です。必要なら仕入れ案をつくり直してください。</p>
+          <p className="hint">取引が完了した相談、全員が対応できなかった相談、在庫・条件が変わった相談です。必要なら仕入れ案をつくり直してください。</p>
           <ul className="consult-list">{ended.map((c) => <ConsultationCard key={c.id} c={c} />)}</ul>
         </section>
       )}
@@ -122,6 +125,25 @@ export function RestaurantConsultationDetail() {
   const [contacts, setContacts] = useState<Record<string, Contact>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [contactError, setContactError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [receiving, setReceiving] = useState(false);
+  const [receiveError, setReceiveError] = useState<string | null>(null);
+
+  /** 受け取り完了：仕入れ案ごとに1回（同じ仕入れ案の全農家をまとめて完了にする）。もう一度押しても同じ結果 */
+  async function markReceived() {
+    if (!c || receiving) return;
+    setReceiving(true);
+    setReceiveError(null);
+    try {
+      await confirmationApi("/api/approvals/received", "POST", { fingerprint: c.id });
+      setConfirming(false);
+    } catch (e) {
+      setReceiveError(friendlyError(e, "受け取り完了にできませんでした。もう一度お試しください"));
+    } finally {
+      await reload();
+      setReceiving(false);
+    }
+  }
 
   async function showContact(requestId: string) {
     setBusy(requestId);
@@ -152,10 +174,23 @@ export function RestaurantConsultationDetail() {
             <p><StatusTag status={c.status} /></p>
           </div>
           <ProgressSteps farms={c.farms} />
+          {c.status === "completed" && (
+            <section className="trade-done" aria-labelledby="trade-done-title">
+              <p className="trade-done-title" id="trade-done-title" role="status"><Icon name="check" size={28} strokeWidth={3} />取引が完了しました</p>
+              <dl className="trade-done-facts">
+                <div><dt>品目</dt><dd>{c.itemName}</dd></div>
+                <div><dt>合計数量</dt><dd>{c.totalKg}kg</dd></div>
+                <div><dt>生産者</dt><dd>{[...new Set(c.farms.map((f) => f.producerName))].join("・")}</dd></div>
+                <div><dt>受け取り場所</dt><dd>{c.pickupPlace}</dd></div>
+                <div><dt>受け取り日時</dt><dd>{whenText(c.pickupStartAt, c.pickupEndAt)}</dd></div>
+              </dl>
+            </section>
+          )}
           {isMatched(c.farms)
             ? <MatchBanner farms={c.farms} onContactError={reload} />
-            : <p className="hint">「対応できます」は注文の確定ではありません。受け渡しの詳細や最終確認は、農家と直接相談して決めてください。</p>}
+            : c.status !== "completed" && <p className="hint">「対応できます」は注文の確定ではありません。受け渡しの詳細や最終確認は、農家と直接相談して決めてください。</p>}
           {c.status === "stale" && <div className="alert warn" role="status"><Icon name="alert" />{STALE_RECHECK}</div>}
+          {(c.status === "partial" || c.status === "declined") && <div className="alert warn" role="status"><Icon name="alert" />{TRADE_DECLINED}</div>}
           <ul className="farm-list">
             {c.farms.map((f) => (
               <li key={f.id} className={`farm-row farm-${f.status}`}>
@@ -172,11 +207,36 @@ export function RestaurantConsultationDetail() {
                     {contacts[f.id].contactEmail && <a href={`mailto:${encodeURIComponent(contacts[f.id].contactEmail!)}`}>メール：{contacts[f.id].contactEmail}</a>}
                   </div>
                 )}
+                {/* 取引の成立後：この農家とのやり取り（1農家なら最初から開く） */}
+                {(isMatched(c.farms) || c.status === "completed") && (
+                  <details className="trade-chat-wrap" open={c.farms.length === 1}>
+                    <summary>{f.producerName}とのやり取り<Icon name="chevronDown" /></summary>
+                    <TradeChat requestId={f.id} partnerName={f.producerName} completed={c.status === "completed"} showTitle={false} />
+                  </details>
+                )}
               </li>
             ))}
           </ul>
           {contactError && <div className="alert bad" role="alert"><Icon name="alert" />{contactError}</div>}
           <p className="hint">商品代の合計 {yen(c.subtotalYen)}（税込・受け渡し費用は別）</p>
+          {isMatched(c.farms) && (
+            <section className="receive-box" aria-labelledby="receive-title">
+              <h2 className="section-title" id="receive-title">受け取り</h2>
+              <p className="hint">商品を受け取ったら、この仕入れ案の取引をまとめて完了にします（農家ごとに押す必要はありません）。</p>
+              {!confirming ? (
+                <button type="button" className="btn-primary btn-block" onClick={() => { setReceiveError(null); setConfirming(true); }}><Icon name="check" />受け取り完了</button>
+              ) : (
+                <div className="receive-confirm" role="alertdialog" aria-labelledby="receive-q">
+                  <p id="receive-q"><b>{RECEIVE_CONFIRM}</b></p>
+                  <div className="receive-actions">
+                    <button type="button" className="btn-primary" onClick={() => void markReceived()} disabled={receiving} aria-busy={receiving}>{receiving ? "処理中…" : "受け取り完了にする"}</button>
+                    <button type="button" className="btn-secondary" onClick={() => setConfirming(false)} disabled={receiving}>戻る</button>
+                  </div>
+                </div>
+              )}
+              {receiveError && <div className="alert bad" role="alert"><Icon name="alert" />{receiveError}</div>}
+            </section>
+          )}
         </>
       )}
     </main>

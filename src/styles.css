@@ -1043,3 +1043,31 @@ a.inline-link { display: inline-flex; align-items: center; min-height: var(--tap
 .item-alts-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .item-alt.off-condition { flex-direction: column; align-items: flex-start; justify-content: center; min-height: 52px; padding: 6px 14px; border-radius: 16px; text-align: left; }
 .item-alts-note { margin: 0; font-size: 12px; font-weight: 400; color: var(--color-muted); }
+
+/* 取引（成立後）：やり取り・受け取り完了・取引完了 */
+.state-completed { color: #fff; background: var(--color-restaurant-dark); border-color: var(--color-restaurant-dark); }
+.trade-chat-wrap { border-top: 1px solid var(--color-line); padding-top: 8px; min-width: 0; }
+.trade-chat-wrap > summary { display: flex; align-items: center; justify-content: space-between; min-height: var(--tap-min); font-weight: 800; cursor: pointer; list-style: none; }
+.trade-chat-wrap > summary::-webkit-details-marker { display: none; }
+.trade-chat { display: grid; gap: 10px; min-width: 0; }
+.trade-chat-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.trade-messages { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 360px; overflow-y: auto; }
+.trade-message { display: grid; gap: 2px; max-width: 88%; padding: 8px 12px; border-radius: 14px; background: var(--color-sunken); justify-self: start; min-width: 0; }
+.trade-message.mine { justify-self: end; background: var(--accent-tint); }
+.trade-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 13px; color: var(--color-muted); }
+.trade-meta b { color: var(--color-text); }
+.trade-body { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.trade-form { display: grid; gap: 8px; }
+.trade-form textarea { width: 100%; }
+.bad-text { color: var(--color-error); }
+.receive-box { display: grid; gap: 10px; }
+.receive-confirm { display: grid; gap: 10px; padding: 14px; border: 2px solid var(--accent); border-radius: 14px; background: var(--color-page); }
+.receive-confirm p { margin: 0; }
+.receive-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.trade-done { display: grid; gap: 12px; padding: 20px; border-radius: 16px; background: var(--color-restaurant-tint); border: 2px solid var(--color-restaurant-dark); color: var(--color-restaurant-dark); min-width: 0; }
+.trade-done-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 24px; font-weight: 800; }
+.trade-done-facts { display: grid; gap: 6px; margin: 0; }
+.trade-done-facts div { display: grid; grid-template-columns: 7em minmax(0, 1fr); gap: 8px; }
+.trade-done-facts dt { font-weight: 700; }
+.trade-done-facts dd { margin: 0; color: var(--color-text); overflow-wrap: anywhere; }
+.trade-done-note { display: flex; align-items: center; gap: 6px; margin: 0; font-weight: 800; color: var(--color-restaurant-dark); }

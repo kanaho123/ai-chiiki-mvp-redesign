@@ -11,7 +11,13 @@ export type Confirmation = {
   status: ConfirmationStatus; createdAt: string;
   /** 依頼のときに保存した仕入れ条件（相手に見せてよいものだけ）。古いデータなどで読めなければ null */
   conditions?: RequestConditions | null;
+  /** 取引の成立：同じ仕入れ案の全農家が「対応できます」。成立後は計算し直さず、保存した内容で固定する */
+  established?: boolean;
+  /** 受け取り完了（＝取引完了）の日時。まだなら null */
+  receivedAt?: string | null;
 };
+/** 取引のやり取り（テキストだけ） */
+export type TradeMessage = { id: string; body: string; createdAt: string; mine: boolean; sender: "restaurant" | "producer"; senderName: string };
 /** 飲食店の仕入れ条件（依頼のときの planRequest から）。requestedKg は飲食店が必要な全体の量（この農家への相談量は quantityKg） */
 export type RequestConditions = {
   requestedKg: number; desiredDate: string; originPrefectures: string[];
@@ -38,19 +44,24 @@ export const confirmationLabel: Record<ConfirmationStatus, string> = {
 };
 
 /** 1つの相談（仕入れ案）全体の状態 */
-export type ConsultationStatus = "waiting" | "accepted" | "partial" | "declined" | "stale";
+export type ConsultationStatus = "waiting" | "accepted" | "partial" | "declined" | "stale" | "completed";
 export const consultationLabel: Record<ConsultationStatus, string> = {
-  waiting: "返事待ち", accepted: "マッチ成立", partial: "一部対応できません", declined: "今回は対応できません", stale: "条件が変わりました",
+  waiting: "返事待ち", accepted: "マッチ成立", partial: "一部対応できません", declined: "今回は対応できません", stale: "条件が変わりました", completed: "取引完了",
 };
+/** 1農家でも「対応できません」のとき（自動で組み直しはしない） */
+export const TRADE_DECLINED = "1農家が対応できないため、この仕入れ案では取引できません。仕入れ案を作り直してください。";
+/** 受け取り完了の前の確認 */
+export const RECEIVE_CONFIRM = "商品を実際に受け取りましたか？完了するとこの取引は完了済みになります。";
 
 /** マッチ成立の近くに必ず添える文 */
 export const NOT_AN_ORDER = "これは注文確定ではありません。在庫の確保も行われません。";
 /** 在庫・条件が変わって、相談をもう一度確認する必要があるときの文 */
 export const STALE_RECHECK = "在庫や条件が変わったため、現在の条件でもう一度確認が必要です。仕入れ案を計算し直して、改めて相談してください。";
 
-/** 規則：条件が変わった農家が1つでもあれば「条件が変わりました」→ 全員が対応できない → 一部が対応できない → 全員対応できる → それ以外は返事待ち */
-export function consultationStatus(rows: Pick<Confirmation, "status">[]): ConsultationStatus {
+/** 規則：条件が変わった農家が1つでもあれば「条件が変わりました」→ 全員が対応できない → 一部が対応できない → 全員対応できる（受け取り完了なら取引完了）→ それ以外は返事待ち */
+export function consultationStatus(rows: Pick<Confirmation, "status" | "receivedAt">[]): ConsultationStatus {
   if (rows.some((r) => r.status === "stale")) return "stale";
+  if (rows.length > 0 && rows.every((r) => r.status === "approved" && r.receivedAt)) return "completed";
   if (rows.length > 0 && rows.every((r) => r.status === "rejected")) return "declined";
   if (rows.some((r) => r.status === "rejected")) return "partial";
   if (rows.length > 0 && rows.every((r) => r.status === "approved")) return "accepted";
@@ -61,7 +72,7 @@ export function consultationStatus(rows: Pick<Confirmation, "status">[]): Consul
  * マッチ成立：仕入れ案に含まれる全農家が「対応できます」で、条件が変わっていない（consultationStatus が accepted）ときだけ。
  * 一部の農家だけの返事は「成立」とまとめず、農家ごとの状態で見せる。
  */
-export const isMatched = (rows: Pick<Confirmation, "status">[]) => rows.length > 0 && consultationStatus(rows) === "accepted";
+export const isMatched = (rows: Pick<Confirmation, "status" | "receivedAt">[]) => rows.length > 0 && consultationStatus(rows) === "accepted";
 
 /** 「A農園・B農園」（同じ農家は1回だけ） */
 export const farmNames = (rows: Pick<Confirmation, "producerName">[]) => [...new Set(rows.map((r) => r.producerName))].join("・");
@@ -104,21 +115,24 @@ export function groupConsultations(rows: Confirmation[]): Consultation[] {
 
 /**
  * 相談の進み具合（既存の依頼の状態だけから決める。新しい状態は保存しない）。
- * 相談送信済み → 生産者回答待ち → マッチ成立 → 受け渡し待ち。取引の完了は扱わない。
+ * 相談送信済み → 生産者回答待ち → マッチ成立 → 受け渡し待ち → 取引完了（受け取り完了の日時があるとき）。
  * 条件が変わった・対応できない農家がいる相談は、この流れでは表さない（null。画面は従来どおり状態のタグと案内を出す）。
  */
-export type ProgressStep = { key: "sent" | "answer" | "matched" | "handover"; label: string; state: "done" | "current" | "todo" };
+export type ProgressStep = { key: "sent" | "answer" | "matched" | "handover" | "completed"; label: string; state: "done" | "current" | "todo" };
 export function consultationProgress(c: Pick<Consultation, "status" | "farms" | "pickupStartAt">, now: Date): { steps: ProgressStep[]; current: string } | null {
-  if (c.status !== "waiting" && c.status !== "accepted") return null;
-  const matched = c.status === "accepted";
+  if (c.status !== "waiting" && c.status !== "accepted" && c.status !== "completed") return null;
+  const completed = c.status === "completed";
+  const matched = c.status === "accepted" || completed;
   const answered = c.farms.filter((f) => f.status !== "pending").length;
   const pickupPassed = now.getTime() >= new Date(c.pickupStartAt).getTime();
   const steps: ProgressStep[] = [
     { key: "sent", label: "相談送信済み", state: "done" },
     { key: "answer", label: "生産者回答待ち", state: matched ? "done" : "current" },
     { key: "matched", label: "マッチ成立", state: matched ? "done" : "todo" },
-    { key: "handover", label: "受け渡し待ち", state: matched ? "current" : "todo" },
+    { key: "handover", label: "受け渡し待ち", state: completed ? "done" : matched ? "current" : "todo" },
+    { key: "completed", label: "取引完了", state: completed ? "done" : "todo" },
   ];
+  if (completed) return { steps, current: "取引完了" };
   const current = !matched
     ? `生産者回答待ち（${answered}/${c.farms.length}農家が回答済み）`
     : pickupPassed ? "受け渡し待ち（受け渡しの予定日時を過ぎています）" : "受け渡し待ち";

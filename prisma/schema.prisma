@@ -48,6 +48,7 @@ model User {
   restaurant       Restaurant?
   relationships    Relationship[]
   approvalRequests ApprovalRequest[]
+  tradeMessages    TradeMessage[]
 
   @@map("users")
 }
@@ -396,11 +397,28 @@ model ApprovalRequest {
   status          ApprovalStatus @default(pending)
   createdAt       DateTime       @default(now())
   respondedAt     DateTime?
+  // 受け取り完了（＝取引完了）。同じ仕入れ案の「対応できます」の行すべてに、飲食店が1回の操作で同じ時刻を入れる
+  receivedAt      DateTime?
+  messages        TradeMessage[]
 
   @@unique([restaurantId, supplyId, planFingerprint])
   @@index([producerId, createdAt])
   @@index([restaurantId, planFingerprint])
   @@map("approval_requests")
+}
+
+// 取引のやり取り（テキストだけ）。相談1件（飲食店 × 生産者 × 仕入れ案）に紐づく。読み書きはその飲食店と生産者だけ
+model TradeMessage {
+  id                String          @id @default(cuid())
+  approvalRequestId String
+  approvalRequest   ApprovalRequest @relation(fields: [approvalRequestId], references: [id])
+  senderUserId      String
+  sender            User            @relation(fields: [senderUserId], references: [id])
+  body              String // 1〜1000文字（前後の空白を除いたもの）
+  createdAt         DateTime        @default(now())
+
+  @@index([approvalRequestId, createdAt])
+  @@map("trade_messages")
 }
 
 // ============================================================

@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlanRequest, PlanSlot, PlanSupply } from "../src/lib/allocate";
 
 // Exercise the real authorization, recomputation and response handlers against a memory DB.
-const db = vi.hoisted(() => ({ rows: [] as any[], inputs: {} as any, version: "v1", now: new Date("2026-10-22T03:00:00Z"), users: new Map<string, any>(), contacts: new Map<string, any>() }));
+const db = vi.hoisted(() => ({ rows: [] as any[], messages: [] as any[], inputs: {} as any, version: "v1", now: new Date("2026-10-22T03:00:00Z"), users: new Map<string, any>(), contacts: new Map<string, any>() }));
 vi.mock("./db.js", () => {
   const producer = {
     findUnique: async ({ where }: any) => db.contacts.get(where.id) ?? null,
@@ -17,12 +17,18 @@ vi.mock("./db.js", () => {
     },
   };
   const match = (r: any, where: any) => Object.entries(where).every(([key, value]) => r[key] === value);
+  // 取引のやり取り（作成と、相談ごとの一覧だけ）
+  const tradeMessage = {
+    findMany: async ({ where, take }: any) => db.messages.filter(m => m.approvalRequestId === where.approvalRequestId)
+      .sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id)).slice(0, take),
+    create: async ({ data }: any) => { const m = { ...data, id: `m-${String(db.messages.length + 1).padStart(3, "0")}`, createdAt: new Date(Date.now()) }; db.messages.push(m); return m; },
+  };
   const tx: any = {
-    producer,
+    producer, tradeMessage,
     item: { findUnique: async () => ({ name: "トマト" }) },
     approvalRequest: {
       createMany: async ({ data }: any) => {
-        for (const row of data) if (!db.rows.some(r => r.restaurantId === row.restaurantId && r.supplyId === row.supplyId && r.planFingerprint === row.planFingerprint)) db.rows.push({ ...row, id: `req-${db.rows.length + 1}`, status: "pending", createdAt: new Date(), respondedAt: null });
+        for (const row of data) if (!db.rows.some(r => r.restaurantId === row.restaurantId && r.supplyId === row.supplyId && r.planFingerprint === row.planFingerprint)) db.rows.push({ ...row, id: `req-${db.rows.length + 1}`, status: "pending", createdAt: new Date(), respondedAt: null, receivedAt: null });
       },
       findUnique: async ({ where }: any) => db.rows.find(r => r.id === where.id) ?? null,
       findMany: async ({ where }: any) => db.rows.filter(r => match(r, where)).map(r => ({ ...r, restaurant: { displayName: r.restaurantId }, producer: { farmName: r.producerId } })),
@@ -50,6 +56,10 @@ const { approvals, parseContact } = await import("./approvals");
 const api = await import("./routes/approvals/index");
 const one = await import("./routes/approvals/[id]");
 const { overallConfirmation } = await import("../src/lib/approvals");
+const msgs = await import("./routes/approvals/messages");
+const received = await import("./routes/approvals/received");
+const { trades } = await import("./approvals");
+const { TRADE_DECLINED, consultationStatus } = await import("../src/lib/approvals");
 
 const request: PlanRequest = {
   itemId: "tomato", varietyId: null, quantityKg: 10, desiredDate: "2026-10-23", budgetYen: null,
@@ -58,7 +68,7 @@ const request: PlanRequest = {
 };
 beforeEach(() => {
   process.env.SESSION_SECRET = "test-secret-0123456789-abcdefghijklmnop";
-  db.rows = []; db.version = "v1"; db.now = new Date("2026-10-22T03:00:00Z"); db.users.clear(); db.contacts.clear();
+  db.rows = []; db.messages = []; db.version = "v1"; db.now = new Date("2026-10-22T03:00:00Z"); db.users.clear(); db.contacts.clear();
   for (const id of ["r1", "r2", "a", "b"]) {
     const producer = ["a", "b"].includes(id);
     db.users.set(id, { id, role: producer ? "producer" : "restaurant", displayName: id, producer: producer ? { id: `p-${id}`, farmName: id, originPrefecture: "大阪府" } : null, onboarded: true });
@@ -181,5 +191,122 @@ describe("承認・連絡先の権限と整合性", () => {
     expect(db.contacts.get("p-b").contactEmail).toBe("b@example.invalid");
     expect(() => parseContact({ contactPhone: "javascript:alert(1)", contactEmail: "" })).toThrow();
     expect(() => parseContact({ contactPhone: "", contactEmail: "a@example.invalid\r\nBcc:x@y.com" })).toThrow();
+  });
+});
+
+describe("取引：成立までは今までどおり計算し直し、全農家が「対応できます」になったら固定する", () => {
+  const approveAll = async (rows: any[]) => { for (const row of rows) await approvals.respond(db.users.get(row.producerName.replace("p-", "")), row.id, "approved"); };
+  const change = () => { db.version = "v2"; db.inputs.supplies[0].priceYenPerKg = 999; db.inputs.supplies[0].availableKg = 1; db.inputs.supplies[0].version++; };
+
+  it("1. 返事待ちの間に出品が変わる → 今までどおり「条件が変わりました」", async () => {
+    await create(); change();
+    expect((await approvals.list(db.users.get("r1"))).every(r => r.status === "stale" && !r.established)).toBe(true);
+  });
+  it("2. 1農家だけ「対応できます」、ほかが返事待ちのときに出品が変わる → stale（まだ成立前）", async () => {
+    const rows = await create(); await approvals.respond(db.users.get("a"), rows[0].id, "approved"); change();
+    expect((await approvals.list(db.users.get("r1"))).every(r => r.status === "stale")).toBe(true);
+  });
+  it("3・4. 全農家が「対応できます」→ 取引成立。そのあと価格・数量・在庫の版・締切が変わっても、保存した内容で固定（連絡先も見られる）", async () => {
+    const rows = await create(); await approveAll(rows);
+    const before = await approvals.list(db.users.get("r1"));
+    expect(before.every(r => r.status === "approved" && r.established)).toBe(true);
+    expect(overallConfirmation(before)).toBe("マッチ成立");
+    change(); db.now = new Date("2026-10-22T09:00:00Z"); // 締切（08:00Z）も過ぎた
+    const after = await approvals.list(db.users.get("r1"));
+    expect(after.map(r => [r.status, r.quantityKg, r.priceYenPerKg, r.subtotalYen, r.pickupPlace])).toEqual(before.map(r => [r.status, r.quantityKg, r.priceYenPerKg, r.subtotalYen, r.pickupPlace]));
+    expect(overallConfirmation(after)).toBe("マッチ成立");
+    expect((await approvals.list(db.users.get("a")))[0]).toMatchObject({ status: "approved", established: true });
+    await expect(approvals.contact(db.users.get("r1"), rows[0].id)).resolves.toMatchObject({ contactEmail: "a@example.invalid" });
+    expect(db.rows.map(r => r.priceYenPerKg)).toEqual([600, 600]); // 保存した値は変えない
+  });
+});
+
+describe("取引のやり取り（テキストだけ）", () => {
+  let clock = Date.UTC(2026, 9, 22, 3, 0, 0);
+  beforeEach(() => { vi.useFakeTimers({ toFake: ["Date"] }); });
+  afterEach(() => { vi.useRealTimers(); });
+  const tick = () => vi.setSystemTime(new Date((clock += 2000))); // 1秒の連打防止に掛からないように
+  const send = async (who: string, id: string, text: string) => { tick(); return msgs.POST(req(who, "POST", { body: text }, `/api/approvals/${id}/messages`)); };
+  const read = async (who: string | null, id: string) => msgs.GET(req(who, "GET", undefined, `/api/approvals/${id}/messages`));
+  const established = async () => { const rows = await create(); for (const r of rows) await approvals.respond(db.users.get(r.producerName.replace("p-", "")), r.id, "approved"); return rows; };
+
+  it("5. 全農家が「対応できます」になるまでは、やり取りできない（409）", async () => {
+    const rows = await create();
+    expect((await read("r1", rows[0].id)).status).toBe(409);
+    await approvals.respond(db.users.get("a"), rows[0].id, "approved");
+    expect((await send("r1", rows[0].id, "よろしくお願いします")).status).toBe(409);
+    expect((await read("a", rows[0].id)).status).toBe(409);
+    expect(db.messages).toHaveLength(0);
+  });
+  it("6・7. 成立後は飲食店⇄その農家だけ。ほかの店・ほかの農家は読めず書けない。ほかの農家とのやり取りは混ざらない", async () => {
+    const [a, b] = await established();
+    expect((await send("r1", a.id, "  当日はよろしくお願いします  ")).status).toBe(201);
+    expect((await send("a", a.id, "こちらこそ、よろしくお願いします")).status).toBe(201);
+    expect((await send("r1", b.id, "B農園さん宛て")).status).toBe(201);
+    const ra = await (await read("r1", a.id)).json();
+    expect(ra.messages.map((m: any) => [m.body, m.sender, m.senderName, m.mine])).toEqual([
+      ["当日はよろしくお願いします", "restaurant", "r1", true], ["こちらこそ、よろしくお願いします", "producer", "p-a", false],
+    ]);
+    const aa = await (await read("a", a.id)).json();
+    expect(aa.messages.map((m: any) => m.mine)).toEqual([false, true]);
+    expect(JSON.stringify(aa)).not.toContain("B農園さん宛て");
+    expect((await read("b", a.id)).status).toBe(404);
+    expect((await send("b", a.id, "割り込み")).status).toBe(404);
+    expect((await read("r2", a.id)).status).toBe(404);
+    expect((await read(null, a.id)).status).toBe(401);
+    const bb = await (await read("b", b.id)).json();
+    expect(bb.messages.map((m: any) => m.body)).toEqual(["B農園さん宛て"]);
+  });
+  it("本文：前後の空白を除いて1〜1000文字。空・長すぎは送れない。外部サイトからは送れない。連打は1秒に1通まで", async () => {
+    const [a] = await established();
+    expect((await send("r1", a.id, "   ")).status).toBe(400);
+    expect((await send("r1", a.id, "あ".repeat(1001))).status).toBe(400);
+    expect((await send("r1", a.id, "あ".repeat(1000))).status).toBe(201);
+    const external = req("r1", "POST", { body: "x" }, `/api/approvals/${a.id}/messages`); external.headers.set("origin", "https://elsewhere.invalid");
+    tick(); expect((await msgs.POST(external)).status).toBe(403);
+    tick(); expect((await msgs.POST(req("r1", "POST", { body: "1通目" }, `/api/approvals/${a.id}/messages`))).status).toBe(201);
+    expect((await msgs.POST(req("r1", "POST", { body: "すぐ2通目" }, `/api/approvals/${a.id}/messages`))).status).toBe(429);
+    expect(db.messages).toHaveLength(2);
+  });
+});
+
+describe("受け取り完了（仕入れ案ごとに1回）", () => {
+  const done = (who: string, fingerprint: unknown) => received.POST(req(who, "POST", { fingerprint }, "/api/approvals/received"));
+
+  it("8. 1農家でも「対応できません」なら完了できない（その旨の文）。返事待ちでも完了できない", async () => {
+    const rows = await create();
+    expect((await done("r1", rows[0].planFingerprint)).status).toBe(409);
+    await approvals.respond(db.users.get("a"), rows[0].id, "approved");
+    await approvals.respond(db.users.get("b"), rows[1].id, "rejected");
+    const r = await done("r1", rows[0].planFingerprint);
+    expect(r.status).toBe(409);
+    expect((await r.json()).error).toBe(TRADE_DECLINED);
+    expect(db.rows.every(x => x.receivedAt === null)).toBe(true);
+  });
+  it("9・10・11. 1回で同じ仕入れ案の全農家に同じ receivedAt。もう一度押しても変わらない。完了後は「取引完了」、やり取りは読むだけ", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date("2026-10-22T04:00:00Z"));
+    const rows = await create();
+    for (const r of rows) await approvals.respond(db.users.get(r.producerName.replace("p-", "")), r.id, "approved");
+    expect((await done("a", rows[0].planFingerprint)).status).toBe(403); // 生産者は押せない
+    expect((await done("r2", rows[0].planFingerprint)).status).toBe(404); // ほかの店の相談は見つからない
+    expect((await done("r1", "not-a-fingerprint")).status).toBe(400);
+    const first = await done("r1", rows[0].planFingerprint);
+    expect(first.status).toBe(200);
+    const at = db.rows[0].receivedAt;
+    expect(at).toBeInstanceOf(Date);
+    expect(db.rows.every(x => x.receivedAt.getTime() === at.getTime())).toBe(true);
+    vi.setSystemTime(new Date("2026-10-22T05:00:00Z"));
+    const second = await done("r1", rows[0].planFingerprint);
+    expect(second.status).toBe(200);
+    expect(db.rows.every(x => x.receivedAt.getTime() === at.getTime())).toBe(true);
+    const list = await approvals.list(db.users.get("r1"));
+    expect(consultationStatus(list)).toBe("completed");
+    expect(list.every(r => r.receivedAt === at.toISOString())).toBe(true);
+    expect((await approvals.list(db.users.get("a")))[0].receivedAt).toBe(at.toISOString());
+    vi.setSystemTime(new Date("2026-10-22T05:00:10Z"));
+    const after = await msgs.POST(req("r1", "POST", { body: "完了後" }, `/api/approvals/${rows[0].id}/messages`));
+    expect(after.status).toBe(409);
+    expect((await (await msgs.GET(req("a", "GET", undefined, `/api/approvals/${rows[0].id}/messages`))).json()).completed).toBe(true);
+    vi.useRealTimers();
   });
 });
