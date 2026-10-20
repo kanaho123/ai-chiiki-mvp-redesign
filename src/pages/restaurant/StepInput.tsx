@@ -14,7 +14,7 @@ const HINTS: { icon: IconName; word: string; label: string }[] = [
   { icon: "calendar", word: "10/23 午前", label: "受け取り" },
 ];
 // 一般向けの環境：例は1つの例文だけ（チェックの表示はしない）。押すと例文全体が入力欄に入る
-export const EXAMPLE_TEXT = "トマト10kg 大阪産 10/23午前";
+export const EXAMPLE_TEXT = "トマト10kg 大阪産 10/27午前";
 
 export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable, error, emptyHint, general = false }: {
   text: string; onText: (t: string) => void; onExtract: () => void; onManual: () => void; busy: boolean;

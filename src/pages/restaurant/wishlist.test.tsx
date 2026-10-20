@@ -115,13 +115,13 @@ const kurokyabetsu = {
 };
 
 describe("STEP 1（一般向けの環境）：入力例は1つだけ。一覧・✓の表示は出さない", () => {
-  it("「入力例：トマト10kg 大阪産 10/23午前」と「例文を入力」（押すと例文がそのまま入る）。食材の一覧はない", async () => {
+  it("「入力例：トマト10kg 大阪産 10/27午前」と「例文を入力」（押すと例文がそのまま入る）。食材の一覧はない", async () => {
     await open();
-    expect(text()).toContain("入力例：トマト10kg 大阪産 10/23午前");
+    expect(text()).toContain("入力例：トマト10kg 大阪産 10/27午前");
     expect(el.querySelector(".hint-tiles")).toBeNull();
     expect(el.querySelector(".wish-section, .wish-row")).toBeNull();
     await click(button("例文を入力"));
-    expect(el.querySelector("textarea")!.value).toBe("トマト10kg 大阪産 10/23午前");
+    expect(el.querySelector("textarea")!.value).toBe("トマト10kg 大阪産 10/27午前");
     expect(calls.filter((c) => c.method !== "GET")).toEqual([]); // 入れるだけで AI は呼ばない
   });
 });
