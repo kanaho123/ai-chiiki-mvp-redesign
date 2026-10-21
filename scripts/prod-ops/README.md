@@ -120,3 +120,18 @@ npx tsx scripts/prod-ops/general-demo-farm-login.mts inspect --target production
 npx tsx scripts/prod-ops/general-demo-farm-login.mts set --target production --ids <data>/<日時>.ids.json --confirm GENERAL_PRODUCTION_DEMO_FARM_A_LOGIN_SET
 npx tsx scripts/prod-ops/general-demo-farm-login.mts rollback --target production --ids <data>/<日時>.ids.json --before <data>/<日時>.farm-a-login.before.json --confirm GENERAL_PRODUCTION_DEMO_FARM_A_LOGIN_ROLLBACK
 ```
+
+## デモ A農園（架空）のプロフィールを、通常の登録と同じ状態に補う（general-demo-farm-profile.mts）
+
+用途：デモの登録データでは空のままだった4項目を、通常の登録なら入っている値で補い、マイページの「あなたの販売スタイル」とプロフィールの保存を通常の生産者と同じにするため。
+
+- 変えるのは producers の A農園の1行の、生産のスタイル（`many_small`）・飲食店との直接取引の経験（`sometimes`）・対応できること（`small_lot`・`direct_talk`）・今の販売先（`direct_store`）だけです（updatedAt は自動で変わります）。市区町村・主な作物・ユーザー・出品・場所・受け渡しの回・相談・やり取りは変えません。
+- set・rollback は1つのトランザクションで、全テーブルの件数と対象外のデータ（A農園のユーザー・4項目以外の列・主な作物・出品・場所・回・相談・やり取り）の指紋が変わらないことを確かめ、変わったら取り消します。
+- set は変更前の値を `<日時>.farm-a-profile.before.json`（記録の保存先・Git の外）に保存します。すでに設定済みなら何もしません。
+- rollback は4項目と updatedAt を変更前に戻します。このツールで設定した値のままのときだけ戻し、2回目は何もしません。
+
+```
+npx tsx scripts/prod-ops/general-demo-farm-profile.mts inspect --target production --ids <data>/<日時>.ids.json
+npx tsx scripts/prod-ops/general-demo-farm-profile.mts set --target production --ids <data>/<日時>.ids.json --confirm GENERAL_PRODUCTION_DEMO_FARM_A_PROFILE_SET
+npx tsx scripts/prod-ops/general-demo-farm-profile.mts rollback --target production --ids <data>/<日時>.ids.json --before <data>/<日時>.farm-a-profile.before.json --confirm GENERAL_PRODUCTION_DEMO_FARM_A_PROFILE_ROLLBACK
+```
