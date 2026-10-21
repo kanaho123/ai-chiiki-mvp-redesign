@@ -7,7 +7,6 @@ import {
   type Consultation, type Contact,
 } from "../../lib/approvals";
 import { confirmationApi, friendlyError } from "../../lib/confirmation-api";
-import { MatchBanner } from "../restaurant/MatchBanner";
 import { ProgressSteps } from "../restaurant/ProgressSteps";
 import { PATHS } from "../../routes/paths";
 import { useMe } from "../../routes/session";
@@ -19,7 +18,8 @@ import { useConfirmations, whenText, yen } from "./data";
 // 飲食店のホーム・相談一覧・相談の詳細。
 // 相談＝同じ仕入れ案で生産者に確認を依頼したもの。状態は「返事待ち／マッチ成立／一部対応できません／今回は対応できません」で表す。
 // マッチ成立は全農家が「対応できます」のときだけ。それまでは農家ごとの状態で見せる。
-// 相談の詳細は取引ページを兼ねる：マッチ成立（取引の成立）後は農家ごとのやり取りと「受け取り完了」（仕入れ案ごとに1回）、完了後は「取引が完了しました」。
+// 相談の詳細は取引ページを兼ねる：マッチ成立（取引の成立）後は「生産者とのやり取り」に農家ごとの「トークする」（飲食店×農家の1対1）と「受け取り完了」（仕入れ案ごとに1回）、完了後は「取引が完了しました」。
+// 説明文は増やさず、状態・進み具合・ボタンで伝える。電話・メールは「連絡先を見る」を押したときだけ出す補助の手段。
 
 const consultationPath = (id: string) => `${PATHS.restaurant.consultations}/${id}`;
 
@@ -118,6 +118,42 @@ export function RestaurantConsultations() {
   );
 }
 
+/** 電話・メール（「連絡先を見る」で開いたときだけ。急ぎのときなどの補助） */
+function ContactLinks({ contact }: { contact: Contact }) {
+  return (
+    <div className="contact-details">
+      {contact.contactPhone && <a href={`tel:${contact.contactPhone.replace(/[^+\d]/g, "")}`}>電話：{contact.contactPhone}</a>}
+      {contact.contactEmail && <a href={`mailto:${encodeURIComponent(contact.contactEmail)}`}>メール：{contact.contactEmail}</a>}
+      {!contact.contactPhone && !contact.contactEmail && <span className="muted">連絡先が未登録です</span>}
+    </div>
+  );
+}
+
+/** 成立後の1農家：数量・金額、「トークする」（この農家との1対1のやり取り）、補助の「連絡先を見る」 */
+function TalkRow({ f, completed, contact, contactBusy, onContact }: {
+  f: Consultation["farms"][number]; completed: boolean; contact: Contact | undefined; contactBusy: boolean; onContact: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <li className="talk-row">
+      <div className="talk-head"><b>{f.producerName}</b><span className="talk-amount">{f.quantityKg}kg・{yen(f.subtotalYen)}</span></div>
+      {open ? (
+        <>
+          <TradeChat requestId={f.id} partnerName={f.producerName} completed={completed} showTitle={false} />
+          <button type="button" className="text-btn talk-close" onClick={() => setOpen(false)}>トークを閉じる</button>
+        </>
+      ) : (
+        <button type="button" className="btn-primary btn-block talk-open" onClick={() => setOpen(true)} aria-label={`${f.producerName}と${completed ? "のトークを見る" : "トークする"}`}>
+          <Icon name="chat" />{completed ? "トークを見る" : "トークする"}
+        </button>
+      )}
+      {contact ? <ContactLinks contact={contact} /> : (
+        <button type="button" className="text-btn talk-contact" disabled={contactBusy} aria-busy={contactBusy} onClick={onContact} aria-label={`${f.producerName}の連絡先を見る`}>連絡先を見る</button>
+      )}
+    </li>
+  );
+}
+
 export function RestaurantConsultationDetail() {
   const id = useParams().id ?? "";
   const { data, error, reload } = useConfirmations();
@@ -159,6 +195,8 @@ export function RestaurantConsultationDetail() {
     }
   }
 
+  // 成立後（受け渡し待ち・取引完了）：農家ごとのトークが主な連絡手段。成立前：農家ごとの返事の状態
+  const traded = c ? isMatched(c.farms) || c.status === "completed" : false;
   return (
     <main className="screen">
       <Link className="text-btn link-btn back-link" to={PATHS.restaurant.consultations}><Icon name="chevronRight" style={{ transform: "rotate(180deg)" }} />相談の一覧へ</Link>
@@ -167,11 +205,11 @@ export function RestaurantConsultationDetail() {
       {c === null && <p className="empty-note">この相談は見つかりませんでした。</p>}
       {c && (
         <>
-          <div className="title-block">
-            <span className="eyebrow">相談</span>
-            <h1 className="display">{c.itemName} {c.totalKg}kg</h1>
-            <p className="consult-when">{whenText(c.pickupStartAt, c.pickupEndAt)}・{c.pickupPlace}</p>
+          <div className="title-block consult-title-block">
             <p><StatusTag status={c.status} /></p>
+            <h1 className="display">{c.itemName} {c.totalKg}kg</h1>
+            <p className="consult-place">受け取り：{c.pickupPlace}</p>
+            <p className="consult-when">{whenText(c.pickupStartAt, c.pickupEndAt)}</p>
           </div>
           <ProgressSteps farms={c.farms} />
           {c.status === "completed" && (
@@ -186,45 +224,38 @@ export function RestaurantConsultationDetail() {
               </dl>
             </section>
           )}
-          {isMatched(c.farms)
-            ? <MatchBanner farms={c.farms} onContactError={reload} />
-            : c.status !== "completed" && <p className="hint">「対応できます」は注文の確定ではありません。受け渡しの詳細や最終確認は、農家と直接相談して決めてください。</p>}
           {c.status === "stale" && <div className="alert warn" role="status"><Icon name="alert" />{STALE_RECHECK}</div>}
           {(c.status === "partial" || c.status === "declined") && <div className="alert warn" role="status"><Icon name="alert" />{TRADE_DECLINED}</div>}
-          <ul className="farm-list">
-            {c.farms.map((f) => (
-              <li key={f.id} className={`farm-row farm-${f.status}`}>
-                <div className="farm-head"><b>{f.producerName}</b><span className={`state-tag state-farm-${f.status}`}>{confirmationLabel[f.status]}</span></div>
-                <p className="farm-detail">{f.quantityKg}kg・{yen(f.priceYenPerKg)}/kg・小計 {yen(f.subtotalYen)}（税込・受け渡し費用は別）</p>
-                {f.status === "approved" && !contacts[f.id] && (
-                  <button type="button" className="btn-secondary" disabled={busy !== null} aria-busy={busy === f.id} onClick={() => showContact(f.id)}>
-                    <Icon name="info" />連絡先を見る
-                  </button>
-                )}
-                {contacts[f.id] && (
-                  <div className="contact-details">
-                    {contacts[f.id].contactPhone && <a href={`tel:${contacts[f.id].contactPhone!.replace(/[^+\d]/g, "")}`}>電話：{contacts[f.id].contactPhone}</a>}
-                    {contacts[f.id].contactEmail && <a href={`mailto:${encodeURIComponent(contacts[f.id].contactEmail!)}`}>メール：{contacts[f.id].contactEmail}</a>}
-                  </div>
-                )}
-                {/* 取引の成立後：この農家とのやり取り（1農家なら最初から開く） */}
-                {(isMatched(c.farms) || c.status === "completed") && (
-                  <details className="trade-chat-wrap" open={c.farms.length === 1}>
-                    <summary>{f.producerName}とのやり取り<Icon name="chevronDown" /></summary>
-                    <TradeChat requestId={f.id} partnerName={f.producerName} completed={c.status === "completed"} showTitle={false} />
-                  </details>
-                )}
-              </li>
-            ))}
-          </ul>
+          {traded ? (
+            <section aria-labelledby="talk-title">
+              <h2 className="section-title" id="talk-title">生産者とのやり取り</h2>
+              <ul className="talk-list">
+                {c.farms.map((f) => (
+                  <TalkRow key={f.id} f={f} completed={c.status === "completed"} contact={contacts[f.id]} contactBusy={busy === f.id} onContact={() => void showContact(f.id)} />
+                ))}
+              </ul>
+            </section>
+          ) : (
+            <ul className="farm-list">
+              {c.farms.map((f) => (
+                <li key={f.id} className={`farm-row farm-${f.status}`}>
+                  <div className="farm-head"><b>{f.producerName}</b><span className={`state-tag state-farm-${f.status}`}>{confirmationLabel[f.status]}</span></div>
+                  <p className="farm-detail">{f.quantityKg}kg・{yen(f.priceYenPerKg)}/kg・{yen(f.subtotalYen)}</p>
+                  {f.status === "approved" && (contacts[f.id] ? <ContactLinks contact={contacts[f.id]} /> : (
+                    <button type="button" className="text-btn talk-contact" disabled={busy !== null} aria-busy={busy === f.id} onClick={() => void showContact(f.id)}>連絡先を見る</button>
+                  ))}
+                </li>
+              ))}
+            </ul>
+          )}
           {contactError && <div className="alert bad" role="alert"><Icon name="alert" />{contactError}</div>}
-          <p className="hint">商品代の合計 {yen(c.subtotalYen)}（税込・受け渡し費用は別）</p>
+          <p className="consult-total">商品代の合計 <b>{yen(c.subtotalYen)}</b>（税込・受け渡し費用は別）</p>
           {isMatched(c.farms) && (
             <section className="receive-box" aria-labelledby="receive-title">
               <h2 className="section-title" id="receive-title">受け取り</h2>
-              <p className="hint">商品を受け取ったら、この仕入れ案の取引をまとめて完了にします（農家ごとに押す必要はありません）。</p>
+              <p className="hint">受け取ったら、全農家分をまとめて完了にします。</p>
               {!confirming ? (
-                <button type="button" className="btn-primary btn-block" onClick={() => { setReceiveError(null); setConfirming(true); }}><Icon name="check" />受け取り完了</button>
+                <button type="button" className="btn-secondary btn-block" onClick={() => { setReceiveError(null); setConfirming(true); }}><Icon name="check" />受け取り完了</button>
               ) : (
                 <div className="receive-confirm" role="alertdialog" aria-labelledby="receive-q">
                   <p id="receive-q"><b>{RECEIVE_CONFIRM}</b></p>

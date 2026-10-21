@@ -709,13 +709,6 @@ h1, h2, h3 { letter-spacing: -0.02em; }
 .match-banner p { margin: 0; line-height: 1.6; }
 .match-title { font-size: 26px; font-weight: 800; line-height: 1.3; }
 .match-text { font-size: 17px; font-weight: 700; color: var(--color-text, #1f1f1f); overflow-wrap: anywhere; }
-.match-note { font-size: 15px; font-weight: 700; padding: 10px 12px; border-radius: var(--r-input); background: var(--color-page, #fff); color: var(--color-text, #1f1f1f); }
-.match-banner .hint { color: var(--color-text, #1f1f1f); }
-.deal-contacts { list-style: none; padding: 0; margin: 0; display: grid; gap: 16px; }
-.deal-farm { display: grid; gap: 10px; min-width: 0; padding-top: 12px; border-top: 1px solid rgba(0, 0, 0, .12); }
-.deal-farm-name { font-size: 17px; color: var(--color-text, #1f1f1f); }
-.deal-farm a { overflow-wrap: anywhere; text-align: center; }
-.deal-address { font-size: 15px; color: var(--color-text, #1f1f1f); overflow-wrap: anywhere; }
 @media (max-width: 480px) { .confirmation-panel { padding: 18px; } .confirmation-actions > button { width: 100%; } }
 
 /* ── 画面の枠（Phase 2）：下部ナビ・ログイン前の画面・最小の各画面 ─────────────
@@ -853,6 +846,18 @@ legend.label { padding: 0; margin-bottom: 8px; width: 100%; }
 .farm-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .farm-head b { font-size: 17px; }
 .farm-detail { color: var(--color-muted); font-size: 15px; }
+/* 相談の詳細：受け取りの場所と日時・合計、成立後の「生産者とのやり取り」（農家ごとの「トークする」が主、連絡先は補助） */
+.consult-title-block p { margin: 0; }
+.consult-place { font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
+.consult-total { margin: 0; color: var(--color-muted); font-size: 15px; }
+.consult-total b { color: var(--color-text); font-size: 17px; }
+.talk-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.talk-row { display: grid; gap: 8px; padding: 14px; border: 1.5px solid var(--color-line); border-radius: var(--r-input); background: var(--color-page); min-width: 0; }
+.talk-head { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 8px; flex-wrap: wrap; }
+.talk-head b { font-size: 17px; overflow-wrap: anywhere; }
+.talk-amount { color: var(--color-muted); font-size: 15px; font-variant-numeric: tabular-nums; }
+.talk-contact, .talk-close { justify-self: start; margin-left: -12px; font-size: 15px; }
+.farm-row .contact-details, .talk-row .contact-details { gap: 4px; }
 .request-what { font-size: 18px; font-weight: 800; }
 .request-actions { display: grid; gap: 8px; margin-top: 4px; }
 .request-list.compact .farm-row { padding: 10px 0; }
@@ -918,14 +923,6 @@ a.inline-link { display: inline-flex; align-items: center; min-height: var(--tap
 .request-conds li { display: inline-flex; gap: 6px; align-items: center; padding: 3px 10px; border-radius: var(--r-tag); background: var(--color-sunken); font-size: 14px; }
 .request-conds b { font-weight: 800; }
 
-/* マッチ成立：農家ごとの内訳と日時 */
-.match-farms { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-.match-farms li { display: grid; gap: 2px; padding: 10px 12px; border-radius: var(--r-input); background: var(--color-page, #fff); color: var(--color-text, #1f1f1f); font-size: 15px; overflow-wrap: anywhere; }
-.match-farms b { font-size: 16px; }
-.match-facts { margin: 0; display: grid; gap: 4px; color: var(--color-text, #1f1f1f); font-size: 15px; }
-.match-facts div { display: grid; grid-template-columns: 5em minmax(0, 1fr); gap: 8px; }
-.match-facts dt { font-weight: 700; }
-.match-facts dd { margin: 0; overflow-wrap: anywhere; }
 
 /* 生産者のマイページ：いま出品しているもの */
 .listings-summary { display: grid; gap: 12px; }

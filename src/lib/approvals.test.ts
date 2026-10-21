@@ -91,8 +91,8 @@ describe("マッチ成立（全農家が「対応できます」で、条件が�
     expect(farmNames([...two("approved", "approved"), row({ id: "c", status: "approved" })])).toBe("A農園・B農園");
     expect(matchMessage(two("approved", "approved"))).toBe("A農園・B農園と、数量・価格・受け渡し条件がそろいました");
   });
-  it("今やること：成立 → 取引相談へ、一部だけ → ほかの農家を待つ、一部対応できない → 従来どおり", () => {
-    expect(restaurantTodo(groupConsultations(two("approved", "approved"))).text).toBe("🎉 マッチ成立：A農園・B農園と条件がそろいました。取引相談へ進みましょう（注文確定ではありません）");
+  it("今やること：成立 → やり取りへ、一部だけ → ほかの農家を待つ、一部対応できない → 従来どおり", () => {
+    expect(restaurantTodo(groupConsultations(two("approved", "approved"))).text).toBe("マッチ成立：生産者とやり取りできます");
     expect(restaurantTodo(groupConsultations(two("approved", "pending"))).text).toBe("A農園が「対応できます」と返事をしました。ほかの農家の返事を待っています");
     expect(restaurantTodo(groupConsultations(two("approved", "rejected"))).text).toContain("A農園が「対応できます」と返事をしました。連絡先を確認して");
     expect(restaurantTodo(groupConsultations(two("approved", "stale"))).to).toBe("buy");

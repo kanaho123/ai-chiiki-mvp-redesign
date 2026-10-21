@@ -170,10 +170,10 @@ export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, o
         <section className={`answer ${tone}`} aria-labelledby="answer-title">
           <p className="answer-head" id="answer-title"><Icon name={statusIcon} size={26} strokeWidth={2.6} />{prefix}{headline}</p>
           {sub && <p className="answer-sub">{sub}</p>}
-          {/* マッチ成立（全農家が「対応できます」）のときだけ、スクロールしなくても分かるように上部にも短く出す。詳しい表示は下の「マッチ成立」の欄 */}
+          {/* マッチ成立（全農家が「対応できます」）のときだけ、スクロールしなくても分かるように上部にも短く出す。下の「マッチ成立」の欄（相談の詳細への導線）へ移る */}
           {matched && ok && (
             <button type="button" className="match-jump" onClick={() => document.getElementById("match-title")?.closest(".match-banner")?.scrollIntoView({ block: "start" })}>
-              <span>🎉 マッチ成立</span><span className="match-jump-go">取引相談へ<Icon name="arrowRight" size={18} /></span>
+              <span>マッチ成立</span><span className="match-jump-go">やり取りへ<Icon name="arrowRight" size={18} /></span>
             </button>
           )}
           {hasPlan && (

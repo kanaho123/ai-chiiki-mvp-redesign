@@ -147,7 +147,7 @@ export function restaurantTodo(cs: Consultation[]): { text: string; to: "consult
   const ongoing = cs.filter(isOngoing);
   const matched = ongoing.filter((c) => c.status === "accepted");
   if (matched.length > 0) {
-    return { text: `🎉 マッチ成立：${farmNames(matched.flatMap((c) => c.farms))}と条件がそろいました。取引相談へ進みましょう（注文確定ではありません）`, to: "consultations" };
+    return { text: "マッチ成立：生産者とやり取りできます", to: "consultations" };
   }
   const ready = ongoing.filter((c) => c.farms.some((f) => f.status === "approved"));
   if (ready.length > 0) {

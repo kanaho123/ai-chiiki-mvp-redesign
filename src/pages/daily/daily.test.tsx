@@ -166,11 +166,11 @@ describe("飲食店のホーム", () => {
     expect($(".consult-card .state-tag")?.textContent).toBe("返事待ち");
     expect($(".todo-text")?.textContent).toContain("返事を待っています");
   });
-  it("全農家が対応できる：「マッチ成立」と取引相談への案内を「今やること」に", async () => {
+  it("全農家が対応できる：「今やること」は短く「マッチ成立：生産者とやり取りできます」", async () => {
     requests = [req("a", "approved"), req("b", "approved", { producerName: "B農園" })];
     await open("/restaurant/home");
     expect($(".consult-card .state-tag")?.textContent).toBe("マッチ成立");
-    expect($(".todo-text")?.textContent).toBe("🎉 マッチ成立：A農園・B農園と条件がそろいました。取引相談へ進みましょう（注文確定ではありません）");
+    expect($(".todo-text")?.textContent).toBe("マッチ成立：生産者とやり取りできます");
   });
   it("一部の農家だけ対応できる：成立とは言わず、農家ごとの状態とほかの農家の返事待ち", async () => {
     requests = [req("a", "approved"), req("b", "pending", { producerName: "B農園" })];
@@ -219,13 +219,12 @@ describe("飲食店の相談一覧・詳細", () => {
     expect(calls.filter((c) => /^\/api\/approvals\/./.test(c.url)).map((c) => c.url)).toEqual(["/api/approvals/a"]);
     expect(el.querySelector('.bottom-nav a[aria-current="page"]')?.textContent).toContain("相談");
   });
-  it("詳細：全農家が対応できる相談は「🎉 マッチ成立」と注文確定ではない旨、取引相談へ進む", async () => {
+  it("詳細：全農家が対応できる相談（2農家）は「マッチ成立」と「生産者とのやり取り」：農家ごとに「トークする」。電話・メールは「連絡先を見る」を押したときだけ", async () => {
     requests = [req("a", "approved"), req("b", "approved", { producerName: "B農園" })];
     await open("/restaurant/consultations/fp-1");
-    expect($(".match-banner .match-title")?.textContent).toBe("🎉 マッチ成立");
-    expect($(".match-banner .match-text")?.textContent).toBe("A農園・B農園と、数量・価格・受け渡し条件がそろいました");
-    expect($(".match-banner .match-note")?.textContent).toBe("これは注文確定ではありません。在庫の確保も行われません。");
     expect($("main .state-tag")?.textContent).toBe("マッチ成立");
+    expect($("main h1")?.textContent).toBe("トマト 10kg");
+    expect($(".consult-place")?.textContent).toBe("受け取り：梅田エリア受渡所（仮）");
     // 進み具合：相談送信済み・生産者回答待ち・マッチ成立は済み、いまは受け渡し待ち
     expect([...el.querySelectorAll(".progress-step")].map((s) => `${s.querySelector(".progress-label")?.textContent}:${s.className.replace("progress-step ", "")}`))
       .toEqual(["相談送信済み:done", "生産者回答待ち:done", "マッチ成立:done", "受け渡し待ち:current"]);
@@ -233,22 +232,53 @@ describe("飲食店の相談一覧・詳細", () => {
     // 狭い画面でも単語の途中で折り返さない区切り
     expect([...el.querySelectorAll(".progress-step .progress-label")].map((l) => [...l.querySelectorAll(".progress-label-part")].map((p) => p.textContent)))
       .toEqual([["相談", "送信済み"], ["生産者", "回答待ち"], ["マッチ", "成立"], ["受け渡し", "待ち"]]);
-    // 成立の内訳（農家・品目・数量・価格）と受け渡し
-    expect([...el.querySelectorAll(".match-farms li")].map((li) => li.textContent)).toEqual(["A農園トマト 5kg・¥600/kg・小計 ¥3,000", "B農園トマト 5kg・¥600/kg・小計 ¥3,000"]);
-    expect($(".match-facts")?.textContent).toContain("梅田エリア受渡所（仮）");
-    await click(button("取引相談へ進む"));
-    expect(el.querySelectorAll(".deal-farm")).toHaveLength(2);
-    expect($(".deal-farm .deal-mail")?.textContent).toBe("A農園にメールで相談する");
-    expect($(".deal-farm .deal-tel")?.getAttribute("href")).toBe("tel:00000000001");
+    // 農家ごと：数量・金額と「トークする」（主）・「連絡先を見る」（補助）。長い説明・成立の重複表示は出さない
+    expect($("#talk-title")?.textContent).toBe("生産者とのやり取り");
+    const rows = [...el.querySelectorAll(".talk-row")];
+    expect(rows.map((r) => r.querySelector(".talk-head")?.textContent)).toEqual(["A農園5kg・¥3,000", "B農園5kg・¥3,000"]);
+    expect(rows.map((r) => r.querySelector(".btn-primary")?.textContent)).toEqual(["トークする", "トークする"]);
+    expect(rows.map((r) => r.querySelector(".talk-contact")?.textContent)).toEqual(["連絡先を見る", "連絡先を見る"]);
+    expect($(".match-banner")).toBeNull();
+    expect(text()).not.toMatch(/注文の?確定|直接相談|取引相談へ進む|そろいました/);
+    expect($(".consult-total")?.textContent).toBe("商品代の合計 ¥6,000（税込・受け渡し費用は別）");
+    // 押すまでは連絡先もやり取りも取りに行かない・電話番号は見えない
+    expect(text()).not.toContain("000-0000-0001");
+    expect($(".trade-chat")).toBeNull();
+    expect(calls.some((c) => /^\/api\/approvals\/./.test(c.url))).toBe(false);
+    await click(rows[0].querySelector(".talk-contact"));
+    expect(rows[0].querySelector(".contact-details a[href='tel:00000000001']")?.textContent).toBe("電話：000-0000-0001");
+    expect(rows[0].querySelector(".contact-details")?.textContent).toContain("メール：a-farm@example.invalid");
+    expect(rows[1].querySelector(".contact-details")).toBeNull();
+    expect(calls.filter((c) => /^\/api\/approvals\/./.test(c.url)).map((c) => c.url)).toEqual(["/api/approvals/a"]);
   });
-  it("詳細：一部の農家だけ対応できる相談にはマッチ成立を出さない", async () => {
+  it("詳細：3農家で成立：A・B・C それぞれに「トークする」。開いたトークはその農家との1対1だけ", async () => {
+    requests = [
+      req("a", "approved", { quantityKg: 5, subtotalYen: 3000 }),
+      req("b", "approved", { producerName: "B農園", quantityKg: 3, subtotalYen: 1650 }),
+      req("c", "approved", { producerName: "C農園", quantityKg: 2, subtotalYen: 1000 }),
+    ];
+    await open("/restaurant/consultations/fp-1");
+    const rows = () => [...el.querySelectorAll(".talk-row")];
+    expect(rows().map((r) => r.querySelector(".talk-head")?.textContent)).toEqual(["A農園5kg・¥3,000", "B農園3kg・¥1,650", "C農園2kg・¥1,000"]);
+    expect(rows().map((r) => r.querySelector(".btn-primary")?.textContent)).toEqual(["トークする", "トークする", "トークする"]);
+    await click(rows()[1].querySelector(".talk-open"));
+    expect(el.querySelectorAll(".trade-chat")).toHaveLength(1);
+    expect(rows()[1].querySelector(".trade-chat")?.getAttribute("aria-label")).toBe("B農園とのやり取り");
+    expect(calls.filter((c) => c.url.endsWith("/messages")).map((c) => c.url)).toEqual(["/api/approvals/b/messages"]);
+    expect(rows()[1].querySelector(".talk-close")?.textContent).toBe("トークを閉じる");
+    expect($(".consult-total")?.textContent).toBe("商品代の合計 ¥5,650（税込・受け渡し費用は別）");
+  });
+  it("詳細：一部の農家だけ対応できる相談にはマッチ成立もトークも出さない。進み具合は「1/2農家が回答済み」と短く", async () => {
     requests = [req("a", "approved"), req("b", "pending", { producerName: "B農園" })];
     await open("/restaurant/consultations/fp-1");
     expect($(".match-banner")).toBeNull();
     expect($("main .state-tag")?.textContent).toBe("返事待ち");
     expect([...el.querySelectorAll(".progress-step")].map((s) => s.className.replace("progress-step ", ""))).toEqual(["done", "current"]); // まだ先の段階（マッチ成立・受け渡し待ち）は出さない
+    expect($(".progress-current")?.textContent).toBe("いま：生産者回答待ち（1/2農家が回答済み）");
     expect(text()).not.toMatch(/マッチ成立|一部成立|🎉/);
-    expect($("main .hint")?.textContent).toBe("「対応できます」は注文の確定ではありません。受け渡しの詳細や最終確認は、農家と直接相談して決めてください。");
+    expect(text()).not.toMatch(/注文の?確定|直接相談/); // 長い説明文は出さない
+    expect($(".talk-row")).toBeNull();
+    expect(button("トークする")).toBeUndefined();
     expect(text()).not.toMatch(/数量・受け?取/);
   });
   it("詳細：在庫が変わった相談は、もう一度の確認を案内する（マッチ成立は出さない）", async () => {
@@ -355,10 +385,12 @@ describe("取引：成立後のやり取り・受け取り完了（相談の詳�
     me = restaurant;
     requests = [req("a", "approved", { established: true, receivedAt: null })];
     await open("/restaurant/consultations/fp-1");
-    expect($(".match-banner .match-title")?.textContent).toBe("🎉 マッチ成立");
+    expect($("main .state-tag")?.textContent).toBe("マッチ成立");
+    expect($(".trade-chat")).toBeNull(); // 「トークする」で開く
+    await click(button("トークする"));
     const chat = $(".trade-chat")!;
-    expect(chat.closest("details")?.hasAttribute("open")).toBe(true); // 1農家なら最初から開く
-    expect(chat.closest("details")?.querySelector("summary")?.textContent).toContain("A農園とのやり取り");
+    expect(chat.getAttribute("aria-label")).toBe("A農園とのやり取り");
+    expect(chat.closest(".talk-row")?.querySelector(".talk-head b")?.textContent).toBe("A農園");
     expect(chat.textContent).toContain("まだメッセージはありません");
     await typeInto(chat.querySelector("textarea")!, "当日はよろしくお願いします");
     await click(chat.querySelector("button[type=submit]"));
