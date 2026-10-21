@@ -5,12 +5,14 @@
 // 使い方（リポジトリ直下で。接続情報は ENV_FILE だけから読む・表示しない。ID の記録は AIC_OPS_DATA_DIR（既定 ~/.ai-chiiki-ops/demo-data））：
 //   npx tsx scripts/prod-ops/general-demo-approvals.mts inspect --target production --ids <data>/<日時>.ids.json [--kale <data>/<日時>.kale.json]
 //       … 読み取りのみ。デモの店の相談を一覧にし、消してよい相談（仕入れ案ごと）と ID を示す
-//   npx tsx scripts/prod-ops/general-demo-approvals.mts delete --target production --ids <ids.json> [--kale <kale.json>] --expect-ids <id1,id2,...> --confirm <CONFIRM_DELETE>
+//   npx tsx scripts/prod-ops/general-demo-approvals.mts delete --target production --ids <ids.json> [--kale <kale.json>] --expect-ids <id1,id2,...> --confirm <CONFIRM_DELETE> [--allow-approved]
 //       … 指定した ID の相談だけを 1 トランザクションで消す。出品・品目・生産者・店・場所・回は変えない
+//   --allow-approved：「対応できます」（approved）と返事済みの相談も消してよいことにする（明示したときだけ。例：途中まで返事が来たデモの相談をデモ前に片付ける）。
+//       inspect にも付けられる。ほかの条件（受け取り完了なし・やり取り0件・仕入れ案の全件を指定 など）は変わらない
 //
 // 消す条件（1件でも合わなければ何も消さない）：
 //   ・指定した ID がすべて、デモの店（記録の ID）からデモの農家（記録の ID）への相談で、出品がデモの出品（記録の ID。--kale ならケールも）
-//   ・状態が返事待ち（pending）・受け取り完了なし（receivedAt が null）・やり取り（trade_messages）0件
+//   ・状態が返事待ち（pending）（--allow-approved のときは「対応できます」（approved）も可）・受け取り完了なし（receivedAt が null）・やり取り（trade_messages）0件
 //   ・同じ仕入れ案（店・planFingerprint）の相談をすべて指定している（仕入れ案の一部だけを消さない）
 //   ・指定した ID がもう1件も無ければ、何もせずに終わる（2回目の実行で壊れない）
 import { readFileSync } from "node:fs";
@@ -39,6 +41,8 @@ class Guard extends Error {}
 const args = process.argv.slice(2);
 const mode = args[0];
 const opt = (n: string) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : undefined; };
+const allowApproved = args.includes("--allow-approved");
+const allowedStatuses = allowApproved ? ["pending", "approved"] : ["pending"];
 let prisma: any = null;
 type Ids = { endpoint: string; userIds: string[]; producerIds: string[]; restaurantUserId: string | null; supplyIds: string[] };
 
@@ -78,7 +82,7 @@ async function main() {
     if (r.restaurantId !== ids.restaurantUserId) p.push("店がデモの店ではない");
     if (!ids.producerIds.includes(r.producerId)) p.push("生産者がデモの農家ではない");
     if (!demoSupplies.includes(r.supplyId)) p.push("出品がデモの出品ではない");
-    if (r.status !== "pending") p.push(`返事待ちではない（${r.status}）`);
+    if (!allowedStatuses.includes(r.status)) p.push(`${allowApproved ? "返事待ち・対応できます" : "返事待ち"}ではない（${r.status}）`);
     if (r.receivedAt !== null) p.push("受け取り完了あり");
     const messages = await tx.tradeMessage.count({ where: { approvalRequestId: r.id } });
     if (messages > 0) p.push(`やり取り ${messages}件`);
@@ -121,7 +125,7 @@ async function main() {
       const missing = all.map((a: any) => a.id).filter((id: string) => !expected.includes(id));
       if (missing.length) throw new Guard(`同じ仕入れ案の相談 ${missing.join(",")} が指定されていないため、何も消さない`);
     }
-    const n = await tx.approvalRequest.deleteMany({ where: { id: { in: expected }, restaurantId: ids.restaurantUserId, status: "pending", receivedAt: null } });
+    const n = await tx.approvalRequest.deleteMany({ where: { id: { in: expected }, restaurantId: ids.restaurantUserId, status: { in: allowedStatuses }, receivedAt: null } });
     if (n.count !== expected.length) throw new Guard(`削除件数が ${n.count}/${expected.length} 件のため取り消した`);
     return { deleted: n.count, note: expected.join(", ") };
   }, { isolationLevel: "Serializable", timeout: 60_000, maxWait: 20_000 });
