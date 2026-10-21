@@ -81,6 +81,31 @@ npx tsx scripts/prod-ops/general-demo-approvals.mts inspect --target production 
 npx tsx scripts/prod-ops/general-demo-approvals.mts delete --target production --ids <data>/<日時>.ids.json --expect-ids <id1,id2,id3> --confirm GENERAL_PRODUCTION_DEMO_APPROVALS_DELETE
 ```
 
+### デモの相談を「相談を送る前」の状態に戻す（reset）・元に戻す（restore）
+
+用途：通しリハーサルのあとに、同じ仕入れ案からもう一度「仕入れ相談する」を押せる状態へ戻すため。返事済み・やり取りあり・受け取り完了の相談も戻せます。
+
+- 消すのは、指定した仕入れ案の相談（approval_requests）と、それに紐づくやり取り（trade_messages）だけです。出品・在庫・品目・品種・受け取りの回・農園・店・ユーザーは変えません。
+- 対象は、ID の記録で確かめたデモの店・デモの農家・デモの出品の相談だけです。店と農家のユーザーは記録にあるデモのユーザー（メールが `@example.invalid`）、やり取りの送り手はデモの店かその相談の農家だけ、という条件を満たさなければ何もしません。
+- 同じ仕入れ案の相談は全部まとめて指定します（一部だけは戻しません）。受け取り完了の相談は `--include-completed` を付けたときだけ対象にします。
+- 消す前に、対象の行を `<data>/<日時>.approvals-reset.backup.json` に保存します（上書きしない・本人だけが読める権限）。トランザクション（Serializable）の中で、バックアップと今の行のハッシュが一致すること、対象外のデータ（全テーブル。相談・やり取りは対象の ID を除く）のハッシュが前後で同じことを確かめ、違えば取り消します。
+- 2回目の実行では、指定した相談がもうないので何もしません。
+- restore は、バックアップから相談とやり取りを元の ID・時刻・状態のまま入れ直します。同じ ID がすでにある、同じ仕入れ案の相談が新しく送られている、出品がない、のどれかなら何もしません。
+- 本番とローカルのアプリが同時に動いていても、判定は同じトランザクションの中で行うので、ほかの利用者の操作で誤って止まることはありません（同時に書き込みがあると Serializable の競合で失敗することがあります。そのときは何も変わっていないので、もう一度実行します）。
+
+```
+# 1. 一覧と、reset できる相談の ID を確かめる（読み取りだけ）
+npx tsx scripts/prod-ops/general-demo-approvals.mts inspect --target production --ids <data>/<日時>.ids.json --kale <data>/<日時>.kale.json
+
+# 2. inspect で示された ID（仕入れ案ごとに全件）を明示して戻す。受け取り完了なら --include-completed も付ける
+npx tsx scripts/prod-ops/general-demo-approvals.mts reset --target production --ids <data>/<日時>.ids.json --kale <data>/<日時>.kale.json --expect-ids <id1,id2,id3> [--include-completed] --confirm GENERAL_PRODUCTION_DEMO_APPROVALS_RESET
+
+# 3. 元に戻すとき（reset が表示したバックアップを指定）
+npx tsx scripts/prod-ops/general-demo-approvals.mts restore --target production --ids <data>/<日時>.ids.json --kale <data>/<日時>.kale.json --backup <data>/<日時>.approvals-reset.backup.json --confirm GENERAL_PRODUCTION_DEMO_APPROVALS_RESTORE
+```
+
+ブラウザ側：飲食店の画面は入力内容と仕入れ案をブラウザ（localStorage）に保存しています。reset のあとは「仕入れ案を見る」でもう一度計算すれば「仕入れ相談する」が出ます。入力欄から始めたいときは、ブラウザの画面で入力に戻してください（DB の reset では消えません）。
+
 ## デモ A農園（架空）をログインできるようにする（general-demo-farm-login.mts）
 
 用途：ライブデモで、飲食店の仕入れ相談に「デモ A農園（架空）」として返事をし、やり取りを見せるため。今までの認証方式（メール＋パスワード）のまま、A農園のユーザーの `passwordHash` だけを設定します（ほかの行・列は変えません）。
