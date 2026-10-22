@@ -10,6 +10,7 @@ import { PATHS } from "../../routes/paths";
 import { useMe, useSession } from "../../routes/session";
 import { ErrorRetry } from "./ErrorRetry";
 import { TradeChat } from "./TradeChat";
+import { TradeReviewBox } from "./TradeReviewBox";
 import { WelcomeNotice } from "./WelcomeNotice";
 import { useConfirmations, useSupplies, whenText, yen } from "./data";
 
@@ -178,6 +179,7 @@ export function ProducerRequests() {
                 <li key={r.id} className="farm-row">
                   <RequestBody r={r} />
                   {r.receivedAt && <p className="trade-done-note" role="status"><Icon name="check" />取引完了：飲食店が受け取りを完了しました</p>}
+                  {r.receivedAt && r.established && <TradeReviewBox requestId={r.id} partnerName={r.restaurantName} role="producer" />}
                   {r.established
                     ? <TradeChat requestId={r.id} partnerName={r.restaurantName} completed={!!r.receivedAt} />
                     : <p className="hint">この仕入れ案のほかの農家の返事がそろうと、飲食店とやり取りできるようになります。</p>}

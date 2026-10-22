@@ -49,6 +49,8 @@ model User {
   relationships    Relationship[]
   approvalRequests ApprovalRequest[]
   tradeMessages    TradeMessage[]
+  tradeReviews     TradeReview[]
+  usualProducers   UsualProducer[]
 
   @@map("users")
 }
@@ -76,6 +78,7 @@ model Producer {
   seriesMemberships     SlotSeriesParticipant[]
   ownedPlaces           Place[]
   usualPlaces           ProducerPlace[]
+  usualOf               UsualProducer[]
   createdAt             DateTime                @default(now())
   updatedAt             DateTime                @default(now()) @updatedAt
 
@@ -394,11 +397,11 @@ enum ApprovalStatus {
 
 // A confirmation to discuss directly, never an order or inventory reservation.
 model ApprovalRequest {
-  id              String         @id @default(cuid())
+  id              String          @id @default(cuid())
   restaurantId    String
-  restaurant      User           @relation(fields: [restaurantId], references: [id])
+  restaurant      User            @relation(fields: [restaurantId], references: [id])
   producerId      String
-  producer        Producer       @relation(fields: [producerId], references: [id])
+  producer        Producer        @relation(fields: [producerId], references: [id])
   supplyId        String
   planFingerprint String
   planVersion     String
@@ -410,12 +413,14 @@ model ApprovalRequest {
   pickupStartAt   DateTime
   pickupEndAt     DateTime
   pickupPlace     String
-  status          ApprovalStatus @default(pending)
-  createdAt       DateTime       @default(now())
+  status          ApprovalStatus  @default(pending)
+  createdAt       DateTime        @default(now())
   respondedAt     DateTime?
   // 受け取り完了（＝取引完了）。同じ仕入れ案の「対応できます」の行すべてに、飲食店が1回の操作で同じ時刻を入れる
   receivedAt      DateTime?
   messages        TradeMessage[]
+  reviews         TradeReview[]
+  usualProducers  UsualProducer[]
 
   @@unique([restaurantId, supplyId, planFingerprint])
   @@index([producerId, createdAt])
@@ -435,6 +440,46 @@ model TradeMessage {
 
   @@index([approvalRequestId, createdAt])
   @@map("trade_messages")
+}
+
+enum TradeRating {
+  good // 良かった
+  bad // 残念だった
+}
+
+// 取引後の評価（受け取り完了後だけ）。相談1件（飲食店 × 生産者）につき、飲食店側・生産者側から1回ずつ。
+// 今は相手やほかの利用者には見せない（本人が「評価済み」と分かるだけ）。マッチングには使わない
+model TradeReview {
+  id                String          @id @default(cuid())
+  approvalRequestId String
+  approvalRequest   ApprovalRequest @relation(fields: [approvalRequestId], references: [id], onDelete: Restrict)
+  reviewerRole      UserRole // 評価した側
+  reviewerUserId    String
+  reviewer          User            @relation(fields: [reviewerUserId], references: [id], onDelete: Restrict)
+  rating            TradeRating
+  comment           String? // 任意・前後の空白を除いて100文字まで
+  createdAt         DateTime        @default(now())
+
+  @@unique([approvalRequestId, reviewerRole])
+  @@index([reviewerUserId])
+  @@map("trade_reviews")
+}
+
+// 飲食店の「いつもの農家」。受け取り完了まで進んだ取引の農家だけ登録できる（登録のもとになった相談を残す）。
+// 今は保存・表示だけ。マッチング（Relationship.priorTrade・仕入れ案の順位）には使わない
+model UsualProducer {
+  restaurantUserId  String
+  restaurant        User            @relation(fields: [restaurantUserId], references: [id], onDelete: Restrict)
+  producerId        String
+  producer          Producer        @relation(fields: [producerId], references: [id], onDelete: Restrict)
+  approvalRequestId String
+  approvalRequest   ApprovalRequest @relation(fields: [approvalRequestId], references: [id], onDelete: Restrict)
+  createdAt         DateTime        @default(now())
+
+  @@id([restaurantUserId, producerId])
+  @@index([producerId])
+  @@index([approvalRequestId])
+  @@map("usual_producers")
 }
 
 // ============================================================

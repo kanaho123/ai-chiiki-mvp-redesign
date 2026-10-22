@@ -8,7 +8,9 @@ import { planFingerprint } from "./plan-fingerprint.js";
 import { serverNow } from "./clock.js";
 import { handle, json } from "./http.js";
 import { IntervalLimiter } from "./rate-limit.js";
-import { TRADE_DECLINED, type Confirmation, type Contact, type RequestConditions, type TradeMessage } from "../src/lib/approvals.js";
+import {
+  REVIEW_COMMENT_MAX, TRADE_DECLINED, type Confirmation, type Contact, type MyReview, type RequestConditions, type TradeMessage, type TradeRating, type TradeReviewState,
+} from "../src/lib/approvals.js";
 
 export class ApprovalProblem extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -254,6 +256,70 @@ export const trades = {
       const at = rows.find((r) => r.receivedAt)?.receivedAt ?? new Date();
       await tx.approvalRequest.updateMany({ where: { restaurantId: user.id, planFingerprint: fingerprint, status: "approved", receivedAt: null }, data: { receivedAt: at } });
       return rows.map((r) => view({ ...r, receivedAt: at }, true, true));
+    });
+  },
+};
+
+// ---------------------------------------------------------------------------
+// 取引の後：評価（飲食店・生産者がそれぞれ1回）と「いつもの農家」（飲食店だけ）
+// どちらも受け取り完了（receivedAt あり）の取引だけ。保存と本人への表示だけで、マッチング・Relationship には使わない
+// ---------------------------------------------------------------------------
+
+/** その相談の飲食店か生産者で、受け取りまで完了した取引だけ */
+async function completedRow(tx: Tx, user: SessionUser, id: string) {
+  const row = await tradeRow(tx, user, id);
+  if (!row.receivedAt) throw new ApprovalProblem(409, "受け取りが完了した取引だけ、評価や「いつもの農家」の登録ができます");
+  return row;
+}
+
+/** 評価：「良かった」「残念だった」のどちらかと、任意の一言（前後の空白を除いて100文字まで。空なら保存しない） */
+export function parseReview(raw: unknown): { rating: TradeRating; comment: string | null } {
+  const b = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  if (b.rating !== "good" && b.rating !== "bad") throw new ApprovalProblem(400, "「良かった」か「残念だった」を選んでください");
+  if (b.comment !== undefined && b.comment !== null && typeof b.comment !== "string") throw new ApprovalProblem(400, "一言コメントの形式が正しくありません");
+  const comment = typeof b.comment === "string" ? b.comment.trim() : "";
+  if ([...comment].length > REVIEW_COMMENT_MAX) throw new ApprovalProblem(400, `一言コメントは${REVIEW_COMMENT_MAX}文字以内で入力してください`);
+  return { rating: b.rating, comment: comment || null };
+}
+
+const reviewView = (r: { rating: TradeRating; comment: string | null; createdAt: Date }): MyReview => ({ rating: r.rating, comment: r.comment, createdAt: r.createdAt.toISOString() });
+
+export const reviews = {
+  /** 自分の評価（相手の評価は返さない）と、飲食店なら「いつもの農家」に登録済みか */
+  async get(user: SessionUser, id: string): Promise<TradeReviewState> {
+    return prisma.$transaction(async (tx) => {
+      const row = await completedRow(tx, user, id);
+      const mine = await tx.tradeReview.findUnique({ where: { approvalRequestId_reviewerRole: { approvalRequestId: id, reviewerRole: user.role } } });
+      const usual = user.role === "restaurant"
+        ? !!await tx.usualProducer.findUnique({ where: { restaurantUserId_producerId: { restaurantUserId: user.id, producerId: row.producerId } } })
+        : null;
+      return { review: mine && reviewView(mine), usual };
+    });
+  },
+
+  /** 評価は同じ相談・同じ側から1回だけ（変更・取り消しはしない） */
+  async create(user: SessionUser, id: string, raw: unknown): Promise<MyReview> {
+    const input = parseReview(raw);
+    return serial(async (tx) => {
+      await completedRow(tx, user, id);
+      const exists = await tx.tradeReview.findUnique({ where: { approvalRequestId_reviewerRole: { approvalRequestId: id, reviewerRole: user.role } } });
+      if (exists) throw new ApprovalProblem(409, "この取引はすでに評価しています");
+      const r = await tx.tradeReview.create({ data: { approvalRequestId: id, reviewerRole: user.role, reviewerUserId: user.id, ...input } });
+      return reviewView(r);
+    }).catch((e) => {
+      // 同時に2回送られたとき（一意制約）も「評価済み」として扱う
+      if (typeof e === "object" && e !== null && "code" in e && e.code === "P2002") throw new ApprovalProblem(409, "この取引はすでに評価しています");
+      throw e;
+    });
+  },
+
+  /** 「いつもの農家」に登録。受け取りまで完了した取引の農家だけ。登録済みならそのまま（最初の登録を残す） */
+  async markUsual(user: SessionUser, id: string): Promise<{ usual: true }> {
+    if (user.role !== "restaurant") throw new ApprovalProblem(403, "飲食店だけが登録できます");
+    return serial(async (tx) => {
+      const row = await completedRow(tx, user, id);
+      await tx.usualProducer.createMany({ data: [{ restaurantUserId: user.id, producerId: row.producerId, approvalRequestId: id }], skipDuplicates: true });
+      return { usual: true };
     });
   },
 };

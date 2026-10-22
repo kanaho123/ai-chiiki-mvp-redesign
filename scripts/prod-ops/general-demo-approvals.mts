@@ -8,9 +8,10 @@
 //   npx tsx scripts/prod-ops/general-demo-approvals.mts delete --target production --ids <ids.json> [--kale <kale.json>] --expect-ids <id1,id2,...> --confirm <CONFIRM_DELETE> [--allow-approved]
 //       … 指定した ID の相談だけを 1 トランザクションで消す。出品・品目・生産者・店・場所・回は変えない
 //   npx tsx scripts/prod-ops/general-demo-approvals.mts reset --target production --ids <ids.json> [--kale <kale.json>] --expect-ids <id1,id2,...> --confirm <CONFIRM_RESET> [--include-completed]
-//       … 指定した仕入れ案の相談（状態を問わない）と、そのやり取り（trade_messages）を消し、相談を送る前の状態に戻す。消す前に JSON にバックアップする
+//       … 指定した仕入れ案の相談（状態を問わない）と、そのやり取り（trade_messages）・取引の評価（trade_reviews）・その相談から登録した「いつもの農家」（usual_producers）を消し、
+//         相談を送る前の状態に戻す。消す前に JSON にバックアップする
 //   npx tsx scripts/prod-ops/general-demo-approvals.mts restore --target production --ids <ids.json> [--kale <kale.json>] --backup <data>/<日時>.approvals-reset.backup.json --confirm <CONFIRM_RESTORE>
-//       … reset のバックアップから、相談とやり取りを元の ID・時刻・状態のまま入れ直す
+//       … reset のバックアップから、相談・やり取り・評価・いつもの農家を元の ID・時刻・状態のまま入れ直す
 //   --allow-approved：delete で「対応できます」（approved）と返事済みの相談も消してよいことにする（明示したときだけ。例：途中まで返事が来たデモの相談をデモ前に片付ける）。
 //       inspect にも付けられる。ほかの条件（受け取り完了なし・やり取り0件・仕入れ案の全件を指定 など）は変わらない
 //   --include-completed：reset で受け取り完了（receivedAt あり）の仕入れ案も対象にする（明示したときだけ）。inspect にも付けられる
@@ -23,14 +24,14 @@
 // reset の条件（1件でも合わなければ何も変えない）：
 //   ・delete と同じ「デモの店・デモの農家・デモの出品」「仕入れ案の全件を指定」。状態（返事待ち・対応できます・今回は対応できません）は問わない
 //   ・店と農家のユーザーが、記録にあるデモのユーザー（メールが @example.invalid）であること
-//   ・やり取りの送り手が、デモの店か、その相談のデモの農家のユーザーだけであること
+//   ・やり取りの送り手・評価した人が、デモの店か、その相談のデモの農家のユーザーだけであること。いつもの農家は、デモの店がその相談の農家を登録したものだけであること
 //   ・受け取り完了の相談は --include-completed のときだけ
 //   ・消す前に対象の行をバックアップ（JSON）し、トランザクションの中でバックアップと今の行のハッシュが一致することを確かめる
 //   ・トランザクションの中で、対象外のデータ（全テーブル。相談・やり取りは対象の ID を除く）のハッシュを消す前後で比べ、違えば取り消す
 //   ・指定した ID がもう1件も無ければ、何もせずに終わる（2回目の実行で壊れない）
 // restore の条件（1件でも合わなければ何も変えない）：
 //   ・バックアップの接続先・店が今の --target・記録と一致し、ファイルのハッシュが合っていること
-//   ・同じ ID の相談・やり取りがまだ無いこと。同じ店・出品・仕入れ案の相談が新しく送られていないこと
+//   ・同じ ID の相談・やり取り・評価、同じ店・農家のいつもの農家がまだ無いこと。同じ店・出品・仕入れ案の相談が新しく送られていないこと
 //   ・相談の出品がまだあり、その農家の出品であること。店・農家・送り手が reset のときと同じ条件を満たすこと
 //   ・入れ直した行のハッシュがバックアップと一致し、対象外のデータが前後で変わっていないこと
 import { createHash } from "node:crypto";
@@ -75,7 +76,8 @@ const includeCompleted = args.includes("--include-completed");
 const allowedStatuses = allowApproved ? ["pending", "approved"] : ["pending"];
 let prisma: any = null;
 type Ids = { endpoint: string; userIds: string[]; producerIds: string[]; restaurantUserId: string | null; supplyIds: string[] };
-type Target = { approvals: any[]; messages: any[] };
+// reviews・usuals は後から追加した表（2026-10-23）。それより前のバックアップには無い（空として扱う）
+type Target = { approvals: any[]; messages: any[]; reviews?: any[]; usuals?: any[] };
 
 async function connect() {
   if (process.env.VERCEL || process.env.VERCEL_ENV) throw new Guard("Vercel 上では実行しない");
@@ -101,17 +103,29 @@ const stable = (v: unknown): unknown =>
   : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, stable((v as Record<string, unknown>)[k])]))
   : v;
 const sha = (v: unknown) => createHash("sha256").update(JSON.stringify(stable(v))).digest("hex");
-const targetHash = (t: Target) => sha({ approvals: [...t.approvals].sort((a, b) => (a.id < b.id ? -1 : 1)), messages: [...t.messages].sort((a, b) => (a.id < b.id ? -1 : 1)) });
+const byKey = (k: (x: any) => string) => (a: any, b: any) => (k(a) < k(b) ? -1 : k(a) > k(b) ? 1 : 0);
+const usualKey = (u: any) => `${u.restaurantUserId}|${u.producerId}`;
+/** 評価・いつもの農家が無いときは、以前と同じ値になる（以前のバックアップもそのまま確かめられる） */
+const targetHash = (t: Target) => sha({
+  approvals: [...t.approvals].sort((a, b) => (a.id < b.id ? -1 : 1)), messages: [...t.messages].sort((a, b) => (a.id < b.id ? -1 : 1)),
+  ...(t.reviews?.length ? { reviews: [...t.reviews].sort(byKey((r) => r.id)) } : {}),
+  ...(t.usuals?.length ? { usuals: [...t.usuals].sort(byKey(usualKey)) } : {}),
+});
 
-/** 指定した相談と、それに紐づくやり取り（読み取り） */
+/** 後から追加した表（trade_reviews・usual_producers）は、マイグレーション前の DB には無い。無ければ 0 件として扱う */
+const hasTable = async (db: any, table: string) => ((await db.$queryRawUnsafe(`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = $1) AS ok`, table)) as { ok: boolean }[])[0]?.ok === true;
+
+/** 指定した相談と、それに紐づくやり取り・評価・いつもの農家（読み取り） */
 async function loadTarget(db: any, approvalIds: string[]): Promise<Target> {
   const approvals = await db.approvalRequest.findMany({ where: { id: { in: approvalIds } }, orderBy: { id: "asc" } });
   const messages = await db.tradeMessage.findMany({ where: { approvalRequestId: { in: approvalIds } }, orderBy: { id: "asc" } });
-  return { approvals, messages };
+  const reviews = await hasTable(db, "trade_reviews") ? await db.tradeReview.findMany({ where: { approvalRequestId: { in: approvalIds } }, orderBy: { id: "asc" } }) : [];
+  const usuals = await hasTable(db, "usual_producers") ? await db.usualProducer.findMany({ where: { approvalRequestId: { in: approvalIds } }, orderBy: [{ restaurantUserId: "asc" }, { producerId: "asc" }] }) : [];
+  return { approvals, messages, reviews, usuals };
 }
 
 /**
- * 対象外のデータの指紋（全テーブルの件数と、全列の内容のハッシュ）。相談・やり取りは対象の ID を除く。
+ * 対象外のデータの指紋（全テーブルの件数と、全列の内容のハッシュ）。相談・やり取りは対象の ID、評価・いつもの農家は対象の相談に結びつくものを除く。
  * 同じトランザクションの中で消す前後に取り、対象の行以外が変わっていないことを確かめる
  */
 async function otherDataHash(tx: any, approvalIds: string[], messageIds: string[]) {
@@ -119,9 +133,10 @@ async function otherDataHash(tx: any, approvalIds: string[], messageIds: string[
     `SELECT table_name AS t FROM information_schema.tables WHERE table_schema = current_schema() AND table_type = 'BASE TABLE' ORDER BY table_name`);
   const out: Record<string, string> = {};
   for (const { t } of tables) {
-    const exclude = t === "approval_requests" ? approvalIds : t === "trade_messages" ? messageIds : null;
+    const [column, exclude] = t === "approval_requests" ? ["id", approvalIds] : t === "trade_messages" ? ["id", messageIds]
+      : t === "trade_reviews" || t === "usual_producers" ? ["approvalRequestId", approvalIds] : [null, null];
     const rows: { n: number; h: string | null }[] = await tx.$queryRawUnsafe(
-      `SELECT count(*)::int AS n, md5(string_agg(x::text, '|' ORDER BY x::text)) AS h FROM "${t.replace(/"/g, '""')}" x${exclude ? ` WHERE x.id <> ALL($1::text[])` : ""}`,
+      `SELECT count(*)::int AS n, md5(string_agg(x::text, '|' ORDER BY x::text)) AS h FROM "${t.replace(/"/g, '""')}" x${exclude ? ` WHERE x."${column}" <> ALL($1::text[])` : ""}`,
       ...(exclude ? [exclude] : []));
     out[t] = `${rows[0].n}:${rows[0].h ?? ""}`;
   }
@@ -162,6 +177,10 @@ async function main() {
     if (r.receivedAt !== null) p.push("受け取り完了あり");
     const messages = await tx.tradeMessage.count({ where: { approvalRequestId: r.id } });
     if (messages > 0) p.push(`やり取り ${messages}件`);
+    const reviews = await hasTable(tx, "trade_reviews") ? await tx.tradeReview.count({ where: { approvalRequestId: r.id } }) : 0;
+    if (reviews > 0) p.push(`取引の評価 ${reviews}件`);
+    const usuals = await hasTable(tx, "usual_producers") ? await tx.usualProducer.count({ where: { approvalRequestId: r.id } }) : 0;
+    if (usuals > 0) p.push(`いつもの農家 ${usuals}件`);
     return p;
   };
 
@@ -191,6 +210,14 @@ async function main() {
     for (const m of t.messages) {
       const r = rowOf.get(m.approvalRequestId);
       if (!r || (m.senderUserId !== shopId && m.senderUserId !== ownerOf.get(r.producerId))) p.push(`やり取り ${m.id} の送り手がデモの店・その農家ではない`);
+    }
+    for (const v of t.reviews ?? []) {
+      const r = rowOf.get(v.approvalRequestId);
+      if (!r || (v.reviewerUserId !== shopId && v.reviewerUserId !== ownerOf.get(r.producerId))) p.push(`評価 ${v.id} の評価者がデモの店・その農家ではない`);
+    }
+    for (const u of t.usuals ?? []) {
+      const r = rowOf.get(u.approvalRequestId);
+      if (!r || u.restaurantUserId !== shopId || u.producerId !== r.producerId) p.push(`いつもの農家 ${usualKey(u)} がデモの店・その相談の農家のものではない`);
     }
     return p;
   };
@@ -226,7 +253,7 @@ async function main() {
       const t = await loadTarget(prisma, list.map((r) => r.id));
       const rp = await tradeProblems(prisma, t, false); // 受け取り完了は「--include-completed が必要」と示すだけにする
       const completed = list.some((r) => r.receivedAt);
-      console.log(`  → 仕入れ案 ${fp.slice(0, 12)}…（${list.length}件・合計 ${list.reduce((n, r) => n + r.quantityKg, 0)}kg・やり取り ${t.messages.length}件${completed ? "・受け取り完了" : ""}）`);
+      console.log(`  → 仕入れ案 ${fp.slice(0, 12)}…（${list.length}件・合計 ${list.reduce((n, r) => n + r.quantityKg, 0)}kg・やり取り ${t.messages.length}件・評価 ${t.reviews?.length ?? 0}件・いつもの農家 ${t.usuals?.length ?? 0}件${completed ? "・受け取り完了" : ""}）`);
       console.log(`     delete：${problems.length ? "できない" : `できる。--expect-ids ${idList}`}`);
       console.log(`     reset ：${rp.length ? `できない（${rp.join(" / ")}）` : `できる。--expect-ids ${idList}${completed ? " --include-completed（受け取り完了のため必要）" : ""}`}`);
     }
@@ -267,11 +294,11 @@ async function main() {
 
     // 2. バックアップ（消す前の行をそのまま JSON に保存する。上書きしない）
     const stamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
-    const backup = { kind: BACKUP_KIND, target: targetName, endpoint: ALLOWED, createdAt: new Date().toISOString(), restaurantUserId: shopId, expectIds: expected, approvals: pre.approvals, messages: pre.messages, hash: targetHash(pre) };
+    const backup = { kind: BACKUP_KIND, target: targetName, endpoint: ALLOWED, createdAt: new Date().toISOString(), restaurantUserId: shopId, expectIds: expected, approvals: pre.approvals, messages: pre.messages, reviews: pre.reviews ?? [], usuals: pre.usuals ?? [], hash: targetHash(pre) };
     mkdirSync(OUT_DIR, { recursive: true });
     const file = resolve(OUT_DIR, `${stamp}.approvals-reset.backup.json`);
     writeFileSync(file, JSON.stringify(stable(backup), null, 1), { flag: "wx", mode: 0o600 });
-    console.log(`バックアップ：${file}（相談 ${pre.approvals.length}件・やり取り ${pre.messages.length}件・hash ${backup.hash.slice(0, 12)}…）`);
+    console.log(`バックアップ：${file}（相談 ${pre.approvals.length}件・やり取り ${pre.messages.length}件・評価 ${backup.reviews.length}件・いつもの農家 ${backup.usuals.length}件・hash ${backup.hash.slice(0, 12)}…）`);
 
     // 3. 1つのトランザクションで、確かめ直してから消す
     const out = await prisma.$transaction(async (tx: any) => {
@@ -284,19 +311,25 @@ async function main() {
       if (missing.length) throw new Guard(`同じ仕入れ案の相談 ${missing.join(",")} が指定されていないため、何も変えない`);
       const messageIds = cur.messages.map((m) => m.id);
       const before = await otherDataHash(tx, expected, messageIds);
+      // 相談への外部キー（RESTRICT）があるので、いつもの農家・評価・やり取りを先に消す
+      const usuals = cur.usuals ?? [], reviews = cur.reviews ?? [];
+      const u = usuals.length ? await tx.usualProducer.deleteMany({ where: { approvalRequestId: { in: expected }, OR: usuals.map((x) => ({ restaurantUserId: x.restaurantUserId, producerId: x.producerId })) } }) : { count: 0 };
+      if (u.count !== usuals.length) throw new Guard(`いつもの農家の削除件数が ${u.count}/${usuals.length} 件のため取り消した`);
+      const v = reviews.length ? await tx.tradeReview.deleteMany({ where: { id: { in: reviews.map((x) => x.id) }, approvalRequestId: { in: expected } } }) : { count: 0 };
+      if (v.count !== reviews.length) throw new Guard(`評価の削除件数が ${v.count}/${reviews.length} 件のため取り消した`);
       const m = await tx.tradeMessage.deleteMany({ where: { id: { in: messageIds }, approvalRequestId: { in: expected } } });
       if (m.count !== messageIds.length) throw new Guard(`やり取りの削除件数が ${m.count}/${messageIds.length} 件のため取り消した`);
       const a = await tx.approvalRequest.deleteMany({ where: { id: { in: expected }, restaurantId: shopId } });
       if (a.count !== expected.length) throw new Guard(`相談の削除件数が ${a.count}/${expected.length} 件のため取り消した`);
       const left = await loadTarget(tx, expected);
-      if (left.approvals.length || left.messages.length) throw new Guard("対象の行が残っているため取り消した");
+      if (left.approvals.length || left.messages.length || left.reviews?.length || left.usuals?.length) throw new Guard("対象の行が残っているため取り消した");
       const after = await otherDataHash(tx, expected, messageIds);
       const changed = diffTables(before, after);
       if (changed.length) throw new Guard(`対象外のデータが変わったため取り消した：${changed.join(", ")}`);
-      return { approvals: a.count, messages: m.count, tables: Object.keys(before).length };
+      return { approvals: a.count, messages: m.count, reviews: v.count, usuals: u.count, tables: Object.keys(before).length };
     }, { isolationLevel: "Serializable", timeout: 60_000, maxWait: 20_000 });
     if (!out) { console.log("指定した相談はもうありません（何もしない）"); return; }
-    console.log(`相談前の状態に戻しました：相談 ${out.approvals}件・やり取り ${out.messages}件を削除（対象外の ${out.tables} テーブルは前後で一致）`);
+    console.log(`相談前の状態に戻しました：相談 ${out.approvals}件・やり取り ${out.messages}件・評価 ${out.reviews}件・いつもの農家 ${out.usuals}件を削除（対象外の ${out.tables} テーブルは前後で一致）`);
     console.log(`元に戻すとき：restore --backup ${file}`);
     return;
   }
@@ -305,10 +338,15 @@ async function main() {
   const b = backupIn!;
   const approvalIds: string[] = b.approvals.map((r: any) => r.id);
   const messageIds: string[] = b.messages.map((m: any) => m.id);
+  const reviewsIn: any[] = b.reviews ?? [], usualsIn: any[] = b.usuals ?? [];
   const out = await prisma.$transaction(async (tx: any) => {
     const existA = await tx.approvalRequest.count({ where: { id: { in: approvalIds } } });
     const existM = await tx.tradeMessage.count({ where: { id: { in: messageIds } } });
     if (existA || existM) throw new Guard(`同じ ID の相談 ${existA}件・やり取り ${existM}件がすでにあるため、何も変えない（すでに戻してある可能性があります）`);
+    if ((reviewsIn.length && !await hasTable(tx, "trade_reviews")) || (usualsIn.length && !await hasTable(tx, "usual_producers"))) throw new Guard("評価・いつもの農家の表がない DB のため、何も変えない");
+    const existV = reviewsIn.length ? await tx.tradeReview.count({ where: { id: { in: reviewsIn.map((r) => r.id) } } }) : 0;
+    const existU = usualsIn.length ? await tx.usualProducer.count({ where: { OR: usualsIn.map((u) => ({ restaurantUserId: u.restaurantUserId, producerId: u.producerId })) } }) : 0;
+    if (existV || existU) throw new Guard(`同じ評価 ${existV}件・同じ店と農家のいつもの農家 ${existU}件がすでにあるため、何も変えない`);
     for (const r of b.approvals) {
       const dup = await tx.approvalRequest.findFirst({ where: { restaurantId: r.restaurantId, supplyId: r.supplyId, planFingerprint: r.planFingerprint }, select: { id: true } });
       if (dup) throw new Guard(`同じ仕入れ案の相談 ${dup.id} が新しく送られているため、何も変えない（先にその相談を reset してください）`);
@@ -321,14 +359,16 @@ async function main() {
     const date = (v: string | null) => (v ? new Date(v) : null);
     await tx.approvalRequest.createMany({ data: b.approvals.map((r: any) => ({ ...r, createdAt: date(r.createdAt), respondedAt: date(r.respondedAt), receivedAt: date(r.receivedAt) })) });
     if (b.messages.length) await tx.tradeMessage.createMany({ data: b.messages.map((m: any) => ({ ...m, createdAt: date(m.createdAt) })) });
+    if (reviewsIn.length) await tx.tradeReview.createMany({ data: reviewsIn.map((r: any) => ({ ...r, createdAt: date(r.createdAt) })) });
+    if (usualsIn.length) await tx.usualProducer.createMany({ data: usualsIn.map((u: any) => ({ ...u, createdAt: date(u.createdAt) })) });
     const now = await loadTarget(tx, approvalIds);
     if (targetHash(now) !== b.hash) throw new Guard("入れ直した行がバックアップと一致しないため取り消した");
     const after = await otherDataHash(tx, approvalIds, messageIds);
     const changed = diffTables(before, after);
     if (changed.length) throw new Guard(`対象外のデータが変わったため取り消した：${changed.join(", ")}`);
-    return { approvals: approvalIds.length, messages: messageIds.length };
+    return { approvals: approvalIds.length, messages: messageIds.length, reviews: reviewsIn.length, usuals: usualsIn.length };
   }, { isolationLevel: "Serializable", timeout: 60_000, maxWait: 20_000 });
-  console.log(`バックアップから戻しました：相談 ${out.approvals}件・やり取り ${out.messages}件（元の ID・時刻・状態。対象外のデータは前後で一致）`);
+  console.log(`バックアップから戻しました：相談 ${out.approvals}件・やり取り ${out.messages}件・評価 ${out.reviews}件・いつもの農家 ${out.usuals}件（元の ID・時刻・状態。対象外のデータは前後で一致）`);
 }
 
 try {

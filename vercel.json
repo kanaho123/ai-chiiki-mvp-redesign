@@ -16,6 +16,8 @@
     { "source": "/api/approvals/received", "destination": "/api/approvals?__path=/api/approvals/received" },
     { "source": "/api/approvals/:id", "destination": "/api/approvals?__path=/api/approvals/:id" },
     { "source": "/api/approvals/:id/messages", "destination": "/api/approvals?__path=/api/approvals/:id/messages" },
+    { "source": "/api/approvals/:id/review", "destination": "/api/approvals?__path=/api/approvals/:id/review" },
+    { "source": "/api/approvals/:id/usual", "destination": "/api/approvals?__path=/api/approvals/:id/usual" },
     { "source": "/api/supplies/:id", "destination": "/api/supplies?__path=/api/supplies/:id" },
     { "source": "/api/me", "destination": "/api/account?__path=/api/me" },
     { "source": "/api/inbox", "destination": "/api/account?__path=/api/inbox" },

@@ -25,6 +25,14 @@ export type RequestConditions = {
 };
 export type Contact = { contactPhone: string | null; contactEmail: string | null };
 
+/** 取引後の評価（受け取り完了後に、飲食店・生産者がそれぞれ1回）。今は本人にだけ見せる */
+export type TradeRating = "good" | "bad";
+export const TRADE_RATINGS = [{ value: "good", label: "良かった" }, { value: "bad", label: "残念だった" }] as const satisfies readonly { value: TradeRating; label: string }[];
+export const REVIEW_COMMENT_MAX = 100;
+export type MyReview = { rating: TradeRating; comment: string | null; createdAt: string };
+/** 取引1件（飲食店 × 農家）の評価の状態。usual は飲食店だけ（その農家を「いつもの農家」に登録済みか）。生産者には null */
+export type TradeReviewState = { review: MyReview | null; usual: boolean | null };
+
 /** 相談カードに並べる仕入れ条件（ふつうの言葉で） */
 export function conditionChips(c: RequestConditions): { label: string; value: string }[] {
   const yesNo = (v: boolean | null) => (v === null ? null : v ? "可" : "不可");

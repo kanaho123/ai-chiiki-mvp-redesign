@@ -203,6 +203,9 @@ async function main() {
   if (ids.endpoint !== ALLOWED) throw new Guard("ids.json の接続先が違うため中止");
   if (!ids.producerIds.includes(kale.producerId)) throw new Guard("kale.json の出品者がデモの生産者ではないため中止");
 
+  /** 後から追加した表（trade_reviews・usual_producers）は、マイグレーション前の DB には無い。無ければ 0 件として扱う */
+  const hasTable = async (tx: any, table: string) => ((await tx.$queryRawUnsafe(`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = $1) AS ok`, table)) as { ok: boolean }[])[0]?.ok === true;
+
   /** 消す対象（記録した ID から辿れるものだけ）と、想定外の関連（本物の利用者のデータなど）を数える（読み取り） */
   const survey = async (tx: any) => {
     const supply = await tx.supply.findUnique({ where: { id: kale.supplyId }, select: { id: true, producerId: true, itemId: true, varietyId: true } });
@@ -215,11 +218,16 @@ async function main() {
       otherSuppliesInPlan += await tx.approvalRequest.count({ where: { restaurantId, planFingerprint, supplyId: { not: kale.supplyId } } });
     }
     const messages = await tx.tradeMessage.findMany({ where: { approvalRequestId: { in: approvals.map((a: any) => a.id) } }, select: { id: true, senderUserId: true } });
+    const approvalIds = approvals.map((a: any) => a.id);
+    const reviews = await hasTable(tx, "trade_reviews") ? await tx.tradeReview.findMany({ where: { approvalRequestId: { in: approvalIds } }, select: { id: true, reviewerUserId: true } }) : [];
+    const usuals = await hasTable(tx, "usual_producers") ? await tx.usualProducer.findMany({ where: { approvalRequestId: { in: approvalIds } }, select: { restaurantUserId: true, producerId: true } }) : [];
     const demoUsers = new Set(ids.userIds);
     const real = {
       approvals: approvals.filter((a: any) => a.restaurantId !== ids.restaurantUserId || a.producerId !== kale.producerId).length, // デモの店とデモ A農園のあいだの相談だけを消す
       otherSuppliesInPlan,
       messages: messages.filter((m: any) => !demoUsers.has(m.senderUserId)).length, // 送り手はデモの利用者だけのはず
+      reviews: reviews.filter((v: any) => !demoUsers.has(v.reviewerUserId)).length, // 評価した人もデモの利用者だけのはず
+      usuals: usuals.filter((u: any) => u.restaurantUserId !== ids.restaurantUserId || u.producerId !== kale.producerId).length, // デモの店がデモ A農園を登録したものだけ
     };
     const itemUse = kale.createdItem
       ? {
@@ -229,24 +237,26 @@ async function main() {
         otherVarietySupplies: await tx.supply.count({ where: { varietyId: kale.varietyId, id: { not: kale.supplyId } } }),
       }
       : null;
-    return { supply, approvals, messages, real, itemUse };
+    return { supply, approvals, messages, reviews, usuals, real, itemUse };
   };
 
   if (mode === "inspect") {
     const r = await survey(prisma);
     say(`ケールの出品：${r.supply ? "あり" : "なし（すでに消えている）"}`);
-    say(`相談：${r.approvals.length}件（${r.approvals.map((a: any) => `${a.status}${a.receivedAt ? "・受け取り完了" : ""}`).join("、") || "なし"}）・やり取り：${r.messages.length}件`);
+    say(`相談：${r.approvals.length}件（${r.approvals.map((a: any) => `${a.status}${a.receivedAt ? "・受け取り完了" : ""}`).join("、") || "なし"}）・やり取り：${r.messages.length}件・評価：${r.reviews.length}件・いつもの農家：${r.usuals.length}件`);
     say(`想定外の関連：${JSON.stringify(r.real)}`);
     say(`品目「ケール」：${kale.createdItem ? `このスクリプトが作成・${JSON.stringify(r.itemUse)}` : "既存（消さない）"}`);
     return;
   }
 
-  // delete：やり取り → 相談 → 出品 → 品種 → 品目 の順に、1 トランザクションで
+  // delete：いつもの農家・評価・やり取り → 相談 → 出品 → 品種 → 品目 の順に、1 トランザクションで（相談への外部キーは RESTRICT）
   const out = await prisma.$transaction(async (tx: any) => {
     const r = await survey(tx);
     const realTotal = Object.values(r.real).reduce((a: number, b: number) => a + b, 0);
     if (realTotal > 0) throw new Guard(`想定外の関連データがあるため、何も消さない：${JSON.stringify(r.real)}`);
-    const n = { tradeMessages: 0, approvals: 0, supplies: 0, varieties: 0, items: 0 };
+    const n = { usuals: 0, reviews: 0, tradeMessages: 0, approvals: 0, supplies: 0, varieties: 0, items: 0 };
+    if (r.usuals.length) n.usuals = (await tx.usualProducer.deleteMany({ where: { approvalRequestId: { in: r.approvals.map((a: any) => a.id) }, OR: r.usuals.map((u: any) => ({ restaurantUserId: u.restaurantUserId, producerId: u.producerId })) } })).count;
+    if (r.reviews.length) n.reviews = (await tx.tradeReview.deleteMany({ where: { id: { in: r.reviews.map((v: any) => v.id) } } })).count;
     n.tradeMessages = (await tx.tradeMessage.deleteMany({ where: { id: { in: r.messages.map((m: any) => m.id) } } })).count;
     n.approvals = (await tx.approvalRequest.deleteMany({ where: { id: { in: r.approvals.map((a: any) => a.id) } } })).count;
     if (r.supply) n.supplies = (await tx.supply.deleteMany({ where: { id: kale.supplyId } })).count;
@@ -257,7 +267,7 @@ async function main() {
         n.items = (await tx.item.deleteMany({ where: { id: kale.itemId } })).count;
       } else say(`品目「ケール」・品種はほかから使われているため残す：${JSON.stringify(u)}`);
     }
-    if (n.tradeMessages !== r.messages.length || n.approvals !== r.approvals.length || n.supplies !== (r.supply ? 1 : 0)) {
+    if (n.usuals !== r.usuals.length || n.reviews !== r.reviews.length || n.tradeMessages !== r.messages.length || n.approvals !== r.approvals.length || n.supplies !== (r.supply ? 1 : 0)) {
       throw new Guard(`削除件数が想定と違うため取り消した：${JSON.stringify(n)}`);
     }
     return n;

@@ -49,11 +49,18 @@ export async function seedMvpDemo(prisma: PrismaClient, password = process.env.D
   const hashes = Object.fromEntries(await Promise.all(keys.map(async (k) => [k, password ? await hashPassword(password) : null] as const)));
   await prisma.$transaction(async (tx) => {
     // 子テーブルから順に空にする（デモ用 DB では新モデルのテーブルはすべてデモデータ）
+    // 後から追加した表は、マイグレーションを適用していないデモ用 DB には無いことがある（無ければ消すものも無い）
+    const tables = new Set((await tx.$queryRawUnsafe<{ t: string }[]>(
+      `SELECT table_name AS t FROM information_schema.tables WHERE table_schema = current_schema() AND table_name IN ('usual_producers', 'trade_reviews', 'trade_messages', 'producer_places')`)).map((r) => r.t));
+    if (tables.has("usual_producers")) await tx.usualProducer.deleteMany();
+    if (tables.has("trade_reviews")) await tx.tradeReview.deleteMany();
+    if (tables.has("trade_messages")) await tx.tradeMessage.deleteMany();
     await tx.approvalRequest.deleteMany();
     await tx.supply.deleteMany();
     await tx.slotParticipant.deleteMany();
     await tx.relationship.deleteMany();
     await tx.handoverSlot.deleteMany();
+    if (tables.has("producer_places")) await tx.producerPlace.deleteMany();
     await tx.place.deleteMany();
     await tx.producer.deleteMany();
     await tx.user.deleteMany();

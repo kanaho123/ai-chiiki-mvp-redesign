@@ -12,6 +12,7 @@ import { PATHS } from "../../routes/paths";
 import { useMe } from "../../routes/session";
 import { ErrorRetry } from "./ErrorRetry";
 import { TradeChat } from "./TradeChat";
+import { TradeReviewBox } from "./TradeReviewBox";
 import { WelcomeNotice } from "./WelcomeNotice";
 import { useConfirmations, whenText, yen } from "./data";
 
@@ -228,6 +229,14 @@ export function RestaurantConsultationDetail() {
                 <div><dt>受け取り場所</dt><dd>{c.pickupPlace}</dd></div>
                 <div><dt>受け取り日時</dt><dd>{whenText(c.pickupStartAt, c.pickupEndAt)}</dd></div>
               </dl>
+            </section>
+          )}
+          {c.status === "completed" && (
+            <section aria-labelledby="review-title">
+              <h2 className="section-title" id="review-title">取引の評価</h2>
+              <ul className="review-list">
+                {c.farms.map((f) => <li key={f.id}><TradeReviewBox requestId={f.id} partnerName={f.producerName} role="restaurant" /></li>)}
+              </ul>
             </section>
           )}
           {c.status === "stale" && <div className="alert warn" role="status"><Icon name="alert" />{STALE_RECHECK}</div>}

@@ -1073,6 +1073,15 @@ a.inline-link { display: inline-flex; align-items: center; min-height: var(--tap
 .trade-done-facts dt { font-weight: 700; }
 .trade-done-facts dd { margin: 0; color: var(--color-text); overflow-wrap: anywhere; }
 .trade-done-note { display: flex; align-items: center; gap: 6px; margin: 0; font-weight: 800; color: var(--color-restaurant-dark); }
+/* 取引後の評価（農家ごと）と「いつもの農家」 */
+.review-list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.review-box { display: grid; gap: 10px; padding: 14px; border: 1.5px solid var(--color-line); border-radius: var(--r-input); background: var(--color-page); min-width: 0; }
+.review-head { display: flex; align-items: center; justify-content: space-between; gap: 4px 8px; flex-wrap: wrap; }
+.review-head b { font-size: 17px; overflow-wrap: anywhere; }
+.usual-tag { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; background: var(--accent-tint); color: var(--accent-ink); font-size: 14px; font-weight: 800; white-space: nowrap; }
+.review-form { display: grid; gap: 10px; min-width: 0; }
+.review-done { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 0; font-weight: 800; }
+.review-comment { font-weight: 400; overflow-wrap: anywhere; }
 
 /* ── ホームの主な操作（1画面に1つ。いちばん上に大きく） ─────────── */
 a.link-btn.home-main { min-height: 84px; justify-content: flex-start; gap: 14px; padding: 14px 20px; text-align: left; border-radius: var(--r-zone); text-decoration: none; }

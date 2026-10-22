@@ -5,7 +5,7 @@
 export const API_FUNCTIONS = {
   auth: ["/api/auth/:route"],
   onboarding: ["/api/onboarding/:route"],
-  approvals: ["/api/approvals", "/api/approvals/received", "/api/approvals/:id", "/api/approvals/:id/messages"],
+  approvals: ["/api/approvals", "/api/approvals/received", "/api/approvals/:id", "/api/approvals/:id/messages", "/api/approvals/:id/review", "/api/approvals/:id/usual"],
   supplies: ["/api/supplies", "/api/supplies/:id"],
   account: ["/api/me", "/api/inbox", "/api/profile", "/api/pickup-points"],
   purchase: ["/api/catalog", "/api/inventory-version", "/api/plan", "/api/plan-options", "/api/item-suggestions"],

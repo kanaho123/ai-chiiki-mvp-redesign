@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlanRequest, PlanSlot, PlanSupply } from "../src/lib/allocate";
 
 // Exercise the real authorization, recomputation and response handlers against a memory DB.
-const db = vi.hoisted(() => ({ rows: [] as any[], messages: [] as any[], inputs: {} as any, version: "v1", now: new Date("2026-10-22T03:00:00Z"), users: new Map<string, any>(), contacts: new Map<string, any>() }));
+const db = vi.hoisted(() => ({ rows: [] as any[], messages: [] as any[], reviews: [] as any[], usuals: [] as any[], inputs: {} as any, version: "v1", now: new Date("2026-10-22T03:00:00Z"), users: new Map<string, any>(), contacts: new Map<string, any>() }));
 vi.mock("./db.js", () => {
   const producer = {
     findUnique: async ({ where }: any) => db.contacts.get(where.id) ?? null,
@@ -23,8 +23,24 @@ vi.mock("./db.js", () => {
       .sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id)).slice(0, take),
     create: async ({ data }: any) => { const m = { ...data, id: `m-${String(db.messages.length + 1).padStart(3, "0")}`, createdAt: new Date(Date.now()) }; db.messages.push(m); return m; },
   };
+  // 取引後の評価・いつもの農家（一意の組で探す・作るだけ）
+  const tradeReview = {
+    findUnique: async ({ where }: any) => db.reviews.find(r => r.approvalRequestId === where.approvalRequestId_reviewerRole.approvalRequestId && r.reviewerRole === where.approvalRequestId_reviewerRole.reviewerRole) ?? null,
+    create: async ({ data }: any) => {
+      if (db.reviews.some(r => r.approvalRequestId === data.approvalRequestId && r.reviewerRole === data.reviewerRole)) throw Object.assign(new Error("unique"), { code: "P2002" });
+      const r = { ...data, id: `rv-${db.reviews.length + 1}`, createdAt: new Date("2026-10-22T06:00:00Z") }; db.reviews.push(r); return r;
+    },
+  };
+  const usualProducer = {
+    findUnique: async ({ where }: any) => db.usuals.find(u => u.restaurantUserId === where.restaurantUserId_producerId.restaurantUserId && u.producerId === where.restaurantUserId_producerId.producerId) ?? null,
+    createMany: async ({ data }: any) => {
+      let count = 0;
+      for (const d of data) if (!db.usuals.some(u => u.restaurantUserId === d.restaurantUserId && u.producerId === d.producerId)) { db.usuals.push({ ...d, createdAt: new Date() }); count++; }
+      return { count };
+    },
+  };
   const tx: any = {
-    producer, tradeMessage,
+    producer, tradeMessage, tradeReview, usualProducer,
     item: { findUnique: async () => ({ name: "トマト" }) },
     approvalRequest: {
       createMany: async ({ data }: any) => {
@@ -58,6 +74,8 @@ const one = await import("./routes/approvals/[id]");
 const { overallConfirmation } = await import("../src/lib/approvals");
 const msgs = await import("./routes/approvals/messages");
 const received = await import("./routes/approvals/received");
+const reviewRoute = await import("./routes/approvals/review");
+const usualRoute = await import("./routes/approvals/usual");
 const { trades } = await import("./approvals");
 const { TRADE_DECLINED, consultationStatus } = await import("../src/lib/approvals");
 
@@ -68,7 +86,7 @@ const request: PlanRequest = {
 };
 beforeEach(() => {
   process.env.SESSION_SECRET = "test-secret-0123456789-abcdefghijklmnop";
-  db.rows = []; db.messages = []; db.version = "v1"; db.now = new Date("2026-10-22T03:00:00Z"); db.users.clear(); db.contacts.clear();
+  db.rows = []; db.messages = []; db.reviews = []; db.usuals = []; db.version = "v1"; db.now = new Date("2026-10-22T03:00:00Z"); db.users.clear(); db.contacts.clear();
   for (const id of ["r1", "r2", "a", "b"]) {
     const producer = ["a", "b"].includes(id);
     db.users.set(id, { id, role: producer ? "producer" : "restaurant", displayName: id, producer: producer ? { id: `p-${id}`, farmName: id, originPrefecture: "大阪府" } : null, onboarded: true });
@@ -308,5 +326,99 @@ describe("受け取り完了（仕入れ案ごとに1回）", () => {
     expect(after.status).toBe(409);
     expect((await (await msgs.GET(req("a", "GET", undefined, `/api/approvals/${rows[0].id}/messages`))).json()).completed).toBe(true);
     vi.useRealTimers();
+  });
+});
+
+describe("取引後の評価と「いつもの農家」（受け取り完了後だけ。保存と本人への表示だけ）", () => {
+  const path = (id: string, what: "review" | "usual") => `/api/approvals/${id}/${what}`;
+  const getReview = (who: string | null, id: string) => reviewRoute.GET(req(who, "GET", undefined, path(id, "review")));
+  const postReview = (who: string | null, id: string, payload: unknown) => reviewRoute.POST(req(who, "POST", payload, path(id, "review")));
+  const postUsual = (who: string | null, id: string) => usualRoute.POST(req(who, "POST", {}, path(id, "usual")));
+  /** 2農家の仕入れ案を、全農家「対応できます」→ 受け取り完了まで進める */
+  const completed = async () => {
+    const rows = await create();
+    for (const r of rows) await approvals.respond(db.users.get(r.producerName.replace("p-", "")), r.id, "approved");
+    await trades.received(db.users.get("r1"), rows[0].planFingerprint);
+    return rows;
+  };
+
+  it("受け取り完了前（返事待ち・マッチ成立）は評価も登録もできない（409）", async () => {
+    const rows = await create();
+    expect((await getReview("r1", rows[0].id)).status).toBe(409);
+    expect((await postReview("r1", rows[0].id, { rating: "good" })).status).toBe(409);
+    for (const r of rows) await approvals.respond(db.users.get(r.producerName.replace("p-", "")), r.id, "approved");
+    const res = await postUsual("r1", rows[0].id);
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe("受け取りが完了した取引だけ、評価や「いつもの農家」の登録ができます");
+    expect((await postReview("a", rows[0].id, { rating: "good" })).status).toBe(409);
+    expect(db.reviews).toHaveLength(0);
+    expect(db.usuals).toHaveLength(0);
+  });
+
+  it("飲食店・生産者がそれぞれ1回ずつ、農家ごとに評価できる。読めるのは自分の評価だけ", async () => {
+    const [a, b] = await completed();
+    expect(await (await getReview("r1", a.id)).json()).toEqual({ review: null, usual: false });
+    expect(await (await getReview("a", a.id)).json()).toEqual({ review: null, usual: null });
+    const r = await postReview("r1", a.id, { rating: "good", comment: "  丁寧でした  " });
+    expect(r.status).toBe(201);
+    expect((await r.json()).review).toEqual({ rating: "good", comment: "丁寧でした", createdAt: "2026-10-22T06:00:00.000Z" });
+    // 同じ相談・同じ側からは1回だけ（変更もしない）
+    const again = await postReview("r1", a.id, { rating: "bad" });
+    expect(again.status).toBe(409);
+    expect((await again.json()).error).toBe("この取引はすでに評価しています");
+    // 生産者側は別に1回。飲食店の評価は見えない
+    expect((await getReview("a", a.id)).status).toBe(200);
+    expect((await (await getReview("a", a.id)).json()).review).toBeNull();
+    expect((await postReview("a", a.id, { rating: "bad", comment: "" })).status).toBe(201);
+    expect((await (await getReview("a", a.id)).json()).review).toMatchObject({ rating: "bad", comment: null });
+    expect((await (await getReview("r1", a.id)).json()).review).toMatchObject({ rating: "good", comment: "丁寧でした" });
+    // もう1農家（B）は別の取引として評価できる
+    expect((await (await getReview("r1", b.id)).json()).review).toBeNull();
+    expect((await postReview("r1", b.id, { rating: "bad" })).status).toBe(201);
+    expect(db.reviews.map((x) => [x.approvalRequestId, x.reviewerRole, x.reviewerUserId, x.rating, x.comment])).toEqual([
+      [a.id, "restaurant", "r1", "good", "丁寧でした"], [a.id, "producer", "a", "bad", null], [b.id, "restaurant", "r1", "bad", null],
+    ]);
+  });
+
+  it("権限：ほかの店・ほかの農家・未ログイン・外部サイトからは使えない。生産者は「いつもの農家」を登録できない", async () => {
+    const [a] = await completed();
+    expect((await getReview("r2", a.id)).status).toBe(404);
+    expect((await getReview("b", a.id)).status).toBe(404);
+    expect((await postReview("b", a.id, { rating: "good" })).status).toBe(404);
+    expect((await getReview(null, a.id)).status).toBe(401);
+    expect((await postUsual("a", a.id)).status).toBe(403);
+    expect((await postUsual("r2", a.id)).status).toBe(404);
+    const external = req("r1", "POST", { rating: "good" }, path(a.id, "review")); external.headers.set("origin", "https://elsewhere.invalid");
+    expect((await reviewRoute.POST(external)).status).toBe(403);
+    expect((await getReview("r1", "bad id!")).status).toBe(400);
+    expect(db.reviews).toHaveLength(0);
+    expect(db.usuals).toHaveLength(0);
+  });
+
+  it("入力：「良かった」「残念だった」のどちらか。一言は前後の空白を除いて100文字まで", async () => {
+    const [a] = await completed();
+    expect((await postReview("r1", a.id, {})).status).toBe(400);
+    expect((await postReview("r1", a.id, { rating: "great" })).status).toBe(400);
+    expect((await postReview("r1", a.id, { rating: "good", comment: 3 })).status).toBe(400);
+    const long = await postReview("r1", a.id, { rating: "good", comment: "あ".repeat(101) });
+    expect(long.status).toBe(400);
+    expect((await long.json()).error).toBe("一言コメントは100文字以内で入力してください");
+    expect((await postReview("r1", a.id, { rating: "good", comment: ` ${"あ".repeat(100)} ` })).status).toBe(201);
+  });
+
+  it("いつもの農家：受け取り完了した取引の農家だけ。2回押しても1件。マッチング（取引経験・計算の入力・相談の状態）は変えない", async () => {
+    const [a, b] = await completed();
+    const relationshipsBefore = JSON.stringify(db.inputs.relationships);
+    const before = await approvals.list(db.users.get("r1"));
+    const r = await postUsual("r1", a.id);
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ usual: true });
+    expect((await postUsual("r1", a.id)).status).toBe(200);
+    expect(db.usuals.map((u) => [u.restaurantUserId, u.producerId, u.approvalRequestId])).toEqual([["r1", "p-a", a.id]]);
+    expect((await (await getReview("r1", a.id)).json()).usual).toBe(true);
+    expect((await (await getReview("r1", b.id)).json()).usual).toBe(false); // 農家ごと
+    expect(JSON.stringify(db.inputs.relationships)).toBe(relationshipsBefore);
+    expect(await approvals.list(db.users.get("r1"))).toEqual(before);
+    expect(db.reviews).toHaveLength(0); // 評価とは別
   });
 });

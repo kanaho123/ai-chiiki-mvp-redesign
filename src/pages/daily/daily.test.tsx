@@ -46,9 +46,12 @@ let draftReply: Record<string, unknown> | null = null;
 const usualUmeda = { placeId: "pl-umeda", name: "梅田エリア受渡所（仮）", address: "大阪市北区", kind: null, times: [{ seriesId: "s-umeda", weekday: 2, startTime: "10:00", endTime: "11:00", active: true }] };
 // 取引のやり取り（相談の id ごと）と受け取り完了
 let tradeMessages: Record<string, { id: string; body: string; createdAt: string; mine: boolean; sender: string; senderName: string }[]> = {};
+// 取引後の評価・いつもの農家（相談の id ごと）
+let reviewState: Record<string, { review: { rating: string; comment: string | null; createdAt: string } | null; usual: boolean | null }> = {};
 let pickup: { usual: unknown[]; candidates: { placeId: string; name: string; address: string; kind: string | null }[] } = { usual: [], candidates: [] };
 beforeEach(() => {
   tradeMessages = {};
+  reviewState = {};
   supplyPost = defaultSupplyPost;
   draftReply = null;
   supplyRows = [supplyRow()];
@@ -91,6 +94,18 @@ beforeEach(() => {
         return json({ message: m }, 201);
       }
       return json({ messages: list, completed: requests.some((r) => r.id === id && r.receivedAt) });
+    }
+    const after = /^\/api\/approvals\/([^/]+)\/(review|usual)$/.exec(url);
+    if (after) {
+      const st = (reviewState[decodeURIComponent(after[1])] ??= { review: null, usual: me.role === "restaurant" ? false : null });
+      if (after[2] === "usual") { st.usual = true; return json({ usual: true }); }
+      if (method === "POST") {
+        if (st.review) return json({ error: "この取引はすでに評価しています" }, 409);
+        const b = body as { rating: string; comment: string };
+        st.review = { rating: b.rating, comment: b.comment || null, createdAt: "2026-10-22T06:00:00.000Z" };
+        return json({ review: st.review }, 201);
+      }
+      return json(st);
     }
     if (url === "/api/approvals/received" && method === "POST") {
       const fp = (body as { fingerprint: string }).fingerprint;
@@ -457,6 +472,78 @@ describe("取引：成立後のやり取り・受け取り完了（相談の詳�
     expect(rowOf("完了した店").textContent).toContain("取引完了：飲食店が受け取りを完了しました");
     expect(rowOf("完了した店").querySelector(".trade-chat textarea")).toBeNull();
     expect(calls.filter((c) => c.url.endsWith("/messages")).map((c) => c.url).sort()).toEqual(["/api/approvals/b/messages", "/api/approvals/c/messages"]);
+  });
+});
+
+describe("取引後の評価と「☆ いつもの農家」（受け取り完了後だけ・農家ごと）", () => {
+  const typeInto = async (input: HTMLTextAreaElement, value: string) => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(input, value);
+    await act(async () => { input.dispatchEvent(new Event("input", { bubbles: true })); });
+  };
+  const boxOf = (name: string) => [...el.querySelectorAll(".review-box")].find((b) => b.getAttribute("aria-label") === `${name}との取引の評価`)!;
+  const pick = async (box: Element, label: string) => {
+    const input = [...box.querySelectorAll<HTMLInputElement>("input[type=radio]")].find((i) => i.closest("label")?.textContent?.includes(label))!;
+    await act(async () => { input.click(); });
+  };
+  const done = "2026-10-22T05:00:00.000Z";
+
+  it("飲食店：2農家の取引を農家ごとに評価し、評価とは別に「☆ いつもの農家に登録」できる", async () => {
+    me = restaurant;
+    requests = [req("a", "approved", { established: true, receivedAt: done }), req("b", "approved", { established: true, receivedAt: done, producerName: "B農園" })];
+    await open("/restaurant/consultations/fp-1");
+    expect($("#review-title")?.textContent).toBe("取引の評価");
+    const a = boxOf("A農園"), b = boxOf("B農園");
+    expect(a.querySelector("legend")?.textContent).toBe("今回の取引はいかがでしたか？");
+    expect([...a.querySelectorAll(".option-card b")].map((x) => x.textContent)).toEqual(["良かった", "残念だった"]);
+    expect(a.querySelector<HTMLButtonElement>("button[type=submit]")?.disabled).toBe(true); // 選ぶまで送れない
+    // 一言は100文字まで
+    await typeInto(a.querySelector("textarea")!, "あ".repeat(101));
+    await pick(a, "良かった");
+    expect(a.textContent).toContain("一言コメントは100文字以内で入力してください");
+    expect(a.querySelector<HTMLButtonElement>("button[type=submit]")?.disabled).toBe(true);
+    await typeInto(a.querySelector("textarea")!, "  丁寧でした  ");
+    await click(a.querySelector("button[type=submit]"));
+    expect(calls.filter((c) => c.url.endsWith("/review") && c.method === "POST").map((c) => [c.url, c.body])).toEqual([["/api/approvals/a/review", { rating: "good", comment: "丁寧でした" }]]);
+    expect(a.querySelector(".review-done")?.textContent).toBe("評価済み：良かった「丁寧でした」");
+    expect(a.querySelector("form")).toBeNull();
+    expect(b.querySelector("form")).not.toBeNull(); // B農園はまだ（農家ごと）
+    // いつもの農家：評価していない B農園でも登録できる（評価の内容で自動登録しない）
+    expect(a.querySelector(".usual-tag")).toBeNull();
+    await click(b.querySelector("button[aria-label='B農園をいつもの農家に登録']"));
+    expect(calls.filter((c) => c.url.endsWith("/usual")).map((c) => c.url)).toEqual(["/api/approvals/b/usual"]);
+    expect(b.querySelector(".usual-tag")?.textContent).toBe("☆ いつもの農家");
+    expect([...b.querySelectorAll("button")].some((x) => x.textContent?.includes("いつもの農家に登録"))).toBe(false);
+    expect(a.querySelector(".usual-tag")).toBeNull();
+    expect([...a.querySelectorAll("button")].some((x) => x.textContent?.includes("☆ いつもの農家に登録"))).toBe(true);
+  });
+  it("飲食店：受け取り完了前（マッチ成立）は評価・いつもの農家を出さず、API も呼ばない", async () => {
+    me = restaurant;
+    requests = [req("a", "approved", { established: true, receivedAt: null })];
+    await open("/restaurant/consultations/fp-1");
+    expect($(".review-box")).toBeNull();
+    expect($("#review-title")).toBeNull();
+    expect(calls.some((c) => c.url.endsWith("/review") || c.url.endsWith("/usual"))).toBe(false);
+  });
+  it("生産者：完了した取引だけ評価できる（いつもの農家のボタンは出さない）", async () => {
+    me = producer;
+    requests = [
+      req("b", "approved", { established: true, restaurantName: "取引中の店" }),
+      req("c", "approved", { established: true, receivedAt: done, restaurantName: "完了した店" }),
+    ];
+    reviewState = { c: { review: null, usual: null } };
+    await open("/producer/requests");
+    const rowOf = (name: string) => [...el.querySelectorAll(".request-list .farm-row")].find((r) => r.textContent?.includes(name))!;
+    expect(rowOf("取引中の店").querySelector(".review-box")).toBeNull();
+    const box = rowOf("完了した店").querySelector(".review-box")!;
+    expect(box.getAttribute("aria-label")).toBe("完了した店との取引の評価");
+    expect(box.textContent).toContain("評価は相手やほかの利用者には表示されません");
+    expect(box.querySelector(".review-head")).toBeNull();
+    expect([...box.querySelectorAll("button")].some((x) => x.textContent?.includes("いつもの農家"))).toBe(false);
+    await pick(box, "残念だった");
+    await click(box.querySelector("button[type=submit]"));
+    expect(calls.filter((c) => c.url.endsWith("/review") && c.method === "POST").map((c) => [c.url, c.body])).toEqual([["/api/approvals/c/review", { rating: "bad", comment: "" }]]);
+    expect(box.querySelector(".review-done")?.textContent).toBe("評価済み：残念だった");
+    expect(calls.filter((c) => c.url.endsWith("/review")).map((c) => c.url)).toEqual(["/api/approvals/c/review", "/api/approvals/c/review"]);
   });
 });
 

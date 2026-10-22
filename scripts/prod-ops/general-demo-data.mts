@@ -108,6 +108,9 @@ type Ids = {
   placeIds: string[]; seriesIds: string[]; slotIds: string[]; supplyIds: string[]; emails: string[];
 };
 
+/** 後から追加した表（producer_places・trade_reviews・usual_producers）は、マイグレーション前の DB には無い。無ければ 0 件として扱う */
+const hasTable = async (tx: any, table: string) => ((await tx.$queryRawUnsafe(`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = $1) AS ok`, table)) as { ok: boolean }[])[0]?.ok === true;
+
 /** デモの行と、それを参照している行を数える（読み取り） */
 async function survey(tx: any, ids: Ids) {
   const demoProducers = ids.producerIds;
@@ -121,6 +124,14 @@ async function survey(tx: any, ids: Ids) {
   const seriesParticipants = await tx.slotSeriesParticipant.findMany({ where: { OR: [{ seriesId: { in: ids.seriesIds } }, { producerId: { in: demoProducers } }] }, select: { seriesId: true, producerId: true } });
   const slotParticipants = await tx.slotParticipant.findMany({ where: { OR: [{ slotId: { in: slotIds } }, { producerId: { in: demoProducers } }] }, select: { slotId: true, producerId: true } });
   const seriesAtPlaces = await tx.slotSeries.findMany({ where: { placeId: { in: ids.placeIds } }, select: { id: true } });
+  const approvalIds = approvals.map((a: any) => a.id);
+  // いつもの受け渡し場所・取引後の評価・いつもの農家（デモの農家・場所・相談・飲食店に結びつくもの）
+  const producerPlaces = await hasTable(tx, "producer_places")
+    ? await tx.producerPlace.findMany({ where: { OR: [{ producerId: { in: demoProducers } }, { placeId: { in: ids.placeIds } }] }, select: { producerId: true, placeId: true } }) : [];
+  const reviews = await hasTable(tx, "trade_reviews")
+    ? await tx.tradeReview.findMany({ where: { approvalRequestId: { in: approvalIds } }, select: { id: true, reviewerUserId: true } }) : [];
+  const usuals = await hasTable(tx, "usual_producers")
+    ? await tx.usualProducer.findMany({ where: { OR: [{ producerId: { in: demoProducers } }, { approvalRequestId: { in: approvalIds } }, ...(ids.restaurantUserId ? [{ restaurantUserId: ids.restaurantUserId }] : [])] }, select: { restaurantUserId: true, producerId: true } }) : [];
   const isDemoP = (p: string) => demoProducers.includes(p);
   const isDemoU = (u: string) => demoUsers.includes(u);
   const real = {
@@ -130,10 +141,13 @@ async function survey(tx: any, ids: Ids) {
     seriesParticipants: seriesParticipants.filter((s: any) => !isDemoP(s.producerId)).length, // 本物の生産者がデモの場所の回に参加
     slotParticipants: slotParticipants.filter((s: any) => !isDemoP(s.producerId)).length,
     otherSeriesAtDemoPlaces: seriesAtPlaces.filter((s: any) => !ids.seriesIds.includes(s.id)).length, // 本物の生産者がデモの場所に別の時間を登録
+    producerPlaces: producerPlaces.filter((p: any) => !isDemoP(p.producerId)).length, // 本物の生産者がデモの場所を「いつもの場所」に登録
+    reviews: reviews.filter((r: any) => !isDemoU(r.reviewerUserId)).length, // 本物の利用者がデモの取引を評価
+    usuals: usuals.filter((u: any) => !isDemoU(u.restaurantUserId) || !isDemoP(u.producerId)).length, // 本物の飲食店がデモの農家を「いつもの農家」に登録
   };
   const throttles = await tx.authThrottle.findMany({ select: { key: true } });
   const throttleKeys = throttles.map((t: any) => t.key).filter((k: string) => ids.emails.some((e) => k.includes(e)));
-  return { slotIds, supplyIds, approvals, relationships, seriesParticipants, slotParticipants, real, throttleKeys };
+  return { slotIds, supplyIds, approvals, relationships, seriesParticipants, slotParticipants, producerPlaces, reviews, usuals, real, throttleKeys };
 }
 
 async function main() {
@@ -210,7 +224,7 @@ async function main() {
   if (ids.endpoint !== ALLOWED) throw new Guard("ids ファイルの接続先が違うため中止");
   if (mode === "inspect") {
     const s = await prisma.$transaction(async (tx: any) => { await tx.$executeRawUnsafe("SET TRANSACTION READ ONLY"); return survey(tx, ids); }, { timeout: 60_000, maxWait: 20_000 });
-    say(`デモの受け渡しの回 ${s.slotIds.length}・出品 ${s.supplyIds.length}・相談 ${s.approvals.length}・取引の関係 ${s.relationships.length}・毎週の回の参加 ${s.seriesParticipants.length}・回の参加 ${s.slotParticipants.length}・ログイン制限の記録 ${s.throttleKeys.length}`);
+    say(`デモの受け渡しの回 ${s.slotIds.length}・出品 ${s.supplyIds.length}・相談 ${s.approvals.length}・取引の関係 ${s.relationships.length}・毎週の回の参加 ${s.seriesParticipants.length}・回の参加 ${s.slotParticipants.length}・いつもの場所 ${s.producerPlaces.length}・取引の評価 ${s.reviews.length}・いつもの農家 ${s.usuals.length}・ログイン制限の記録 ${s.throttleKeys.length}`);
     say(`本物の利用者のデータがデモを参照している件数：${JSON.stringify(s.real)}`);
     return;
   }
@@ -221,6 +235,9 @@ async function main() {
     const realTotal = Object.values(s.real).reduce((a: number, b: any) => a + b, 0);
     if (realTotal > 0) throw new Guard(`本物の利用者のデータがデモの行を参照しているため、何も消さない：${JSON.stringify(s.real)}`);
     const n: Record<string, number> = {};
+    // いつもの農家・取引の評価を先に消す（相談・農家・利用者への外部キーがあり、RESTRICT のため）。本物の利用者のものは上で止めている
+    n.usuals = s.usuals.length ? (await tx.usualProducer.deleteMany({ where: { OR: s.usuals.map((u: any) => ({ restaurantUserId: u.restaurantUserId, producerId: u.producerId })) } })).count : 0;
+    n.reviews = s.reviews.length ? (await tx.tradeReview.deleteMany({ where: { id: { in: s.reviews.map((r: any) => r.id) } } })).count : 0;
     // 取引のやり取り（デモの相談に紐づくもの）を先に消す（相談への外部キーがあるため）。送り手がデモの利用者でなければ何も消さない
     const msgs = await tx.tradeMessage.findMany({ where: { approvalRequestId: { in: s.approvals.map((a: any) => a.id) } }, select: { id: true, senderUserId: true } });
     if (msgs.some((m: any) => !ids.userIds.includes(m.senderUserId))) throw new Guard("デモの相談に、デモの利用者以外のやり取りがあるため、何も消さない");
@@ -233,12 +250,14 @@ async function main() {
     n.seriesParticipants = (await tx.slotSeriesParticipant.deleteMany({ where: { OR: [{ seriesId: { in: ids.seriesIds } }, { producerId: { in: ids.producerIds } }] } })).count;
     n.series = (await tx.slotSeries.deleteMany({ where: { id: { in: ids.seriesIds } } })).count;
     n.producerItems = (await tx.producerItem.deleteMany({ where: { producerId: { in: ids.producerIds } } })).count;
+    // いつもの受け渡し場所（場所・農家への外部キーがあるため、場所・農家より先に）
+    n.producerPlaces = s.producerPlaces.length ? (await tx.producerPlace.deleteMany({ where: { OR: s.producerPlaces.map((p: any) => ({ producerId: p.producerId, placeId: p.placeId })) } })).count : 0;
     n.places = (await tx.place.deleteMany({ where: { id: { in: ids.placeIds } } })).count;
     n.producers = (await tx.producer.deleteMany({ where: { id: { in: ids.producerIds } } })).count;
     n.restaurants = ids.restaurantId ? (await tx.restaurant.deleteMany({ where: { id: ids.restaurantId } })).count : 0;
     n.users = (await tx.user.deleteMany({ where: { id: { in: ids.userIds }, email: { endsWith: "@example.invalid" } } })).count;
     n.throttles = s.throttleKeys.length ? (await tx.authThrottle.deleteMany({ where: { key: { in: s.throttleKeys } } })).count : 0;
-    if (n.producers !== ids.producerIds.length || n.places !== ids.placeIds.length || n.series !== ids.seriesIds.length || n.users !== ids.userIds.length || n.restaurants !== (ids.restaurantId ? 1 : 0))
+    if (n.usuals !== s.usuals.length || n.reviews !== s.reviews.length || n.producerPlaces !== s.producerPlaces.length || n.producers !== ids.producerIds.length || n.places !== ids.placeIds.length || n.series !== ids.seriesIds.length || n.users !== ids.userIds.length || n.restaurants !== (ids.restaurantId ? 1 : 0))
       throw new Guard(`削除件数が想定と違うため取り消した：${JSON.stringify(n)}`);
     return n;
   }, { timeout: 60_000, maxWait: 20_000 });
