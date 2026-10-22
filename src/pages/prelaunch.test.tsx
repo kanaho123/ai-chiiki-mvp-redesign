@@ -88,15 +88,19 @@ describe("利用規約・プライバシーポリシー", () => {
     expect([...el.querySelectorAll(".legal-history li")].map((li) => li.textContent)).toEqual(PRIVACY_HISTORY.map((h) => `${h.date}　${h.text}`));
     expect(el.querySelector(".alert.warn")).toBeNull();
     expect(text()).not.toContain("公開前の案");
-    expect(PRIVACY_DATES).toEqual({ established: "2026年10月18日", lastRevised: "2026年10月19日" });
-    expect(PRIVACY_HISTORY.map((h) => h.date)).toEqual(["2026年10月19日"]);
+    expect(PRIVACY_DATES).toEqual({ established: "2026年10月18日", lastRevised: "2026年10月22日" });
+    expect(PRIVACY_HISTORY.map((h) => h.date)).toEqual(["2026年10月19日", "2026年10月22日"]);
     expect(text()).toContain("変更内容は、本サービス上の本ポリシーの改定日・改定履歴等でお知らせします");
     expect(text()).not.toContain("変更するときは、本サービス上でお知らせします");
   });
   it("プライバシーポリシー：受け渡し場所の取り扱いを、今の実装のとおりに書く（住所の表示範囲）", async () => {
     await open("/privacy");
     const t = text();
-    expect(t).toContain("場所の名前、住所、場所の種類（直売所・集荷場・出荷先・自分の農園・その他）、渡せる曜日と時間帯");
+    // 2026-10-22 から、受け渡し場所は場所だけを登録し、渡せる日と時間帯（午前・午後）は出品のときに選ぶ
+    expect(t).toContain("場所の名前、住所、場所の種類（直売所・集荷場・出荷先・自分の農園・その他）。");
+    expect(t).toContain("受け渡し場所の登録では曜日・時間帯を聞かず、渡せる日と時間帯は出品のときに選びます");
+    expect(t).toContain("日時は、渡せる日と時間帯（午前・午後）です");
+    expect(t).not.toContain("渡せる曜日と時間帯。");
     expect(t).not.toContain("参加する受渡枠");
     expect(t).not.toContain("メモ");
     expect(t).toContain("品目・品種・規格と規格外の理由・産地・数量・最低販売量・価格・受け渡しの場所と日時・公開の状態");
@@ -130,6 +134,32 @@ describe("利用規約・プライバシーポリシー", () => {
     expect(t).not.toContain("アカウントを削除するまで保存します");
     expect(t).not.toMatch(/AIが(注文|取引)を(確定|決定)します/);
   });
+  it("プライバシーポリシー：取引のやり取り・取引後の評価・いつもの農家を、実装のとおりに書く（相手には表示しない）", async () => {
+    await open("/privacy");
+    const t = text();
+    expect(t).toContain("取引が成立した後に、飲食店と生産者が送ったメッセージの本文、送った人、送った日時");
+    expect(t).toContain("取引のやり取りのメッセージは、その取引の飲食店と生産者にだけ表示されます");
+    expect(t).toContain("「良かった」または「残念だった」）、任意の一言コメント（100文字まで）");
+    expect(t).toContain("取引後の評価と一言コメントは、現在、取引の相手やほかの利用者には表示しません");
+    expect(t).toContain("飲食店が「いつもの農家」に登録した生産者、登録のもとになった取引、登録した日時");
+    expect(t).toContain("「いつもの農家」に登録したことは、登録した飲食店の画面にだけ表示します");
+    expect(t).toContain("取引後の評価と「いつもの農家」の登録も、仕入れ案の計算やおすすめには使っていません");
+    expect(t).toContain("取引のやり取りのメッセージと送った評価は、アプリ内で変更・削除できません");
+    expect(t).not.toMatch(/評価(は|が)(公開|相手に表示)されます|ランキング/);
+  });
+  it("プライバシーポリシー：AI に送る情報（文章・食材名・写真・話した内容）と音声入力を、実装のとおりに書く", async () => {
+    await open("/privacy");
+    const t = text();
+    expect(t).toContain("入力欄の文章（音声入力で入れた文字を含む）");
+    expect(t).toContain("その食材名と、いま出品されている品目の名前の一覧");
+    expect(t).toContain("写真（端末の中で長い辺 1024 ピクセルの JPEG に縮めたもの）、または話した内容を文字にしたもの（300 文字まで）");
+    expect(t).toContain("写真だけのときは、品目だけを読み取ります");
+    expect(t).toContain("送った文章と写真は、本サービスのデータベースには保存しません");
+    expect(t).toContain("音声は本サービスのサーバーには送りません");
+    expect(t).toContain("ブラウザの提供元の音声認識のサービスで音声が処理されることがあり");
+    expect(t).toContain("「欲しい食材」の一覧（品目と必要な量）");
+    expect(t).not.toContain("「条件を整理する」を押したときだけ、その入力文を OpenAI の API に送り"); // 飲食店の文章だけ、という古い説明は残さない
+  });
   it("利用規約の料金：現在無料・決済機能なし・受渡料金は受渡条件として表示し請求しない", async () => {
     await open("/terms");
     const t = text();
@@ -159,7 +189,7 @@ describe("利用規約・プライバシーポリシー", () => {
   it("規約の版：公開用の版で、新規登録の同意として記録する版（サーバー）と同じ", () => {
     expect(TERMS_VERSION).toBe("2026-10-18");
     expect(isDraftVersion(TERMS_VERSION)).toBe(false);
-    expect(PRIVACY_VERSION).toBe("2026-10-19");
+    expect(PRIVACY_VERSION).toBe("2026-10-22");
     expect(isDraftVersion(PRIVACY_VERSION)).toBe(false);
     expect(serverLegal.TERMS_VERSION).toBe(TERMS_VERSION);
     expect(serverLegal.PRIVACY_VERSION).toBe(PRIVACY_VERSION);
