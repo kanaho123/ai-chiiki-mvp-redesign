@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlanRequest, PlanSlot, PlanSupply } from "../src/lib/allocate";
 
@@ -77,6 +78,7 @@ const received = await import("./routes/approvals/received");
 const reviewRoute = await import("./routes/approvals/review");
 const usualRoute = await import("./routes/approvals/usual");
 const { trades } = await import("./approvals");
+const { prisma: mockPrisma } = await import("./db.js");
 const { TRADE_DECLINED, consultationStatus } = await import("../src/lib/approvals");
 
 const request: PlanRequest = {
@@ -420,5 +422,142 @@ describe("取引後の評価と「いつもの農家」（受け取り完了後�
     expect(JSON.stringify(db.inputs.relationships)).toBe(relationshipsBefore);
     expect(await approvals.list(db.users.get("r1"))).toEqual(before);
     expect(db.reviews).toHaveLength(0); // 評価とは別
+  });
+});
+
+describe("セキュリティ：取引後の評価・いつもの農家の API（本人・権限・状態・入力・エラー）", () => {
+  const path = (id: string, what: "review" | "usual") => `/api/approvals/${id}/${what}`;
+  const postReview = (who: string | null, id: string, payload: unknown) => reviewRoute.POST(req(who, "POST", payload, path(id, "review")));
+  const postUsual = (who: string | null, id: string, payload: unknown = {}) => usualRoute.POST(req(who, "POST", payload, path(id, "usual")));
+  const getReview = (who: string | null, id: string) => reviewRoute.GET(req(who, "GET", undefined, path(id, "review")));
+  const respondAll = async (rows: any[], status: "approved" | "rejected" = "approved") => { for (const r of rows) await approvals.respond(db.users.get(r.producerName.replace("p-", "")), r.id, status); };
+  const completed = async () => { const rows = await create(); await respondAll(rows); await trades.received(db.users.get("r1"), rows[0].planFingerprint); return rows; };
+  const nothingSaved = () => { expect(db.reviews).toHaveLength(0); expect(db.usuals).toHaveLength(0); };
+
+  it("1. 未ログインは評価・登録・取得のどれも 401", async () => {
+    const [a] = await completed();
+    expect((await postReview(null, a.id, { rating: "good" })).status).toBe(401);
+    expect((await postUsual(null, a.id)).status).toBe(401);
+    expect((await getReview(null, a.id)).status).toBe(401);
+    nothingSaved();
+  });
+  it("オンボーディング前のユーザーは使えない（403）", async () => {
+    const [a] = await completed();
+    db.users.set("r1", { ...db.users.get("r1"), onboarded: false });
+    expect((await postReview("r1", a.id, { rating: "good" })).status).toBe(403);
+    expect((await postUsual("r1", a.id)).status).toBe(403);
+    nothingSaved();
+  });
+  it("2・3. 飲食店Bは、飲食店Aの取引を評価も登録もできず、存在も分からない（404・同じ文）", async () => {
+    const [a] = await completed();
+    const r = await postReview("r2", a.id, { rating: "bad" });
+    expect(r.status).toBe(404);
+    expect((await r.json()).error).toBe("相談が見つかりません");
+    expect((await postUsual("r2", a.id)).status).toBe(404);
+    expect((await getReview("r2", a.id)).status).toBe(404);
+    expect((await postReview("r2", "req-999", { rating: "bad" })).status).toBe(404); // 存在しない ID と同じ応答
+    nothingSaved();
+  });
+  it("4. 生産者は「いつもの農家」を登録できない（自分の取引でも 403）", async () => {
+    const [a] = await completed();
+    expect((await postUsual("a", a.id)).status).toBe(403);
+    nothingSaved();
+  });
+  it("5. 生産者Bは、同じ仕入れ案の生産者Aの取引を評価・取得できない（404）", async () => {
+    const [a] = await completed();
+    expect((await postReview("b", a.id, { rating: "good" })).status).toBe(404);
+    expect((await getReview("b", a.id)).status).toBe(404);
+    nothingSaved();
+  });
+  it("6・7. 受け取り完了なし（返事待ち・一部対応・対応できません・マッチ成立）は、サーバーで拒否する", async () => {
+    const rows = await create();
+    const both = async (id: string) => [(await postReview("r1", id, { rating: "good" })).status, (await postUsual("r1", id)).status];
+    expect(await both(rows[0].id)).toEqual([409, 409]); // 返事待ち
+    await approvals.respond(db.users.get("a"), rows[0].id, "approved");
+    await approvals.respond(db.users.get("b"), rows[1].id, "rejected");
+    expect(await both(rows[0].id)).toEqual([409, 409]); // 一部の農家だけ対応（成立していない）
+    expect(await both(rows[1].id)).toEqual([409, 409]); // 対応できません
+    expect((await postReview("b", rows[1].id, { rating: "bad" })).status).toBe(409);
+    nothingSaved();
+    // 別の仕入れ案：全農家が対応＝マッチ成立。受け取り完了の前は拒否
+    db.rows = []; const again = await create(); await respondAll(again);
+    expect(await both(again[0].id)).toEqual([409, 409]);
+    expect((await postReview("a", again[0].id, { rating: "good" })).status).toBe(409);
+    nothingSaved();
+  });
+  it("7. DB の行が食い違っていても（返事待ち・対応できませんの行に receivedAt）、状態を確かめて拒否する", async () => {
+    const rows = await create();
+    rows.forEach((r: any) => { const row = db.rows.find((x) => x.id === r.id); row.receivedAt = new Date(); });
+    expect((await postReview("r1", rows[0].id, { rating: "good" })).status).toBe(409);
+    db.rows.find((x) => x.id === rows[0].id).status = "rejected";
+    expect((await postUsual("r1", rows[0].id)).status).toBe(409);
+    nothingSaved();
+  });
+  it("8. 2回目は 409。同時に送られて DB の一意制約（P2002）に当たっても 409 で、2件目は保存されない", async () => {
+    const [a] = await completed();
+    expect((await postReview("r1", a.id, { rating: "good" })).status).toBe(201);
+    expect((await postReview("r1", a.id, { rating: "good" })).status).toBe(409);
+    // 先に確かめる処理をすり抜けた同時送信：DB の一意制約で止まる
+    const findUnique = (mockPrisma as any).tradeReview.findUnique;
+    (mockPrisma as any).tradeReview.findUnique = async () => null;
+    try {
+      const raced = await postReview("r1", a.id, { rating: "bad" });
+      expect(raced.status).toBe(409);
+      expect((await raced.json()).error).toBe("この取引はすでに評価しています");
+    } finally { (mockPrisma as any).tradeReview.findUnique = findUnique; }
+    expect(db.reviews.map((r) => r.rating)).toEqual(["good"]);
+  });
+  it("12. 本文の ID・役割を書き換えても使わない（評価者・役割・相談・農家・店はサーバーが決める）", async () => {
+    const [a, b] = await completed();
+    expect((await postReview("r1", a.id, { rating: "good", comment: "ok", reviewerRole: "producer", reviewerUserId: "a", approvalRequestId: b.id, id: "forged" })).status).toBe(201);
+    expect(db.reviews.map((r) => [r.approvalRequestId, r.reviewerRole, r.reviewerUserId, r.id])).toEqual([[a.id, "restaurant", "r1", "rv-1"]]);
+    expect((await postUsual("r1", a.id, { producerId: "p-b", restaurantUserId: "r2", approvalRequestId: b.id })).status).toBe(200);
+    expect(db.usuals.map((u) => [u.restaurantUserId, u.producerId, u.approvalRequestId])).toEqual([["r1", "p-a", a.id]]);
+  });
+  it("9. いつもの農家は何度押しても1件（API）。DB でも主キー（店・農家）で重複できない", async () => {
+    const [a] = await completed();
+    for (let i = 0; i < 3; i++) expect((await postUsual("r1", a.id)).status).toBe(200);
+    expect(db.usuals).toHaveLength(1);
+    const sql = readFileSync(new URL("../prisma/migrations/20261023090000_trade_review_usual_producer/migration.sql", import.meta.url), "utf8");
+    expect(sql).toContain('CONSTRAINT "usual_producers_pkey" PRIMARY KEY ("restaurantUserId","producerId")');
+    expect(sql).toContain('CREATE UNIQUE INDEX "trade_reviews_approvalRequestId_reviewerRole_key" ON "trade_reviews"("approvalRequestId", "reviewerRole")');
+  });
+  it("10. コメントの上限はサーバーでも確かめる（101文字・文字列以外・大きすぎる本文は 400）", async () => {
+    const [a] = await completed();
+    expect((await postReview("r1", a.id, { rating: "good", comment: "😀".repeat(101) })).status).toBe(400);
+    expect((await postReview("r1", a.id, { rating: "good", comment: ["x"] })).status).toBe(400);
+    expect((await postReview("r1", a.id, { rating: "good", comment: { toString: "x" } })).status).toBe(400);
+    expect((await postReview("r1", a.id, { rating: "good", comment: "x".repeat(20_000) })).status).toBe(400); // 10KB 超は読まない
+    nothingSaved();
+    expect((await postReview("r1", a.id, { rating: "good", comment: "😀".repeat(100) })).status).toBe(201); // 絵文字も1文字として数える
+  });
+  it("11. HTML のような文字列もそのまま文字として保存・返す（加工しない。表示側でエスケープする）", async () => {
+    const [a] = await completed();
+    const text = "<script>alert(1)</script>";
+    const r = await postReview("r1", a.id, { rating: "good", comment: text });
+    expect((await r.json()).review.comment).toBe(text);
+    expect(r.headers.get("content-type")).toContain("application/json");
+  });
+  it("13. 想定外のエラーでは、接続情報・内部の文・スタックを返さない（500・決まった文）", async () => {
+    const [a] = await completed();
+    const create = (mockPrisma as any).tradeReview.create;
+    (mockPrisma as any).tradeReview.create = async () => { const e = new Error("connect postgresql://neondb_owner:secret@ep-x.neon.tech/neondb at C:\\app\\server\\approvals.ts:300"); throw Object.assign(e, { code: "P1001" }); };
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const r = await postReview("r1", a.id, { rating: "good" });
+      expect(r.status).toBe(500);
+      const body = await r.text();
+      expect(JSON.parse(body)).toEqual({ error: "サーバーで問題が発生しました。時間をおいてもう一度お試しください" });
+      for (const leak of ["postgresql", "secret", "neon", "approvals.ts", "P1001", "stack"]) expect(body).not.toContain(leak);
+      expect(spy.mock.calls.flat().join(" ")).not.toContain("secret"); // ログにもメッセージは出さない
+    } finally { (mockPrisma as any).tradeReview.create = create; spy.mockRestore(); }
+  });
+  it("14. 別サイトからの POST（Origin が違う）は、評価・登録とも 403", async () => {
+    const [a] = await completed();
+    for (const [route, what, payload] of [[reviewRoute, "review", { rating: "good" }], [usualRoute, "usual", {}]] as const) {
+      const r = req("r1", "POST", payload, path(a.id, what)); r.headers.set("origin", "https://evil.invalid");
+      expect((await route.POST(r)).status).toBe(403);
+    }
+    nothingSaved();
   });
 });

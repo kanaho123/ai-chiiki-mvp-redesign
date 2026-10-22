@@ -516,6 +516,15 @@ describe("取引後の評価と「☆ いつもの農家」（受け取り完了
     expect(a.querySelector(".usual-tag")).toBeNull();
     expect([...a.querySelectorAll("button")].some((x) => x.textContent?.includes("☆ いつもの農家に登録"))).toBe(true);
   });
+  it("評価の一言に HTML のような文字列があっても、文字として表示する（実行しない）", async () => {
+    me = restaurant;
+    requests = [req("a", "approved", { established: true, receivedAt: done })];
+    reviewState = { a: { review: { rating: "bad", comment: "<script>alert(1)</script><img src=x onerror=alert(2)>", createdAt: done }, usual: false } };
+    await open("/restaurant/consultations/fp-1");
+    const box = boxOf("A農園");
+    expect(box.querySelector(".review-comment")?.textContent).toBe("「<script>alert(1)</script><img src=x onerror=alert(2)>」");
+    expect(box.querySelector("script, img")).toBeNull();
+  });
   it("飲食店：受け取り完了前（マッチ成立）は評価・いつもの農家を出さず、API も呼ばない", async () => {
     me = restaurant;
     requests = [req("a", "approved", { established: true, receivedAt: null })];
