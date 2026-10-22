@@ -6,6 +6,7 @@ import type { Suggestion } from "../../lib/suggest.js";
 import { BottomBar } from "../../components/BottomBar";
 import { Icon } from "../../components/Icon";
 import { exclusionSentence, PLAIN_NOTICE, PLAIN_REASON, rankingSummary } from "./plain-text";
+import { CAPABILITY_TAGS } from "../../lib/onboarding.js";
 import { placeKindLabel } from "../../lib/pickup.js";
 import type { Freshness, PlanOption, Shown } from "./types";
 import { ApprovalPanel } from "./ApprovalPanel";
@@ -31,7 +32,7 @@ function Num({ children, stale }: { children: React.ReactNode; stale: boolean })
  * 上に農家ごとの量（数字＋左端から始まるバー）、線で合流し、下で1つの量になる。足りないときだけ不足のバーを添える。
  * バーの長さは「今回必要な量」を100%とした比率。足りないときは積み上げの先に点線の「不足 Nkg」を置く。
  */
-function Bundle({ plan, stale }: { plan: PlanResult; stale: boolean }) {
+function Bundle({ plan, stale, tags = {} }: { plan: PlanResult; stale: boolean; tags?: Record<string, string[]> }) {
   const need = plan.requestedKg;
   const gap = plan.status !== "MATCHED" && plan.shortageKg > 0 ? plan.shortageKg : 0;
   const pct = (kg: number) => Math.min(100, (kg / need) * 100);
@@ -39,10 +40,25 @@ function Bundle({ plan, stale }: { plan: PlanResult; stale: boolean }) {
   const label = `${plan.allocations.map((a) => `${a.producerName} ${a.kg}kg`).join("、")}を束ねて${plan.fulfilledKg}kg${gap ? `。必要 ${need}kgまで不足 ${gap}kg` : ""}`;
   return (
     <figure className={`bundle ${gap ? "has-gap" : ""} ${stale ? "is-stale" : ""}`} aria-label={label}>
+      {/* 式で一目に：A農園 5kg ＋ B農園 3kg ＋ C農園 2kg ＝ 合計10kg（複数の農家を組み合わせたときだけ） */}
+      {segs.length > 1 && (
+        <figcaption className="bundle-equation" aria-hidden="true">
+          {segs.map((s, i) => (
+            <span key={s.a.supplyId} className="eq-term">{i > 0 && <span className="eq-op">＋</span>}{s.a.producerName}<b className="num">{s.a.kg}kg</b></span>
+          ))}
+          <span className="eq-term eq-total"><span className="eq-op">＝</span>合計<b className="num">{plan.fulfilledKg}kg</b></span>
+        </figcaption>
+      )}
       <ul className="bundle-sources" style={{ gridTemplateColumns: `repeat(${segs.length}, minmax(0, 1fr))` }}>
         {segs.map((s) => (
           <li key={s.a.supplyId} className={`bundle-row shade-${s.shade}`}>
             <span className="bundle-name">{s.a.producerName}</span>
+            {/* 対応できる取引（生産者が登録したもの）。農家名のすぐ下に小さく */}
+            {(tags[s.a.producerId] ?? []).length > 0 && (
+              <span className="farm-tags" aria-label={`${s.a.producerName}の対応できる取引`}>
+                {CAPABILITY_TAGS.filter((t) => tags[s.a.producerId].includes(t.value)).map((t) => <span key={t.value} className="farm-tag">{t.tag}</span>)}
+              </span>
+            )}
             <span className="bundle-kg num">{s.a.kg}<span className="unit">kg</span></span>
             <span className="bundle-track"><i className="bundle-bar" style={{ width: `${s.w}%` }} /></span>
           </li>
@@ -183,7 +199,7 @@ export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, o
               <small>税込・受け渡し費用込み</small>
             </p>
           )}
-          {hasPlan && <Bundle plan={plan} stale={stale} />}
+          {hasPlan && <Bundle plan={plan} stale={stale} tags={shown.farmTags} />}
           {hasPlan && plan.slot && !pickup.shared && (
             <p className="answer-meta">
               <span><Icon name="calendar" size={20} />{formatDateJa(jstDateOf(plan.slot.startAt))} {jstTimeOf(plan.slot.startAt)}〜{jstTimeOf(plan.slot.endAt)}</span>
@@ -290,7 +306,7 @@ export function PlanView({ shown, freshness, busy, busyLabel, error, onRecalc, o
           <details className="more-info fold foot-meta">
             <summary>計算の条件<Icon name="chevronDown" size={20} /></summary>
             <p className="computed-at">計算した時点：{formatJstDateTime(plan.computedAt)}{shown.demoClock && "（デモの基準日時）"}／在庫の最後の更新：{lastUpdate}</p>
-            <p className="used-conditions">使った条件：{request.quantityKg}kg／{request.desiredDate}に受け取り／産地 {request.originPrefectures.join("・")}／予算 {request.budgetYen === null ? "上限なし" : yen(request.budgetYen)}／初めての農家 {request.allowFirstTime ? "含める" : "含めない"}／規格外 {request.allowIrregular ? "含める" : "含めない"}／品種 {request.allowMixedVarieties ? "まぜてよい" : "まぜない"}／規格 {request.allowMixedGrades ? "まぜてよい" : "まぜない"}</p>
+            <p className="used-conditions">使った条件：{request.quantityKg}kg／{request.desiredDate}に受け取り／産地 {request.originPrefectures.join("・")}／予算 {request.budgetYen === null ? "上限なし" : yen(request.budgetYen)}／初めての農家 {request.allowFirstTime ? "含める" : "含めない"}／規格外 {request.allowIrregular ? "含める" : "含めない"}</p>
           </details>
         </div>
         {error && <div className="alert bad" role="alert"><Icon name="alert" />{error}</div>}

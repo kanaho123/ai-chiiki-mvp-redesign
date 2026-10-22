@@ -141,6 +141,18 @@ const PATHS = {
       <path d="M4.5 20c.8-3.8 3.8-6 7.5-6s6.7 2.2 7.5 6" />
     </>
   ),
+  camera: (
+    <>
+      <path d="M4.5 8h3l1.6-2.5h5.8L16.5 8h3A1.5 1.5 0 0 1 21 9.5v8.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18V9.5A1.5 1.5 0 0 1 4.5 8z" />
+      <circle cx="12" cy="13.5" r="3.5" />
+    </>
+  ),
+  mic: (
+    <>
+      <rect x="9" y="3.5" width="6" height="11" rx="3" />
+      <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5" />
+    </>
+  ),
 } as const;
 
 export type IconName = keyof typeof PATHS;

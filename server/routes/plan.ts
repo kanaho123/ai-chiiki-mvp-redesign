@@ -4,7 +4,7 @@ import { parsePlanRequest } from "../../src/lib/validate.js";
 import { requireRole } from "../auth.js";
 import { isDemoClock, serverNow } from "../clock.js";
 import { handle, json, readJson } from "../http.js";
-import { loadPlanInputs } from "../plan-data.js";
+import { loadFarmTags, loadPlanInputs } from "../plan-data.js";
 import { planFingerprint } from "../plan-fingerprint.js";
 
 // 確定済みの条件と最新の供給から、通常ロジックだけで仕入れ案を計算して返す（AI は使わない）。
@@ -21,5 +21,7 @@ export const POST = handle(async (request) => {
   // 計算のたびにサーバーで最新の供給を読み、同じ時点の version を返す（表示中の案が古いかの判定用）
   const { inputs, version } = await loadPlanInputs({ itemId: req.itemId, slotId: req.slotId, restaurantUserId: g.user.id });
   const plan = allocatePlan({ request: req, ...inputs, now });
-  return json({ plan, version, fingerprint: planFingerprint(req, version, plan), request: req, suggestions: suggestConditionChanges(req, plan), demoClock: isDemoClock() });
+  // farmTags：農家ごとの「対応できる取引」のタグ（表示だけ。案・fingerprint の外に置く）
+  const farmTags = await loadFarmTags(plan.allocations.map((a) => a.producerId));
+  return json({ plan, version, fingerprint: planFingerprint(req, version, plan), request: req, suggestions: suggestConditionChanges(req, plan), demoClock: isDemoClock(), farmTags });
 });

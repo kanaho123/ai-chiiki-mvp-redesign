@@ -59,16 +59,24 @@ export function RestaurantHome() {
         <span className="eyebrow">ホーム</span>
         <h1 className="display">{nameOf(me)}</h1>
       </div>
-      <WelcomeNotice role="restaurant" text="さっそく、欲しい食材の仕入れ案をつくってみましょう。" />
+      <WelcomeNotice role="restaurant" text="さっそく、欲しい食材をAIに相談してみましょう。" />
+
+      {/* いちばん大事な操作は1つだけ、画面の最初に大きく置く */}
+      <Link className="btn-primary btn-block link-btn home-main" to={PATHS.restaurant.buy}>
+        <Icon name="chat" size={28} />
+        <span className="home-main-text"><b>AIに仕入れを相談する</b><small>欲しい食材と量を、話すか書くだけ</small></span>
+      </Link>
       {error && <ErrorRetry text={error} onRetry={reload} />}
 
-      <section className="todo" aria-labelledby="todo-title">
-        <h2 className="section-title" id="todo-title">今やること</h2>
-        {todo ? (
+      {/* 今やること：相談の返事など、見に行くものがあるときだけ（仕入れを始める案内は上のボタンと同じなので出さない） */}
+      {!todo && !error && <p className="muted" aria-busy="true">読み込み中…</p>}
+      {todo?.to === "consultations" && (
+        <section className="todo" aria-labelledby="todo-title">
+          <h2 className="section-title" id="todo-title">今やること</h2>
           <p className="todo-text">{todo.text}</p>
-        ) : !error && <p className="muted" aria-busy="true">読み込み中…</p>}
-        {todo?.to === "consultations" && <Link className="text-btn link-btn todo-link" to={PATHS.restaurant.consultations}>相談を見る<Icon name="chevronRight" /></Link>}
-      </section>
+          <Link className="text-btn link-btn todo-link" to={PATHS.restaurant.consultations}>相談を見る<Icon name="chevronRight" /></Link>
+        </section>
+      )}
 
       <section aria-labelledby="ongoing-title">
         <h2 className="section-title" id="ongoing-title">進行中の相談</h2>
@@ -76,8 +84,6 @@ export function RestaurantHome() {
         {ongoing.length > 0 && <ul className="consult-list">{ongoing.slice(0, 3).map((c) => <ConsultationCard key={c.id} c={c} />)}</ul>}
         {ongoing.length > 3 && <Link className="text-btn link-btn" to={PATHS.restaurant.consultations}>ほかの相談も見る（全{ongoing.length}件）<Icon name="chevronRight" /></Link>}
       </section>
-
-      <Link className="btn-primary btn-block link-btn" to={PATHS.restaurant.buy}><Icon name="basket" />新しい仕入れ案をつくる</Link>
     </main>
   );
 }
@@ -98,7 +104,7 @@ export function RestaurantConsultations() {
       {consultations?.length === 0 && (
         <>
           <p className="empty-note">まだ相談はありません。仕入れ案をつくって「生産者に確認する」を押すと、ここに表示されます。</p>
-          <Link className="btn-primary btn-block link-btn" to={PATHS.restaurant.buy}><Icon name="basket" />新しい仕入れ案をつくる</Link>
+          <Link className="btn-primary btn-block link-btn" to={PATHS.restaurant.buy}><Icon name="chat" />AIに仕入れを相談する</Link>
         </>
       )}
       {ongoing.length > 0 && (

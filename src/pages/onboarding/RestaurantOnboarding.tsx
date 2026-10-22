@@ -5,7 +5,8 @@ import {
   BUSINESS_TYPES, checkRestaurant, EMPTY_RESTAURANT, FIRST_TIME_POLICIES, IRREGULAR_POLICIES, labelOf, LIMITS, PICKUP_TIMES, PRIORITY_MAX,
   PURCHASE_FREQUENCIES, PURCHASE_PRIORITIES, PURCHASE_VOLUMES, RESTAURANT_STEPS, restaurantStyle, stepErrors, type RestaurantField, type RestaurantForm,
 } from "../../lib/onboarding";
-import { homeOf, PATHS } from "../../routes/paths";
+import { GUIDE_KEY } from "../../routes/guards";
+import { guideOf, PATHS } from "../../routes/paths";
 import { useMe, useSession } from "../../routes/session";
 import { ChoiceGroup, focusFirstError, MultiChoiceGroup, PrefectureField, StepFrame, StyleText, SummaryRow, TextField, useDraft, WELCOME_KEY } from "./parts";
 
@@ -64,9 +65,9 @@ export default function RestaurantOnboarding() {
       const d = await r.json().catch(() => ({}));
       if (r.ok) {
         clearDraft();
-        try { sessionStorage.setItem(WELCOME_KEY, "restaurant"); } catch {}
+        try { sessionStorage.setItem(WELCOME_KEY, "restaurant"); sessionStorage.setItem(GUIDE_KEY, "restaurant"); } catch {}
         await refresh();
-        navigate(homeOf("restaurant"), { replace: true });
+        navigate(guideOf("restaurant"), { replace: true }); // 新規登録の直後だけ、使い方を見せてからホームへ
         return;
       }
       if (r.status === 400 && d.errors) {

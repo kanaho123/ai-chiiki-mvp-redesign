@@ -3,9 +3,10 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigationType 
 import { AppShell, GuestShell, OnboardingShell, PlainShell } from "./components/AppShell";
 import { PATHS } from "./routes/paths";
 import { SessionProvider, useMe } from "./routes/session";
-import Producer from "./pages/Producer";
+import Producer, { NewListingPage } from "./pages/Producer";
 import Restaurant from "./pages/Restaurant";
-import { Demo, Login, Signup, Welcome } from "./pages/Guest";
+import { Demo, Login, Signup, Start, Welcome } from "./pages/Guest";
+import Guide from "./pages/Guide";
 import { Privacy, Terms } from "./pages/Legal";
 import ProducerOnboarding from "./pages/onboarding/ProducerOnboarding";
 import RestaurantOnboarding from "./pages/onboarding/RestaurantOnboarding";
@@ -31,6 +32,7 @@ function ScrollToTop() {
 // 既存の仕入れ・在庫の画面は、ログイン中のユーザーを props で受け取る
 const RestaurantBuy = () => <Restaurant me={useMe()} />;
 const ProducerListings = () => <Producer me={useMe()} />;
+const ProducerNewListing = () => <NewListingPage me={useMe()} />;
 
 export default function App() {
   return (
@@ -53,6 +55,7 @@ export function AppRoutes() {
           <Route path={PATHS.login} element={<Login />} />
           <Route path={PATHS.signup} element={<Signup />} />
           <Route path={PATHS.demo} element={<Demo />} />
+          <Route path="/start/:role" element={<Start />} />
         </Route>
       </Route>
 
@@ -63,6 +66,7 @@ export function AppRoutes() {
       </Route>
 
       <Route path="/restaurant" element={<RoleGate role="restaurant" />}>
+        <Route path="guide" element={<Guide role="restaurant" />} />
         <Route element={<AppShell />}>
           <Route index element={<Navigate to={PATHS.restaurant.home} replace />} />
           <Route path="home" element={<RestaurantHome />} />
@@ -75,10 +79,12 @@ export function AppRoutes() {
       </Route>
 
       <Route path="/producer" element={<RoleGate role="producer" />}>
+        <Route path="guide" element={<Guide role="producer" />} />
         <Route element={<AppShell />}>
           <Route index element={<Navigate to={PATHS.producer.home} replace />} />
           <Route path="home" element={<ProducerHome />} />
           <Route path="listings" element={<ProducerListings />} />
+          <Route path="listings/new" element={<ProducerNewListing />} />
           <Route path="requests" element={<ProducerRequests />} />
           <Route path="mypage" element={<MyPage />} />
           <Route path="*" element={<Navigate to={PATHS.producer.home} replace />} />

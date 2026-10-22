@@ -19,7 +19,7 @@ import type { CatalogData, ExtractResult } from "./types";
 
 const FIELD_LABEL: Record<DraftField, string> = {
   itemId: "品目", varietyId: "品種", quantityKg: "数量", desiredDate: "受け取りたい日", budget: "予算", originPrefectures: "産地",
-  slotId: "受け取り時間と場所", allowFirstTime: "初めての農家", allowIrregular: "規格外", allowMixedVarieties: "品種をまぜるか", allowMixedGrades: "規格をまぜるか",
+  slotId: "受け取り時間と場所", allowFirstTime: "初めての農家", allowIrregular: "規格外", allowMixedVarieties: "品種をまぜるか", allowMixedGrades: "規格をまぜるか", // まぜるかは画面では聞かない
   preferredProducerId: "優先したい農家",
 };
 
@@ -107,10 +107,14 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, in
       ),
     },
     {
-      key: "date", label: "受け取り日", icon: "calendar", f: ["desiredDate"], value: form.desiredDate ? formatDateJa(form.desiredDate) : "",
+      // 一般向けの環境では任意（未定なら「おまかせ」で、受け取れる日時の候補から探す）
+      key: "date", label: autoSlot ? "受け取り日（任意）" : "受け取り日", icon: "calendar", f: ["desiredDate"],
+      value: form.desiredDate ? formatDateJa(form.desiredDate) : autoSlot ? "未定" : "",
       editor: () => (
         <>
-          <input type="date" min={today} value={form.desiredDate} onChange={(e) => setForm({ ...form, desiredDate: e.target.value, slotId: "" })} aria-label="受け取りたい日" aria-required="true" />
+          <input type="date" min={today} value={form.desiredDate} onChange={(e) => setForm({ ...form, desiredDate: e.target.value, slotId: "" })} aria-label="受け取りたい日" aria-required={!autoSlot} />
+          {autoSlot && <span className="item-help">未定の場合は空欄のままで進めます。受け取れる日時の候補から仕入れ案を探し、細かい時間はマッチング後に生産者と相談できます。</span>}
+          {autoSlot && form.desiredDate && <button type="button" className="text-btn" onClick={() => setForm({ ...form, desiredDate: "", slotId: "" })}>日付を決めない</button>}
           {dateCands.length > 1 && (
             <div className="date-cands" role="group" aria-label="日付の候補">
               {dateCands.map((c) => (
@@ -158,7 +162,7 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, in
       key: "slot", label: "受け取り時間と場所", icon: "truck", f: ["slotId"], wide: true,
       // 選ばなければ「おまかせ」：希望日に受け取れる場所から、必要量を確保できて受け取りがまとまる案を探す
       value: slot ? `${jstTimeOf(slot.startAt)}〜${jstTimeOf(slot.endAt)}・${slot.placeName}` : autoSlot ? "おまかせ（おすすめを探します）" : "",
-      editor: () => slots.length === 0 ? (
+      editor: () => slots.length === 0 && !autoSlot ? (
         <p className="item-help">{form.desiredDate ? "この日に受け取れる時間と場所はありません。日付を確認してください。" : "先に受け取り日を選んでください。"}</p>
       ) : (
         <div className="option-cards" role="radiogroup" aria-label="受け取り時間と場所">
@@ -167,10 +171,12 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, in
             <span className="tick" aria-hidden="true"><Icon name="check" size={16} /></span>
             <span>
               <b>おまかせ</b>
-              <small>この日に受け取れる場所から、必要な量を確保でき、受け取りがまとまる案を探します</small>
+              <small>{form.desiredDate ? "この日に受け取れる場所" : "これから受け取れる日時・場所"}から、必要な量を確保でき、受け取りがまとまる案を探します</small>
             </span>
           </label>}
-          {slots.map((s) => (
+          {/* 受け取り日が未定なら、場所の一覧は出さない（おまかせで、受け取れる日時の候補から探す） */}
+          {autoSlot && !form.desiredDate && <span className="item-help">受け取り日を選ぶと、その日の受け取り場所から選ぶこともできます。</span>}
+          {(form.desiredDate || !autoSlot) && slots.map((s) => (
             <label key={s.id} className="option-card">
               <input type="radio" name="slot" checked={form.slotId === s.id} onChange={() => set("slotId", s.id)} />
               <span className="tick" aria-hidden="true"><Icon name="check" size={16} /></span>
@@ -195,14 +201,6 @@ export function StepConfirm({ form, setForm, catalog, extraction, sourceText, in
     {
       key: "irr", label: "規格外（形が不ぞろい）", icon: "leaf", f: ["allowIrregular"], value: yn(form.allowIrregular, "含めない", "含める"),
       editor: () => <Seg name="q-irr" value={form.allowIrregular} onChange={(v) => set("allowIrregular", v)} no="含めない" yes="含める" labelId="lbl-irr" />,
-    },
-    {
-      key: "mixv", label: "違う品種をまぜる", icon: "basket", f: ["allowMixedVarieties"], value: yn(form.allowMixedVarieties, "まぜない", "まぜてよい"),
-      editor: () => <Seg name="q-mixv" value={form.allowMixedVarieties} onChange={(v) => set("allowMixedVarieties", v)} no="まぜない" yes="まぜてよい" labelId="lbl-mixv" />,
-    },
-    {
-      key: "mixg", label: "通常品と規格外品をまぜる", icon: "box", f: ["allowMixedGrades"], value: yn(form.allowMixedGrades, "まぜない", "まぜてよい"),
-      editor: () => <Seg name="q-mixg" value={form.allowMixedGrades} onChange={(v) => set("allowMixedGrades", v)} no="まぜない" yes="まぜてよい" labelId="lbl-mixg" />,
     },
     {
       key: "pref", label: "優先したい農家", icon: "store", f: ["preferredProducerId"],

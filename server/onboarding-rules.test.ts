@@ -47,12 +47,12 @@ describe("あなたの仕入れスタイル（飲食店）", () => {
 });
 
 describe("あなたの販売スタイル（生産者）", () => {
-  it("例：少量対応・規格外・直接相談 → 少量対応 × 規格外OK × 直接取引OK", () => {
-    expect(producerStyle({ capabilities: ["direct_talk", "irregular", "small_lot"], salesChannels: [], productionStyle: "seasonal", directTradeExperience: "never" })).toBe("少量対応 × 規格外OK × 直接取引OK");
+  it("例：少量・規格外・直接取引 → 少量OK × 規格外OK × 直接取引OK（飲食店に見せるタグと同じ言葉）", () => {
+    expect(producerStyle({ capabilities: ["direct_talk", "irregular", "small_lot"], salesChannels: [], productionStyle: "seasonal", directTradeExperience: "never" })).toBe("少量OK × 規格外OK × 直接取引OK");
   });
   it("飲食店と直接取引している販売先も「直接取引OK」。足りなければ生産スタイルで補う", () => {
     expect(producerStyle({ capabilities: [], salesChannels: ["market", "restaurant"], productionStyle: "many_small", directTradeExperience: "often" })).toBe("直接取引OK × 少量多品目");
-    expect(producerStyle({ capabilities: ["surplus"], salesChannels: ["ja"], productionStyle: "seasonal", directTradeExperience: "rarely" })).toBe("余剰品も出品 × 旬の野菜");
+    expect(producerStyle({ capabilities: ["surplus"], salesChannels: ["ja"], productionStyle: "seasonal", directTradeExperience: "rarely" })).toBe("旬の野菜"); // 「余剰が出たときだけ」は画面に出さない（保存済みの値は残す）
   });
   it("販売先・対応できることを選ばなくても、経験・生産スタイルから作る", () => {
     expect(producerStyle({ capabilities: [], salesChannels: [], productionStyle: "specialized", directTradeExperience: "sometimes" })).toBe("直接取引の経験あり × 特定品目中心");
@@ -81,7 +81,7 @@ describe("入力の確認の細かい規則", () => {
     const p = { ...EMPTY_PRODUCER, farmName: "農園", producerName: "名", prefecture: "奈良県", city: "奈良市", itemIds: ["i"], productionStyle: "other", salesChannels: ["ec"], directTradeExperience: "never", seriesIds: ["s"] };
     expect(checkProducer({ ...p, contactEmail: "a@b.jp" }).ok).toBe(true);
     expect(checkProducer({ ...p, contactEmail: "a@b.jp", salesChannels: [] }).ok).toBe(true); // 販売先は任意
-    expect(checkProducer({ ...p, contactEmail: "a@b.jp", itemIds: [] }).ok).toBe(false); // 主な作物は1つ以上
+    expect(checkProducer({ ...p, contactEmail: "a@b.jp", itemIds: [] }).ok).toBe(true); // 主な作物は任意（初回登録では聞かない。売る農産物は出品で登録する）
     expect(checkProducer({ ...p, contactEmail: "a@b.jp", seriesIds: [] }).ok).toBe(true); // 受け渡しの場所は任意（はじめての出品のときに聞く）
     expect(checkProducer({ ...p, contactPhone: "06-1234-5678" }).ok).toBe(true);
     expect(checkProducer({ ...p }).ok).toBe(false);
@@ -90,5 +90,16 @@ describe("入力の確認の細かい規則", () => {
   });
   it("定期の受渡枠の表示", () => {
     expect(seriesWhen({ weekday: 2, startTime: "10:00", endTime: "11:00" })).toBe("毎週火曜日 10:00〜11:00");
+  });
+});
+
+describe("対応できる取引（表示）", () => {
+  it("選択肢は「規格外品の販売・少量での販売・飲食店との直接取引」。「余剰が出たときだけ」は出さないが、保存済みの値は受け付ける", async () => {
+    const { PRODUCER_CAPABILITY_CHOICES, capabilityTagValues, CAPABILITY_TAGS } = await import("../src/lib/onboarding.js");
+    expect(PRODUCER_CAPABILITY_CHOICES.map((c) => c.label)).toEqual(["規格外品の販売", "少量での販売", "飲食店との直接取引"]);
+    expect(CAPABILITY_TAGS.map((t) => t.tag)).toEqual(["規格外OK", "少量OK", "直接取引OK"]);
+    expect(capabilityTagValues(["surplus", "direct_talk", "small_lot"])).toEqual(["small_lot", "direct_talk"]); // 余剰はタグにしない・決まった順
+    const p = { ...EMPTY_PRODUCER, farmName: "農園", producerName: "名", prefecture: "奈良県", city: "奈良市", productionStyle: "other", directTradeExperience: "never", contactEmail: "a@b.jp" };
+    expect(checkProducer({ ...p, capabilities: ["surplus", "irregular"] }).ok).toBe(true);
   });
 });

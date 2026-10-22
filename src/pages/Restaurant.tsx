@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Me } from "../App";
 import { Icon } from "../components/Icon";
+import { jstDateOf } from "../lib/dates.js";
 import { EMPTY_FORM, formFromDraft, formFromRequest, toPlanBody, type RequestForm } from "../lib/request-form.js";
 import type { DraftField } from "../lib/resolve.js";
 import type { Suggestion } from "../lib/suggest.js";
@@ -45,7 +46,7 @@ function aiFilledFields(form: RequestForm): DraftField[] {
   if (form.budgetMode) out.push("budget");
   if (form.originPrefectures.length) out.push("originPrefectures");
   if (form.slotId) out.push("slotId");
-  for (const k of ["allowFirstTime", "allowIrregular", "allowMixedVarieties", "allowMixedGrades"] as const) if (form[k]) out.push(k);
+  for (const k of ["allowFirstTime", "allowIrregular"] as const) if (form[k]) out.push(k);
   if (form.preferredProducerId) out.push("preferredProducerId");
   return out;
 }
@@ -72,6 +73,8 @@ export default function RestaurantPage({ me }: { me: Me }) {
   const extractAbort = useRef<AbortController | null>(null);
   // 受け取り場所を「おまかせ」にしたときの、希望日に受け取れる場所ごとの案（おすすめ順）。表示中の案はその中の1つ
   const [planOptions, setPlanOptions] = useState<PlanOption[] | null>(null);
+  // 「おまかせ」で受け取り日も決めずに探したか（ほかの受け取り方を選ぶとき・条件に戻るときに使う）
+  const [openDate, setOpenDate] = useState(false);
   const autoSlot = useSession().appMode === "general"; // 「おまかせ」は一般向けの環境だけ
   // 「欲しい食材」の一覧（一般向けの環境だけ・ブラウザに保存）。null は読み込み前
   const wishOn = autoSlot;
@@ -258,32 +261,34 @@ export default function RestaurantPage({ me }: { me: Me }) {
       return;
     }
     if (options.length === 0) {
-      setError("この日に受け取れる出品が見つかりませんでした。日付や品目を変えてお試しください");
+      setError(form.desiredDate ? "この日に受け取れる出品が見つかりませんでした。日付や品目を変えてお試しください" : "受け取れる出品が見つかりませんでした。品目や数量を変えてお試しください");
       setBusy(false);
       return;
     }
     setPlanOptions(options);
-    await requestPlan({ ...body, slotId: options[0].slotId });
+    setOpenDate(!form.desiredDate);
+    // 受け取り日が未定なら、選んだ案の受け取りの日で計算する（計算の規則は同じ）
+    await requestPlan({ ...body, slotId: options[0].slotId, desiredDate: form.desiredDate || jstDateOf(options[0].startAt) });
   }
 
-  /** 結果画面の「ほかの受け取り方」から、別の場所の案を既存の /api/plan で計算する */
+  /** 結果画面の「ほかの受け取り方」から、別の場所（受け取り日が未定なら別の日も）の案を既存の /api/plan で計算する */
   function pickOption(slotId: string) {
     if (!shown) return;
-    void requestPlan({ ...shown.request, slotId });
+    const o = planOptions?.find((x) => x.slotId === slotId);
+    void requestPlan({ ...shown.request, slotId, ...(openDate && o && { desiredDate: jstDateOf(o.startAt) }) });
   }
 
   /** 結果 → 条件確認（自動で条件を変えない。候補を選んだ場合もフォームに反映するだけ） */
   function editConditions(s?: Suggestion) {
     if (!shown) return setStep("confirm");
     // 「おまかせ」で選んだ場所なら、条件を変えたあとも「おまかせ」のまま探し直す
-    const base = { ...formFromRequest(shown.request), ...(planOptions && { slotId: "" }) };
+    // 受け取り日を決めていなかったなら、未定のまま戻す
+    const base = { ...formFromRequest(shown.request), ...(planOptions && { slotId: "", ...(openDate && { desiredDate: "" }) }) };
     const c = s?.change ?? {};
     setForm({
       ...base,
       ...(c.allowFirstTime !== undefined && { allowFirstTime: c.allowFirstTime ? "yes" : "no" }),
       ...(c.allowIrregular !== undefined && { allowIrregular: c.allowIrregular ? "yes" : "no" }),
-      ...(c.allowMixedVarieties !== undefined && { allowMixedVarieties: c.allowMixedVarieties ? "yes" : "no" }),
-      ...(c.allowMixedGrades !== undefined && { allowMixedGrades: c.allowMixedGrades ? "yes" : "no" }),
       ...(c.quantityKg !== undefined && { quantityKg: String(c.quantityKg) }),
     });
     setExtraction(null);

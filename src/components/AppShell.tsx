@@ -3,7 +3,7 @@ import { NavLink, Outlet } from "react-router";
 import { formatJstDateTime } from "../lib/dates.js";
 import { NAV, type NavItem } from "../routes/paths";
 import { InboxProvider, useInbox } from "../routes/inbox";
-import { demoEntryUrl, generalHomeUrl } from "../routes/paths";
+import { generalHomeUrl } from "../routes/paths";
 import { useSession, type Me } from "../routes/session";
 import { Icon, Logo } from "./Icon";
 
@@ -128,13 +128,11 @@ export function PlainShell() {
 /** ログイン前の画面の枠 */
 export function GuestShell() {
   const { loadError, appMode } = useSession();
-  // 一般向け：右上に「デモを試す」（デモ用の別の環境の /demo へ）。デモ用：一般向けのサービスへ戻る
-  const demo = appMode === "general" ? demoEntryUrl() : null;
+  // デモ用の環境だけ、一般向けのサービスへ戻るリンクを出す（一般向けの環境からデモへのリンクは出さない）
   const general = appMode === "demo" ? generalHomeUrl() : null;
   return (
     <div className="role-guest">
       <AppHeader me={null}>
-        {demo && <a className="text-btn link-btn header-action" href={demo}>デモを試す<Icon name="chevronRight" size={18} /></a>}
         {general && <a className="text-btn link-btn header-action" href={general}>一般向けのサービスへ<Icon name="chevronRight" size={18} /></a>}
       </AppHeader>
       {loadError && <div className="screen"><div className="alert bad" role="alert"><Icon name="alert" />ログイン状態を確認できませんでした。再読み込みしてください。</div></div>}

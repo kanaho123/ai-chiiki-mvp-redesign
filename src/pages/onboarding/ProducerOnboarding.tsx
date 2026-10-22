@@ -2,18 +2,21 @@ import { useEffect, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { Icon } from "../../components/Icon";
 import {
-  checkProducer, DIRECT_TRADE_EXPERIENCES, EMPTY_PRODUCER, labelOf, LIMITS, PRODUCER_CAPABILITIES, PRODUCER_STEPS, producerStyle, PRODUCTION_STYLES,
+  checkProducer, DIRECT_TRADE_EXPERIENCES, EMPTY_PRODUCER, labelOf, LIMITS, PRODUCER_CAPABILITIES, PRODUCER_CAPABILITY_CHOICES, PRODUCER_STEPS, producerStyle, PRODUCTION_STYLES,
   SALES_CHANNELS, stepErrors, type ProducerField, type ProducerForm,
 } from "../../lib/onboarding";
-import { homeOf, PATHS } from "../../routes/paths";
+import { GUIDE_KEY } from "../../routes/guards";
+import { guideOf, PATHS } from "../../routes/paths";
 import { useMe, useSession } from "../../routes/session";
 import { ChoiceGroup, focusFirstError, MultiChoiceGroup, PrefectureField, StepFrame, StyleText, SummaryRow, TextField, useDraft, WELCOME_KEY } from "./parts";
 
-// 生産者の初回登録：1 農園について → 2 作っているもの・販売 → 3 できること → 4 連絡先と確認（あなたの販売スタイル）。
-// 品目はマスタ（/api/onboarding/master）から選ぶ。受け渡しの場所は聞かない（はじめて出品するときに1回だけ聞く）。内部の ID は画面に出さない。
+// 生産者の初回登録：1 農園について → 2 販売について → 3 対応できる取引 → 4 連絡先と確認（あなたの販売スタイル）。
+// 作っている農産物（主な作物）と受け渡しの場所は聞かない（売る農産物と受け渡しの場所は、はじめて出品するときに聞く）。内部の ID は画面に出さない。
 
 const BASE = PATHS.onboarding.producer;
 const TOTAL = PRODUCER_STEPS.length;
+/** 画面に出す「対応できる取引」（「余剰が出たときだけ」は出さない。保存済みの値は残す） */
+const shownCaps = (caps: readonly string[]) => caps.filter((v) => PRODUCER_CAPABILITY_CHOICES.some((c) => c.value === v));
 type Errors = Partial<Record<ProducerField, string>>;
 type Master = { items: { id: string; name: string }[]; series: { id: string; placeName: string; placeAddress: string; placeKind?: string | null; weekday: number; startTime: string; endTime: string; feeYen: number }[] };
 
@@ -81,9 +84,9 @@ export default function ProducerOnboarding() {
       const d = await r.json().catch(() => ({}));
       if (r.ok) {
         clearDraft();
-        try { sessionStorage.setItem(WELCOME_KEY, "producer"); } catch {}
+        try { sessionStorage.setItem(WELCOME_KEY, "producer"); sessionStorage.setItem(GUIDE_KEY, "producer"); } catch {}
         await refresh();
-        navigate(homeOf("producer"), { replace: true });
+        navigate(guideOf("producer"), { replace: true }); // 新規登録の直後だけ、使い方を見せてからホームへ
         return;
       }
       if (r.status === 400 && d.errors) {
@@ -102,9 +105,6 @@ export default function ProducerOnboarding() {
   }
 
   const common = { step, total: TOTAL, stepName: PRODUCER_STEPS[step - 1].title, onBack: step > 1 ? () => go(step - 1) : undefined };
-  const masterNote = masterError
-    ? <div className="alert bad" role="alert"><Icon name="alert" />選択肢を読み込めませんでした。画面を再読み込みしてください。</div>
-    : !master ? <p className="muted" aria-busy="true">選択肢を読み込んでいます…</p> : null;
 
   if (step === 1) return (
     <StepFrame {...common} title="農園について教えてください" lead="農園名は、飲食店に表示されます。" cta="次へ" onNext={next}>
@@ -116,14 +116,8 @@ export default function ProducerOnboarding() {
   );
 
   if (step === 2) return (
-    <StepFrame {...common} title="作っているものと販売について" cta="次へ" onNext={next}>
-      {masterNote}
-      {master && (
-        <MultiChoiceGroup name="itemIds" legend="主な作物" options={master.items.map((i) => ({ value: i.id, label: i.name }))} value={form.itemIds} columns={2}
-          note="いくつでも選べます。出品できるのは、この一覧にある品目です" onChange={(v) => update({ itemIds: v })} error={errors.itemIds} />
-      )}
-      <TextField name="otherCrops" label="その他の作物" optional value={form.otherCrops} onChange={(v) => update({ otherCrops: v })} error={errors.otherCrops}
-        hint="例：かぼちゃ、とうもろこし。その他の作物はプロフィール情報として登録されます（出品はできません）" maxLength={LIMITS.otherCrops} />
+    // 作っている農産物（主な作物）はここでは聞かない。売る農産物は出品のときに登録する
+    <StepFrame {...common} title="販売について" cta="次へ" onNext={next}>
       <ChoiceGroup name="productionStyle" legend="生産のスタイル" options={PRODUCTION_STYLES} value={form.productionStyle}
         onChange={(v) => update({ productionStyle: v })} error={errors.productionStyle} />
       <MultiChoiceGroup name="salesChannels" legend="今の販売先" optional options={SALES_CHANNELS} value={form.salesChannels} columns={2}
@@ -135,13 +129,12 @@ export default function ProducerOnboarding() {
 
   if (step === 3) return (
     // 受け渡しの場所はここでは聞かない（はじめて出品するときに「普段、野菜をどこで渡せますか？」と1回だけ聞く）
-    <StepFrame {...common} title="できること" cta="次へ" onNext={next}>
-      <MultiChoiceGroup name="capabilities" legend="対応できること" optional options={PRODUCER_CAPABILITIES} value={form.capabilities}
+    <StepFrame {...common} title="対応できる取引" lead="選んだものは、飲食店に見せる仕入れ案で、農園名の近くに「規格外OK」などの小さな表示で出ます。" cta="次へ" onNext={next}>
+      <MultiChoiceGroup name="capabilities" legend="対応できる取引" optional options={PRODUCER_CAPABILITY_CHOICES} value={form.capabilities}
         note="当てはまるものを選んでください。選ばなくても登録できます" onChange={(v) => update({ capabilities: v })} error={errors.capabilities} />
     </StepFrame>
   );
 
-  const itemNames = form.itemIds.map((id) => master?.items.find((i) => i.id === id)?.name).filter(Boolean).join("・");
   return (
     <StepFrame {...common} title="連絡先と確認" cta="この内容ではじめる" ctaBusy={busy} onNext={submit}>
       <section className="contact-block" aria-labelledby="contact-title">
@@ -159,9 +152,8 @@ export default function ProducerOnboarding() {
       </section>
       <dl className="summary-rows">
         <SummaryRow label="農園" onEdit={() => go(1)}>{form.farmName}（{form.producerName}）<br />{form.prefecture}{form.city}</SummaryRow>
-        <SummaryRow label="主な作物" onEdit={() => go(2)}>{itemNames}{form.otherCrops && <><br />その他：{form.otherCrops}</>}</SummaryRow>
         <SummaryRow label="販売" onEdit={() => go(2)}>{[labelOf(PRODUCTION_STYLES, form.productionStyle), ...form.salesChannels.map((v) => labelOf(SALES_CHANNELS, v))].join("・")}</SummaryRow>
-        <SummaryRow label="対応できること" onEdit={() => go(3)}>{form.capabilities.length ? form.capabilities.map((v) => labelOf(PRODUCER_CAPABILITIES, v)).join("・") : "選んでいません"}</SummaryRow>
+        <SummaryRow label="対応できる取引" onEdit={() => go(3)}>{shownCaps(form.capabilities).length ? shownCaps(form.capabilities).map((v) => labelOf(PRODUCER_CAPABILITIES, v)).join("・") : "選んでいません"}</SummaryRow>
       </dl>
       {submitError && <div className="alert bad" role="alert"><Icon name="alert" />{submitError}</div>}
     </StepFrame>

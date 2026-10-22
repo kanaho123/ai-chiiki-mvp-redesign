@@ -33,7 +33,7 @@ const catalog = {
 // トマト10kg の条件がすべて決まっている、今までの保存データ（一覧はまだない）
 const tomatoForm: RequestForm = {
   ...EMPTY_FORM, itemId: "i-tomato", quantityKg: "10", desiredDate: "2026-10-23", budgetMode: "none", originPrefectures: ["大阪府"],
-  allowFirstTime: "yes", allowIrregular: "yes", allowMixedVarieties: "yes", allowMixedGrades: "yes",
+  allowFirstTime: "yes", allowIrregular: "yes",
 };
 
 let mode: "general" | "demo" = "general";

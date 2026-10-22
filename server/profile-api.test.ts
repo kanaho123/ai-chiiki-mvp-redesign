@@ -244,7 +244,6 @@ describe("生産者のプロフィール更新", () => {
     ["止めた枠に新しく参加", { seriesIds: ["s-off"] }, "seriesIds"],
     ["存在しない枠", { seriesIds: ["s-x"] }, "seriesIds"],
     ["品目マスタにない作物", { itemIds: ["i-x"] }, "itemIds"],
-    ["作物が空", { itemIds: [] }, "itemIds"],
     ["連絡先をどちらも消す", { contactPhone: "", contactEmail: "" }, "contactPhone"],
     ["メールの形式", { contactEmail: "farm@" }, "contactEmail"],
   ])("%s → 400・変更しない", async (_l, over, field) => {

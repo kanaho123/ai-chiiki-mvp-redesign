@@ -42,12 +42,21 @@ describe("仕入れ条件の検証", () => {
     ["受渡枠なし", { slotId: null }],
     ["初回可否が未選択", { allowFirstTime: null }],
     ["規格外可否が未選択", { allowIrregular: undefined }],
-    ["品種混在が未選択", { allowMixedVarieties: "yes" }],
-    ["規格混在が未選択", { allowMixedGrades: null }],
     ["優先農家IDが不正", { preferredProducerId: "<script>" }],
   ])("%s は受け付けない", (_, o) => {
     const body = _ === "空" ? {} : plan(o);
     expect(parsePlanRequest(body, NOW).ok).toBe(false);
+  });
+  it("品種・規格を「まぜてよいか」は送らなくてよく、品種の指定と規格外の可否から決まる", () => {
+    const without = (o: Record<string, unknown>) => { const b = plan(o) as Record<string, unknown>; delete b.allowMixedVarieties; delete b.allowMixedGrades; return b; };
+    const v = (o: Record<string, unknown>) => { const r = parsePlanRequest(without(o), NOW); return r.ok && { mv: r.value.allowMixedVarieties, mg: r.value.allowMixedGrades }; };
+    expect(v({ varietyId: null, allowIrregular: true })).toEqual({ mv: true, mg: true }); // 品種の指定なし → どの品種でも／規格外も可 → まぜてよい
+    expect(v({ varietyId: "v1", allowIrregular: false })).toEqual({ mv: false, mg: false }); // 品種を指定 → その品種だけ／規格外は使わない
+    expect(parsePlanRequest(without({ allowMixedVarieties: "yes" }), NOW).ok).toBe(true); // 形の違う値も使わない（規則で決める）
+  });
+  it("保存済みの相談の条件（以前は画面で選んでいた値）は、送られた値をそのまま使う（案と fingerprint が変わらない）", () => {
+    const r = parsePlanRequest(plan({ varietyId: null, allowIrregular: true, allowMixedVarieties: false, allowMixedGrades: false }), NOW);
+    expect(r.ok && [r.value.allowMixedVarieties, r.value.allowMixedGrades]).toEqual([false, false]);
   });
 });
 

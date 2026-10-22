@@ -69,7 +69,7 @@ describe("Functions の数と vercel.json", () => {
   it("これまでの URL は、すべてどれかの Function が受け持つ", () => {
     const urls = ["/api/approvals", "/api/approvals/abc", "/api/auth/demo-accounts", "/api/auth/login", "/api/auth/logout", "/api/auth/signup",
       "/api/catalog", "/api/extract", "/api/inbox", "/api/inventory-version", "/api/me", "/api/onboarding/master", "/api/onboarding/producer",
-      "/api/onboarding/restaurant", "/api/plan", "/api/profile", "/api/supplies", "/api/supplies/abc"];
+      "/api/onboarding/restaurant", "/api/plan", "/api/profile", "/api/supplies", "/api/supplies/abc", "/api/supply-draft"];
     expect(urls.map((u) => [u, functionFor(u)])).toEqual(urls.map((u) => [u, expect.any(String)]));
     expect(functionFor("/api/nothing")).toBeNull();
     expect(functionFor("/api/approvals/a/b")).toBeNull();

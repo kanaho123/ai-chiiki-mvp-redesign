@@ -70,7 +70,7 @@ describe("登録データへの照合（resolve）", () => {
       itemId: "demo-item-tomato", varietyId: null, quantityKg: 10, desiredDate: "2026-10-23", budget: { mode: "limit", yen: 8000 },
       originPrefectures: ["大阪府"], slotId: null, allowFirstTime: true, allowIrregular: null, preferredProducerId: "demo-producer-a",
     });
-    expect(r.unresolvedFields).toEqual(["slotId", "allowIrregular", "allowMixedVarieties", "allowMixedGrades"]);
+    expect(r.unresolvedFields).toEqual(["slotId", "allowIrregular"]); // 品種・規格を「まぜてよいか」は聞かない
     // 受渡枠は自動で選ばず、その日の枠を候補として出すだけ
     expect(r.candidateMatches.slotId?.map((c) => c.label)).toEqual(["G-P", "G-Q"]);
   });
@@ -161,24 +161,31 @@ describe("登録データへの照合（resolve）", () => {
   it("文章に書かれていない判断（初回可否・規格外・混在）は null のまま未確定にする", () => {
     const r = resolve({ itemText: "トマト" });
     expect(r.draft).toMatchObject({ allowFirstTime: null, allowIrregular: null, allowMixedVarieties: null, allowMixedGrades: null });
-    expect(r.unresolvedFields).toEqual(expect.arrayContaining(["allowFirstTime", "allowIrregular", "allowMixedVarieties", "allowMixedGrades", "budget", "slotId"]));
+    expect(r.unresolvedFields).toEqual(expect.arrayContaining(["allowFirstTime", "allowIrregular", "budget", "slotId"]));
+    expect(r.unresolvedFields).not.toContain("allowMixedVarieties");
+    expect(r.unresolvedFields).not.toContain("allowMixedGrades");
   });
 });
 
 describe("確認画面 → /api/plan", () => {
   it("O: AI 抽出後に利用者が変更した値が /api/plan に送られる", () => {
     const form = formFromDraft(resolveExtraction(demo, catalog, NOW).draft);
-    expect(missingFields(form)).toEqual(["slotId", "allowIrregular", "allowMixedVarieties", "allowMixedGrades"]);
-    // 一般向けの環境：受け取り場所は選ばなくてもよい（おまかせ：希望日に受け取れる場所からおすすめを探す）
-    expect(missingFields(form, { autoSlot: true })).toEqual(["allowIrregular", "allowMixedVarieties", "allowMixedGrades"]);
+    expect(missingFields(form)).toEqual(["slotId", "allowIrregular"]);
+    // 一般向けの環境：受け取り場所・受け取り日は選ばなくてもよい（おまかせ：受け取れる場所・日時からおすすめを探す）
+    expect(missingFields(form, { autoSlot: true })).toEqual(["allowIrregular"]);
+    expect(missingFields({ ...form, desiredDate: "" }, { autoSlot: true })).toEqual(["allowIrregular"]);
+    expect(missingFields({ ...form, desiredDate: "" })).toContain("desiredDate"); // デモ用の環境では従来どおり必須
     expect(form.slotId).toBe("");
     // 利用者が数量を 8kg に、予算を上限なしに変え、未確定の項目を選ぶ
-    const edited = { ...form, quantityKg: "8", budgetMode: "none" as const, slotId: "demo-slot-gp", allowIrregular: "no" as const, allowMixedVarieties: "no" as const, allowMixedGrades: "no" as const };
+    const edited = { ...form, quantityKg: "8", budgetMode: "none" as const, slotId: "demo-slot-gp", allowIrregular: "no" as const };
     expect(missingFields(edited)).toEqual([]);
     const body = toPlanBody(edited);
     expect(body).toMatchObject({ quantityKg: "8", budgetYen: null, slotId: "demo-slot-gp", allowIrregular: false, preferredProducerId: "demo-producer-a" });
     const parsed = parsePlanRequest(body, NOW);
     expect(parsed.ok && parsed.value).toMatchObject({ quantityKg: 8, budgetYen: null, desiredDate: "2026-10-23", originPrefectures: ["大阪府"], allowFirstTime: true });
+    // 品種は指定なし → どの品種でも合わせる。規格外は含めない → 規格はまぜない（送っていない値は規則で決まる）
+    expect(parsed.ok && parsed.value).toMatchObject({ allowMixedVarieties: true, allowMixedGrades: false });
+    expect(body).not.toHaveProperty("allowMixedVarieties");
   });
 
   it("未確定の項目が残ったまま送ってもサーバーで拒否される（勝手に false にしない）", () => {

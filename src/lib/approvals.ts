@@ -32,8 +32,7 @@ export function conditionChips(c: RequestConditions): { label: string; value: st
     ["規格外", yesNo(c.allowIrregular)],
     ["初めての農家", yesNo(c.allowFirstTime)],
     ["産地", c.originPrefectures.length ? c.originPrefectures.join("・") : null],
-    ["品種のまぜ", yesNo(c.allowMixedVarieties)],
-    ["規格のまぜ", yesNo(c.allowMixedGrades)],
+    // 品種・規格の「まぜ」は飲食店が選ぶ条件ではない（品種の指定・規格外の可否から決まる）ので出さない
   ];
   return rows.flatMap(([label, value]) => (value === null ? [] : [{ label, value }]));
 }

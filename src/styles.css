@@ -1073,3 +1073,47 @@ a.inline-link { display: inline-flex; align-items: center; min-height: var(--tap
 .trade-done-facts dt { font-weight: 700; }
 .trade-done-facts dd { margin: 0; color: var(--color-text); overflow-wrap: anywhere; }
 .trade-done-note { display: flex; align-items: center; gap: 6px; margin: 0; font-weight: 800; color: var(--color-restaurant-dark); }
+
+/* ── ホームの主な操作（1画面に1つ。いちばん上に大きく） ─────────── */
+a.link-btn.home-main { min-height: 84px; justify-content: flex-start; gap: 14px; padding: 14px 20px; text-align: left; border-radius: var(--r-zone); text-decoration: none; }
+.home-main-text { display: grid; gap: 2px; }
+.home-main-text b { font-size: 20px; line-height: 1.3; }
+.home-main-text small { font-size: 14px; font-weight: 500; opacity: 0.92; }
+.role-restaurant .home-main { box-shadow: var(--lift-green); }
+.role-producer .home-main { box-shadow: var(--lift-orange); }
+
+/* ── 音声入力 ─────────────────────────────────────── */
+.voice { display: grid; gap: 6px; }
+.composer-voice { padding: 0 16px 10px; }
+.voice-btn.listening, .entry-choice.listening { background: var(--accent-tint); border-color: var(--accent); }
+
+/* ── 仕入れ案の式（A農園 5kg ＋ B農園 3kg ＝ 合計10kg） ─────────── */
+.bundle-equation { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin-bottom: 14px; font-size: 16px; font-weight: 700; }
+.bundle-equation .eq-term { display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap; }
+.bundle-equation b { font-size: 20px; font-weight: 800; }
+.bundle-equation .eq-op { color: var(--color-muted); font-weight: 800; margin-right: 4px; }
+.bundle-equation .eq-total b { color: var(--color-restaurant); font-size: 22px; }
+
+/* ── 出品の入口（写真・声・手入力） ─────────────────────────── */
+.entry { display: grid; gap: 14px; }
+.entry-choices { display: grid; gap: 12px; }
+.entry-choice { justify-content: flex-start; gap: 14px; min-height: 76px; padding: 14px 18px; border-radius: var(--r-zone); text-align: left; font-size: 18px; }
+.entry-choice span { display: grid; gap: 2px; }
+.entry-choice small { font-size: 14px; font-weight: 500; color: var(--color-muted); }
+.entry-choice.main { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: var(--lift-orange); }
+.entry-choice.main small { color: inherit; opacity: 0.92; }
+.draft-note { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: var(--r-input); background: var(--accent-tint); font-size: 15px; }
+.draft-photo { width: 64px; height: 64px; flex-shrink: 0; object-fit: cover; border-radius: 10px; }
+.listing-form { background: var(--color-zone); border-radius: var(--r-zone); padding-top: 12px; }
+.entry-done { display: grid; gap: 12px; }
+/* ホームでは主ボタンと競わないよう、相談の知らせは淡い面にする（主役の色の塗りは主ボタンだけ） */
+.home .new-requests { background: var(--accent-tint); color: var(--accent-ink); }
+
+/* 仕入れ案の農家名の下：対応できる取引（規格外OK・少量OK・直接取引OK）の小さなタグ。
+   金額の内訳の「取引あり／初めて」（.farm-tag.prior/.first）とは別に、この中だけに効かせる */
+.farm-tags { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px; margin: 2px 0; }
+.farm-tags .farm-tag { padding: 0 6px; border-radius: var(--r-tag); border: 1px solid var(--g200); background: var(--color-page); color: var(--color-restaurant-dark); font-size: 13px; font-weight: 700; line-height: 1.6; white-space: nowrap; }
+/* 農家ごとのカラム：名前・タグは上から自然な高さで並べ、kg とバーは下にそろえる
+   （カラムの高さはいちばん高い農家にそろうので、タグの数が違っても kg・バー・合流の線の位置がそろう） */
+.bundle-row { display: flex; flex-direction: column; }
+.bundle-row .bundle-kg { margin-top: auto; padding-top: 2px; }

@@ -39,7 +39,8 @@ export type SupplyRow = {
   slot: { label: string; placeName: string; startAt: string; endAt: string };
 };
 export type SlotRow = { id: string; label: string; placeName: string; startAt: string; endAt: string };
-export type SuppliesData = { supplies: SupplyRow[]; slots: SlotRow[] };
+/** places：いつもの受け渡し場所（一般向けの環境だけ。デモ用の環境は null） */
+export type SuppliesData = { supplies: SupplyRow[]; slots: SlotRow[]; places?: { placeId: string; name: string }[] | null };
 
 /** 生産者本人の出品と、参加している受渡の回（/api/supplies） */
 export function useSupplies(): Load<SuppliesData> {

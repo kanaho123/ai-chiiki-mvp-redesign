@@ -6,6 +6,11 @@ import { requireRole } from "../../auth.js";
 import { handle, json, readJson } from "../../http.js";
 import { repo } from "../../repo.js";
 import { refillSlotsIfDue } from "../../slot-refill.js";
+import { parseHandover } from "../../../src/lib/pickup.js";
+import { serverNow } from "../../clock.js";
+import { prisma } from "../../db.js";
+import { OnboardingProblem } from "../../onboarding.js";
+import { ensureHandoverSlot, usualPlaces } from "../../pickup-points.js";
 
 // 生産者本人の供給一覧（他の生産者の供給は返さない）と、登録に使う選択肢
 export const GET = handle(async (request) => {
@@ -14,8 +19,12 @@ export const GET = handle(async (request) => {
   await refillSlotsIfDue(); // これからの受渡の回が足りなければ補充（一般向けの環境だけ）
   const producer = g.user.producer;
   if (!producer) return json({ error: "生産者情報が登録されていません" }, 403);
-  const [supplies, slots, items] = await Promise.all([repo.listOwnSupplies(producer.id), repo.producerSlots(producer.id), repo.itemsWithVarieties()]);
-  return json({ producer, supplies, slots, items, prefectures: PREFECTURES });
+  const [supplies, slots, items, places] = await Promise.all([
+    repo.listOwnSupplies(producer.id), repo.producerSlots(producer.id), repo.itemsWithVarieties(),
+    appMode() === "general" ? usualPlaces(prisma, producer.id) : Promise.resolve(null),
+  ]);
+  // places：いつもの受け渡し場所（一般向けの環境だけ。出品のときに場所を選ぶ）
+  return json({ producer, supplies, slots, items, prefectures: PREFECTURES, places });
 });
 
 // 新しい供給。生産者はログイン中の本人に自動で紐付け、受渡枠は本人が参加登録している枠からだけ選べる
@@ -24,9 +33,22 @@ export const POST = handle(async (request) => {
   if (!g.ok) return g.response;
   const producer = g.user.producer;
   if (!producer) return json({ error: "生産者情報が登録されていません" }, 403);
-  const parsed = parseSupplyInput(await readJson(request));
+  const body = await readJson(request);
+  // 一般向けの環境：受け渡しは「いつもの場所・渡せる日・時間帯」（handover）で受け取り、その日時の受渡の回を使う（なければ作る）。
+  // 受渡の回を作るのは、ほかの入力を確かめた後だけ（入力が正しくない出品のために回を作らない）
+  const handover = appMode() === "general" && body && typeof body === "object" && "handover" in body ? parseHandover((body as { handover: unknown }).handover, serverNow()) : null;
+  if (handover && !handover.ok) return json({ error: handover.error }, 400);
+  const parsed = parseSupplyInput(handover ? { ...(body as object), slotId: "handover" } : body);
   if (!parsed.ok) return json({ error: parsed.error }, 400);
   const { itemName, ...input } = parsed.value;
+  if (handover) {
+    try {
+      input.slotId = await ensureHandoverSlot(prisma, producer.id, handover.value);
+    } catch (e) {
+      if (e instanceof OnboardingProblem) return json({ error: e.message }, e.status);
+      throw e;
+    }
+  }
 
   const [slots, items] = await Promise.all([repo.producerSlots(producer.id), repo.itemsWithVarieties()]);
   if (!slots.some((s) => s.id === input.slotId)) return json({ error: "参加登録している受渡枠から選択してください" }, 400);

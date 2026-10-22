@@ -96,6 +96,17 @@ async function next() {
   await act(async () => { $<HTMLButtonElement>(".bottom-bar button[type=submit]")!.click(); });
   await flush(3);
 }
+/** 登録直後の使い方（3枚）：下部ナビは出さず、「次へ」2回と「ホームへ」でホームへ。見たタイトルを返す */
+async function finishGuide() {
+  expect($(".bottom-nav")).toBeNull();
+  const titles: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    titles.push($(".ob-title")?.textContent ?? "");
+    await act(async () => { $<HTMLButtonElement>(".ob-actions .btn-primary")!.click(); });
+  }
+  await flush(2);
+  return titles;
+}
 async function back() {
   await act(async () => { $<HTMLButtonElement>(".onb-back")!.click(); });
   await flush(2);
@@ -175,6 +186,9 @@ describe("飲食店の初回登録（4 STEP）", () => {
     expect(posted).toHaveLength(1);
     expect(posted[0].url).toBe("/api/onboarding/restaurant");
     expect(posted[0].body).toMatchObject({ name: "まちの食堂", businessType: "other", businessTypeOther: "定食屋", pickupTimes: ["early_morning"], priorities: ["local", "freshness"] });
+    // 新規登録の直後だけ、飲食店向けの使い方を見せてからホームへ
+    expect(path).toBe("/restaurant/guide");
+    expect((await finishGuide())[0]).toContain("欲しい食材を");
     expect(path).toBe("/restaurant/home");
     expect($(".bottom-nav")).not.toBeNull();
     expect($("[role=status]")?.textContent).toContain("登録が完了しました");
@@ -206,7 +220,7 @@ describe("飲食店の初回登録（4 STEP）", () => {
     await next();
     await flush(4);
     expect(posted[0].body).toMatchObject({ pickupTimes: [], priorities: [] });
-    expect(path).toBe("/restaurant/home");
+    expect(path).toBe("/restaurant/guide");
   });
 
   it("STEP1 の住所・電話番号は、今は入力しなくても登録できると分かる（マイページへの案内はしない）", async () => {
@@ -279,13 +293,13 @@ describe("生産者の初回登録（4 STEP）", () => {
     await next();
     expect(path).toBe("/onboarding/producer/2");
 
-    // 品目マスタから選ぶ。その他の作物はプロフィール情報（出品はできない）と分かる
-    expect(el.textContent).toContain("出品できるのは、この一覧にある品目です");
-    expect(el.textContent).toContain("その他の作物はプロフィール情報として登録されます");
+    // 作っている農産物（主な作物・その他の作物）はここでは聞かない（売る農産物は出品のときに登録する）
+    expect($('input[name="itemIds"]')).toBeNull();
+    expect($('input[name="otherCrops"]')).toBeNull();
+    expect(el.textContent).not.toContain("主な作物");
     await next();
-    expect(errorsShown()).toEqual(expect.arrayContaining(["主な作物を1つ以上選んでください", "生産のスタイルを選んでください"]));
-    await pick("itemIds", "トマト");
-    await pick("itemIds", "なす");
+    expect(errorsShown()).toEqual(expect.arrayContaining(["生産のスタイルを選んでください"]));
+    expect(errorsShown()).not.toContain("主な作物を1つ以上選んでください");
     await pick("productionStyle", "少量多品目");
     await pick("salesChannels", "直売所");
     await pick("directTradeExperience", "経験あり");
@@ -295,15 +309,15 @@ describe("生産者の初回登録（4 STEP）", () => {
     // 受け渡しの場所はここでは聞かない（物流の言葉も出さない）
     expect(el.textContent).not.toContain("梅田エリア受渡所（仮）");
     expect(el.textContent).not.toContain("受渡枠");
-    await pick("capabilities", "少量対応");
-    await pick("capabilities", "規格外品");
-    await pick("capabilities", "飲食店との直接相談");
+    await pick("capabilities", "少量での販売");
+    await pick("capabilities", "規格外品の販売");
+    await pick("capabilities", "飲食店との直接取引");
     await next();
     expect(path).toBe("/onboarding/producer/4");
 
     expect(el.textContent).toContain("この連絡先は、あなたが「対応できます」と返事をした飲食店だけに表示されます");
     expect($<HTMLInputElement>('input[name="contactEmail"]')!.value).toBe(""); // ログイン用のメールは自動で入れない
-    expect($(".style-text")?.textContent).toBe("少量対応 × 規格外OK × 直接取引OK");
+    expect($(".style-text")?.textContent).toBe("少量OK × 規格外OK × 直接取引OK");
     await next();
     expect(errorsShown()).toContain("電話番号かメールアドレスのどちらかを入力してください");
     expect(posted).toHaveLength(0);
@@ -315,34 +329,32 @@ describe("生産者の初回登録（4 STEP）", () => {
     await flush(4);
     expect(posted).toHaveLength(1);
     expect(posted[0].url).toBe("/api/onboarding/producer");
-    expect(posted[0].body).toMatchObject({ farmName: "みどり農園", itemIds: ["i-tomato", "i-eggplant"], seriesIds: [], contactEmail: "midori@example.com", contactPhone: "" });
+    expect(posted[0].body).toMatchObject({ farmName: "みどり農園", itemIds: [], seriesIds: [], contactEmail: "midori@example.com", contactPhone: "" });
+    expect(path).toBe("/producer/guide");
+    expect((await finishGuide())[0]).toContain("写真か声で");
     expect(path).toBe("/producer/home");
     expect($(".bottom-nav")).not.toBeNull();
     expect($("[role=status]")?.textContent).toContain("登録が完了しました");
   });
 
-  it("販売先・対応できること・受け渡しの場所は選ばなくても登録できる。作物・連絡先は必須のまま", async () => {
+  it("作物・販売先・対応できること・受け渡しの場所は選ばなくても登録できる。連絡先は必須のまま", async () => {
     sessionStorage.setItem("ai-chiiki:onboarding:v1:u-p:producer", JSON.stringify({ farmName: "農園", producerName: "名", prefecture: "奈良県", city: "奈良市" }));
     await open("/onboarding/producer/2");
     await pick("productionStyle", "特定品目中心");
     await pick("directTradeExperience", "経験あり");
     await next();
-    expect(path).toBe("/onboarding/producer/2");
-    expect(errorsShown()).toEqual(["主な作物を1つ以上選んでください"]); // 販売先は誤りにならない
-    await pick("itemIds", "トマト");
-    await next();
-    expect(path).toBe("/onboarding/producer/3");
+    expect(path).toBe("/onboarding/producer/3"); // 作物は聞かない。販売先は誤りにならない
     await next(); // 対応できることは誤りにならない
     expect(errorsShown()).toEqual([]);
     await type("contactPhone", "090-0000-0000");
     expect($(".style-text")?.textContent).toBe("直接取引の経験あり × 特定品目中心");
     await next();
     await flush(4);
-    expect(posted[0].body).toMatchObject({ salesChannels: [], capabilities: [], itemIds: ["i-tomato"], seriesIds: [] });
-    expect(path).toBe("/producer/home");
+    expect(posted[0].body).toMatchObject({ salesChannels: [], capabilities: [], itemIds: [], seriesIds: [] });
+    expect(path).toBe("/producer/guide");
   });
 
-  it("戻っても選んだ作物・できることは残る", async () => {
+  it("戻っても選んだ販売・できることは残る", async () => {
     sessionStorage.setItem("ai-chiiki:onboarding:v1:u-p:producer", JSON.stringify({
       farmName: "農園", producerName: "名", prefecture: "奈良県", city: "奈良市", itemIds: ["i-onion"], productionStyle: "seasonal",
       salesChannels: ["ja"], directTradeExperience: "never", capabilities: ["small_lot"],
@@ -350,9 +362,9 @@ describe("生産者の初回登録（4 STEP）", () => {
     await open("/onboarding/producer/4");
     expect(path).toBe("/onboarding/producer/4");
     await back();
-    expect(checked("capabilities")).toEqual(["少量対応"]);
+    expect(checked("capabilities")).toEqual(["少量での販売"]);
     await back();
-    expect(checked("itemIds")).toEqual(["玉ねぎ"]);
+    expect(checked("productionStyle")).toEqual(["季節中心"]);
   });
 
   it("今は選べない受渡枠（保存していた古い選択）は外す", async () => {

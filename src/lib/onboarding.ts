@@ -84,10 +84,21 @@ export const SALES_CHANNELS = [
 export const DIRECT_TRADE_EXPERIENCES = [
   { value: "often", label: "よくある" }, { value: "sometimes", label: "経験あり" }, { value: "rarely", label: "少しだけ" }, { value: "never", label: "初めて" },
 ] as const satisfies readonly Option<string>[];
+/** 対応できる取引（保存できる値。surplus は選択肢から外したが、保存済みの値として残す） */
 export const PRODUCER_CAPABILITIES = [
-  { value: "small_lot", label: "少量対応", sub: "数kgの注文にも応じられる" }, { value: "irregular", label: "規格外品", sub: "形や大きさがそろわないものも出せる" },
-  { value: "surplus", label: "余剰が出たときだけ", sub: "余った分があるときに出す" }, { value: "direct_talk", label: "飲食店との直接相談", sub: "量や受け取り方を相談できる" },
+  { value: "irregular", label: "規格外品の販売", sub: "形や大きさがそろわないものも販売できる" },
+  { value: "small_lot", label: "少量での販売", sub: "数kgの注文にも応じられる" },
+  { value: "direct_talk", label: "飲食店との直接取引", sub: "量や受け取り方を飲食店と直接相談できる" },
+  { value: "surplus", label: "余剰が出たときだけ", sub: "余った分があるときに出す" },
 ] as const satisfies readonly Option<string>[];
+/** 画面で選べる・見せる「対応できる取引」（「余剰が出たときだけ」は出さない。保存済みの値は消さない） */
+export const PRODUCER_CAPABILITY_CHOICES = PRODUCER_CAPABILITIES.filter((c) => c.value !== "surplus");
+/** 飲食店の仕入れ案で、農家名の近くに出す小さなタグ（この順に並べる） */
+export const CAPABILITY_TAGS = [
+  { value: "irregular", tag: "規格外OK" }, { value: "small_lot", tag: "少量OK" }, { value: "direct_talk", tag: "直接取引OK" },
+] as const;
+/** 保存されている「対応できる取引」から、飲食店に見せるタグの値だけを決まった順で返す */
+export const capabilityTagValues = (caps: readonly string[]) => CAPABILITY_TAGS.filter((t) => caps.includes(t.value)).map((t) => t.value);
 
 export type ProductionStyle = V<typeof PRODUCTION_STYLES>;
 export type SalesChannel = V<typeof SALES_CHANNELS>;
@@ -111,9 +122,10 @@ export type ProducerProfile = {
 export type ProducerField = keyof ProducerForm;
 export const PRODUCER_STEPS: { title: string; fields: ProducerField[] }[] = [
   { title: "農園について", fields: ["farmName", "producerName", "prefecture", "city"] },
-  { title: "作っているもの・販売", fields: ["itemIds", "otherCrops", "productionStyle", "salesChannels", "directTradeExperience"] },
+  // 主な作物・その他の作物は初回登録では聞かない（売る農産物は出品のときに登録する。マイページで後から入力できる）
+  { title: "販売について", fields: ["productionStyle", "salesChannels", "directTradeExperience"] },
   // 受け渡しの場所は初回登録では聞かない（はじめて出品するときに「普段、野菜をどこで渡せますか？」と1回だけ聞く）
-  { title: "できること", fields: ["capabilities"] },
+  { title: "対応できる取引", fields: ["capabilities"] },
   { title: "連絡先と確認", fields: ["contactPhone", "contactEmail"] },
 ];
 
@@ -195,12 +207,12 @@ export function checkProducer(body: unknown): Checked<ProducerField, ProducerPro
   set("prefecture", prefectureError(prefecture));
   set("city", requiredText(city, "市区町村", LIMITS.city));
   if (itemIds === null || itemIds.some((x) => !x || x.length > 64) || itemIds.length > LIMITS.arrayMax) set("itemIds", "作物を選び直してください");
-  else if (itemIds.length === 0) set("itemIds", "主な作物を1つ以上選んでください");
+  // 主な作物は任意（プロフィール用。出品できる品目とは関係しない）
   set("otherCrops", optionalText(otherCrops, "その他の作物", LIMITS.otherCrops));
   set("productionStyle", oneOf(values(PRODUCTION_STYLES), style) ? null : "生産のスタイルを選んでください");
   if (!allOf(values(SALES_CHANNELS), channels)) set("salesChannels", "販売先を選び直してください");
   set("directTradeExperience", oneOf(values(DIRECT_TRADE_EXPERIENCES), experience) ? null : "飲食店との直接取引の経験を選んでください");
-  if (!allOf(values(PRODUCER_CAPABILITIES), capabilities)) set("capabilities", "対応できることを選び直してください");
+  if (!allOf(values(PRODUCER_CAPABILITIES), capabilities)) set("capabilities", "対応できる取引を選び直してください");
   if (seriesIds === null || seriesIds.some((x) => !x || x.length > 64) || seriesIds.length > LIMITS.arrayMax) set("seriesIds", "受け渡しの場所を選び直してください");
   if (phone === null || email === null) set("contactPhone", "連絡先の形式が正しくありません");
   else if (!phone && !email) set("contactPhone", "電話番号かメールアドレスのどちらかを入力してください");
@@ -269,14 +281,13 @@ export function restaurantStyle(p: Pick<RestaurantForm, "priorities" | "purchase
   ], "地域の食材を仕入れる");
 }
 
-/** 生産者：対応できること（少量→規格外→余剰→直接相談）→ 直接取引（販売先・経験）→ 生産スタイル、の順で最大3つ。
- *  対応できること・販売先は選ばなくてもよい */
+/** 生産者：対応できる取引（少量→規格外→直接取引。「余剰が出たときだけ」は出さない）→ 直接取引（販売先・経験）→ 生産スタイル、の順で最大3つ。
+ *  対応できる取引・販売先は選ばなくてもよい。言葉は飲食店に見せるタグ（少量OK・規格外OK・直接取引OK）とそろえる */
 export function producerStyle(p: Pick<ProducerForm, "capabilities" | "salesChannels" | "productionStyle" | "directTradeExperience">): string {
   const has = (c: ProducerCapability) => p.capabilities.includes(c);
   return join([
-    has("small_lot") ? { key: "small", text: "少量対応" } : null,
+    has("small_lot") ? { key: "small", text: "少量OK" } : null,
     has("irregular") ? { key: "irregular", text: "規格外OK" } : null,
-    has("surplus") ? { key: "surplus", text: "余剰品も出品" } : null,
     has("direct_talk") || p.salesChannels.includes("restaurant") ? { key: "direct", text: "直接取引OK" } : null,
     p.directTradeExperience === "often" || p.directTradeExperience === "sometimes" ? { key: "direct", text: "直接取引の経験あり" } : null,
     p.productionStyle === "many_small" ? { key: "style", text: "少量多品目" } : p.productionStyle === "specialized" ? { key: "style", text: "特定品目中心" } : p.productionStyle === "seasonal" ? { key: "style", text: "旬の野菜" } : null,

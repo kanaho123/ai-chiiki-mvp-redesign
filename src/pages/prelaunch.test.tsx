@@ -7,7 +7,7 @@ import { AppRoutes } from "../App";
 import { ApiError, confirmationApi, ERROR_TEXT, friendlyError } from "../lib/confirmation-api";
 import { hasUndecidedOperatorInfo, isDraftVersion, OPERATOR, PRIVACY_DATES, PRIVACY_HISTORY, PRIVACY_VERSION, TERMS_VERSION } from "../lib/legal";
 import * as serverLegal from "../../server/legal";
-import { appUrl, demoEntryUrl, generalHomeUrl } from "../routes/paths";
+import { appUrl, generalHomeUrl } from "../routes/paths";
 import { SessionProvider, type Me } from "../routes/session";
 
 // 公開前の確認：利用規約・プライバシーポリシー、一般向け⇔デモの URL、エラーのときの表示。
@@ -182,26 +182,18 @@ describe("一般向け ⇔ デモの URL（環境変数で設定）", () => {
     expect(appUrl("javascript:alert(1)", true)).toBeNull();
     expect(appUrl(undefined)).toBeNull();
     expect(appUrl("  ")).toBeNull();
-    expect(demoEntryUrl("https://demo.example.test")).toBe("https://demo.example.test/demo");
-    expect(demoEntryUrl(null)).toBeNull();
     expect(generalHomeUrl("https://app.example.test")).toBe("https://app.example.test/");
   });
-  it("一般向け：トップの右上「デモを試す」はデモ用の環境の /demo へ", async () => {
+  it("一般向け：デモの URL が設定されていても、トップ・ヘッダーにデモへのリンクは出さない。/demo はトップへ", async () => {
     vi.stubEnv("VITE_DEMO_APP_URL", "https://demo.example.test/");
     await open("/");
-    const a = [...el.querySelectorAll<HTMLAnchorElement>(".app-header a")].find((x) => x.textContent?.includes("デモを試す"));
-    expect(a?.getAttribute("href")).toBe("https://demo.example.test/demo");
-    expect([...el.querySelectorAll<HTMLAnchorElement>("main a")].find((x) => x.textContent?.includes("デモを試す"))?.getAttribute("href")).toBe("https://demo.example.test/demo");
-  });
-  it("URL が未設定ならデモへのリンクを出さない（localhost などを決め打ちしない）", async () => {
-    vi.stubEnv("VITE_DEMO_APP_URL", "");
-    await open("/");
     expect(text()).not.toContain("デモを試す");
+    expect([...el.querySelectorAll("a")].some((a) => a.getAttribute("href")?.includes("demo.example.test"))).toBe(false);
     await act(async () => root!.unmount());
     root = null;
     el.remove();
     await open("/demo");
-    expect(text()).toContain("デモの画面の場所が設定されていません");
+    expect(path).toBe("/");
   });
   it("デモ用の環境：一般向けのサービスへ戻るリンク（設定されているときだけ）。デモへのリンクは出さない", async () => {
     mode = "demo";

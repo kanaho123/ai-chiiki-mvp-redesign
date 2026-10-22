@@ -25,7 +25,8 @@ export type ExtractResult = {
 };
 
 /** POST /api/plan の応答 */
-export type Shown = { plan: PlanResult; version: string; fingerprint?: string; request: PlanRequest; suggestions: Suggestion[]; demoClock: boolean };
+/** farmTags：農家（producerId）ごとの「対応できる取引」のタグ（規格外OK など。表示だけ。古い保存データにはない） */
+export type Shown = { plan: PlanResult; version: string; fingerprint?: string; request: PlanRequest; suggestions: Suggestion[]; demoClock: boolean; farmTags?: Record<string, string[]> };
 
 /** POST /api/plan-options の1件：希望日に受け取れる1つの回（受け取り1か所）での案の要約。おすすめ順に並ぶ */
 export type PlanOption = {

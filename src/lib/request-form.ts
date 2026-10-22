@@ -17,15 +17,13 @@ export type RequestForm = {
   slotId: string; // 一般向けの環境では "" ＝おまかせ（希望日に受け取れる場所から、おすすめを探す）
   allowFirstTime: YesNo;
   allowIrregular: YesNo;
-  allowMixedVarieties: YesNo;
-  allowMixedGrades: YesNo;
   preferredProducerId: string;
 };
 
 /** 未選択のまま始める（重要な選択を勝手に false にしない） */
 export const EMPTY_FORM: RequestForm = {
   itemId: "", varietyId: "", quantityKg: "", desiredDate: "", budgetMode: "", budgetYen: "", originPrefectures: [], slotId: "",
-  allowFirstTime: "", allowIrregular: "", allowMixedVarieties: "", allowMixedGrades: "", preferredProducerId: "",
+  allowFirstTime: "", allowIrregular: "", preferredProducerId: "",
 };
 
 const yn = (v: YesNo) => (v === "" ? null : v === "yes");
@@ -43,8 +41,6 @@ export function toPlanBody(f: RequestForm) {
     slotId: f.slotId,
     allowFirstTime: yn(f.allowFirstTime),
     allowIrregular: yn(f.allowIrregular),
-    allowMixedVarieties: yn(f.allowMixedVarieties),
-    allowMixedGrades: yn(f.allowMixedGrades),
     preferredProducerId: f.preferredProducerId || null,
   };
 }
@@ -54,7 +50,7 @@ export function formFromRequest(r: PlanRequest): RequestForm {
     itemId: r.itemId, varietyId: r.varietyId ?? "", quantityKg: String(r.quantityKg), desiredDate: r.desiredDate,
     budgetMode: r.budgetYen === null ? "none" : "limit", budgetYen: r.budgetYen === null ? "" : String(r.budgetYen),
     originPrefectures: r.originPrefectures, slotId: r.slotId, allowFirstTime: fromBool(r.allowFirstTime), allowIrregular: fromBool(r.allowIrregular),
-    allowMixedVarieties: fromBool(r.allowMixedVarieties), allowMixedGrades: fromBool(r.allowMixedGrades), preferredProducerId: r.preferredProducerId ?? "",
+    preferredProducerId: r.preferredProducerId ?? "",
   };
 }
 
@@ -64,23 +60,24 @@ export function formFromDraft(d: Draft): RequestForm {
     itemId: d.itemId ?? "", varietyId: d.varietyId ?? "", quantityKg: d.quantityKg === null ? "" : String(d.quantityKg),
     desiredDate: d.desiredDate ?? "", budgetMode: d.budget?.mode ?? "", budgetYen: d.budget?.mode === "limit" ? String(d.budget.yen) : "",
     originPrefectures: d.originPrefectures, slotId: d.slotId ?? "", allowFirstTime: fromBool(d.allowFirstTime),
-    allowIrregular: fromBool(d.allowIrregular), allowMixedVarieties: fromBool(d.allowMixedVarieties), allowMixedGrades: fromBool(d.allowMixedGrades),
+    allowIrregular: fromBool(d.allowIrregular),
     preferredProducerId: d.preferredProducerId ?? "",
   };
 }
 
 /**
  * まだ選択・入力されていない必須項目（画面で「要確認」を示す）。
- * autoSlot（一般向けの環境）では受け取り場所を選ばなくてもよい（おまかせ）。デモ用の環境では従来どおり必須
+ * autoSlot（一般向けの環境）では受け取り日・受け取り場所を選ばなくてもよい（おまかせ）。デモ用の環境では従来どおり必須。
+ * 品種・規格を「まぜてよいか」は聞かない（サーバーが決まった規則で決める：validate.ts の mixingFor）
  */
 export function missingFields(f: RequestForm, opts: { autoSlot?: boolean } = {}): DraftField[] {
   const out: DraftField[] = [];
   if (!f.itemId) out.push("itemId");
   if (!f.quantityKg) out.push("quantityKg");
-  if (!f.desiredDate) out.push("desiredDate");
+  if (!f.desiredDate && !opts.autoSlot) out.push("desiredDate"); // 一般向けの環境では受け取り日は任意（未定なら、受け取れる日時の候補から探す）
   if (!f.budgetMode || (f.budgetMode === "limit" && !f.budgetYen)) out.push("budget");
   if (f.originPrefectures.length === 0) out.push("originPrefectures");
   if (!f.slotId && !opts.autoSlot) out.push("slotId");
-  for (const k of ["allowFirstTime", "allowIrregular", "allowMixedVarieties", "allowMixedGrades"] as const) if (!f[k]) out.push(k);
+  for (const k of ["allowFirstTime", "allowIrregular"] as const) if (!f[k]) out.push(k);
   return out;
 }

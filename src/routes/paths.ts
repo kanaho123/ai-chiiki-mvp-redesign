@@ -10,22 +10,33 @@ export const PATHS = {
   demo: "/demo",
   terms: "/terms",
   privacy: "/privacy",
+  /** トップで役割を選んだ後の「はじめての方／登録済みの方」 */
+  start: { restaurant: "/start/restaurant", producer: "/start/producer" },
   restaurant: {
     home: "/restaurant/home",
     buy: "/restaurant/buy",
     consultations: "/restaurant/consultations",
     mypage: "/restaurant/mypage",
+    guide: "/restaurant/guide",
   },
   producer: {
     home: "/producer/home",
     listings: "/producer/listings",
+    newListing: "/producer/listings/new",
     requests: "/producer/requests",
     mypage: "/producer/mypage",
+    guide: "/producer/guide",
   },
   onboarding: { restaurant: "/onboarding/restaurant", producer: "/onboarding/producer" },
 } as const;
 
+export const isRole = (v: unknown): v is Role => v === "restaurant" || v === "producer";
+/** 新規登録・ログインの画面へ（トップで選んだ役割を URL で引き継ぐ） */
+export const signupOf = (role: Role) => `${PATHS.signup}?role=${role}`;
+export const loginOf = (role: Role) => `${PATHS.login}?role=${role}`;
 export const homeOf = (role: Role) => PATHS[role].home;
+/** 初回登録を終えた直後だけ出す、使い方の説明 */
+export const guideOf = (role: Role) => PATHS[role].guide;
 export const onboardingOf = (role: Role) => PATHS.onboarding[role];
 
 /** ログイン済みのユーザーが最初に行く画面：初回登録が済んでいなければ登録、済んでいればホーム */
@@ -51,7 +62,7 @@ export const NAV: Record<Role, NavItem[]> = {
 
 /**
  * 一般向けの環境とデモ用の環境は、同じコードを別々の URL で公開する。お互いの URL はビルド時の環境変数で設定する（コードに書かない）。
- * ・VITE_DEMO_APP_URL：一般向けの環境に設定。デモ用の環境の URL（例：https://…）。「デモを試す」はその /demo へ
+ * （一般向けの環境からデモ用の環境へのリンクは出さない。トップは「役割を選ぶ → 新規登録／ログイン」だけにする）
  * ・VITE_GENERAL_APP_URL：デモ用の環境に設定。一般向けの環境の URL。「一般向けのサービスへ」の戻り先
  * 未設定・不正な値ならリンクを出さない。https だけを使う（開発中だけ localhost の http も可）
  */
@@ -66,7 +77,5 @@ export function appUrl(raw: string | undefined, dev = import.meta.env.DEV): stri
   } catch {}
   return null;
 }
-/** デモ用の環境の入口（/demo）。未設定なら null */
-export const demoEntryUrl = (base = appUrl(import.meta.env.VITE_DEMO_APP_URL)) => (base ? `${base}${PATHS.demo}` : null);
 /** 一般向けの環境のトップ。未設定なら null */
 export const generalHomeUrl = (base = appUrl(import.meta.env.VITE_GENERAL_APP_URL)) => (base ? `${base}/` : null);

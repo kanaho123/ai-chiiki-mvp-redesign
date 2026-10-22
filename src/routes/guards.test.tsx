@@ -87,11 +87,56 @@ describe("未ログイン", () => {
     const r = await open(path);
     expect(r.path).toBe("/");
     expect(r.nav).toBeNull();
-    expect(r.text).toContain("新規登録");
+    expect(r.text).toContain("あなたはどちらですか？");
   });
   it("存在しない URL → トップ", async () => {
     stubSession(null);
     expect((await open("/no-such-page")).path).toBe("/");
+  });
+});
+
+describe("トップ → 役割 → 新規登録／ログイン（一般向け）", () => {
+  const click = async (el: Element | null | undefined) => { await act(async () => { (el as HTMLElement).click(); }); };
+  it("トップは役割を選ぶだけ（説明・デモへのリンクは出さない）", async () => {
+    stubSession(null);
+    const r = await open("/");
+    expect(r.h1).toBe("あなたはどちらですか？");
+    expect(r.text).toContain("飲食店");
+    expect(r.text).toContain("生産者");
+    expect(r.text).not.toContain("デモ");
+    expect(r.text).not.toContain("新規登録");
+  });
+  it.each([["restaurant", "飲食店"], ["producer", "生産者"]] as const)("%s を選ぶ → はじめての方（新規登録）／登録済みの方（ログイン）の2つ", async (role, label) => {
+    stubSession(null);
+    await open("/");
+    await click(container!.querySelector(`.role-card.${role} button`));
+    expect(container!.querySelector("main h1")?.textContent).toBe("はじめてですか？");
+    expect(container!.textContent).toContain(`${label}として使う`);
+    const links = [...container!.querySelectorAll<HTMLAnchorElement>("main a")].map((a) => [a.textContent, a.getAttribute("href")]);
+    expect(links).toEqual([
+      ["はじめての方（新規登録）", `/signup?role=${role}`],
+      ["登録済みの方（ログイン）", `/login?role=${role}`],
+      ["もどる", "/"],
+    ]);
+  });
+  it("役割を選んで来た新規登録では、役割をもう一度は聞かない", async () => {
+    stubSession(null);
+    const r = await open("/signup?role=producer");
+    expect(r.text).toContain("生産者として使う");
+    expect(container!.querySelector('input[name="role"]')).toBeNull();
+  });
+  it("役割を指定しない新規登録（直接開いた URL）は、これまでどおり役割を聞く", async () => {
+    stubSession(null);
+    await open("/signup");
+    expect(container!.querySelectorAll('input[name="role"]')).toHaveLength(2);
+  });
+  it("一般向けの /demo は中間の画面を出さずトップへ", async () => {
+    stubSession(null);
+    expect((await open("/demo")).path).toBe("/");
+  });
+  it("ログイン済みなら、トップ・役割の画面からも直接ホームへ", async () => {
+    stubSession(producer(true));
+    expect((await open("/start/producer")).path).toBe("/producer/home");
   });
 });
 

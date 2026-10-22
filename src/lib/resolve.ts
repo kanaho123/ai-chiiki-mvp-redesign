@@ -227,7 +227,7 @@ export function resolveExtraction(x: ExtractedRequest, catalog: Catalog, now: Da
   if (!draft.budget) unresolvedFields.push("budget");
   if (draft.originPrefectures.length === 0) unresolvedFields.push("originPrefectures");
   if (!draft.slotId) unresolvedFields.push("slotId");
-  for (const k of ["allowFirstTime", "allowIrregular", "allowMixedVarieties", "allowMixedGrades"] as const)
+  for (const k of ["allowFirstTime", "allowIrregular"] as const) // 品種・規格を「まぜてよいか」は聞かない（サーバーが決める）
     if (draft[k] === null) unresolvedFields.push(k);
   if (x.preferredProducerText && !draft.preferredProducerId) unresolvedFields.push("preferredProducerId");
 

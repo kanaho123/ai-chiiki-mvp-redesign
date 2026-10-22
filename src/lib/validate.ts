@@ -38,6 +38,13 @@ const optionalId = (v: unknown): string | null | undefined => (v === undefined |
  * 重要な選択（初回農家・規格外・混在）は true/false の明示が必要で、未選択のままでは計算しない。
  * 予算は数値か null（＝利用者が「上限なし」を選んだ）を明示する。未入力を上限なしとは扱わない。
  */
+/**
+ * 品種・規格を合わせてよいか（飲食店には聞かない）。
+ * ・品種：品種を指定しなければ、どの品種でも合わせる。指定したら、その品種だけ
+ * ・規格：「規格外も含める」なら通常品と合わせてよい。含めないなら、規格外はそもそも使わない
+ */
+export const mixingFor = (varietyId: string | null, allowIrregular: boolean) => ({ allowMixedVarieties: varietyId === null, allowMixedGrades: allowIrregular });
+
 export function parsePlanRequest(body: unknown, now: Date): Result<PlanRequest> {
   if (!isObj(body)) return { ok: false, error: "条件を読み取れません" };
 
@@ -65,17 +72,17 @@ export function parsePlanRequest(body: unknown, now: Date): Result<PlanRequest> 
   const slotId = id(body.slotId);
   if (!slotId) return { ok: false, error: "受渡枠（受取場所・日時）を選択してください" };
 
+  // 品種・規格を「まぜてよいか」は飲食店に聞かない。送られていなければ決まった規則で決める（mixingFor）
   const flags = [
     ["allowFirstTime", "初回の農家を含めるか"],
     ["allowIrregular", "規格外を使えるか"],
-    ["allowMixedVarieties", "品種の混在を許可するか"],
-    ["allowMixedGrades", "通常品と規格外の混在を許可するか"],
   ] as const;
   for (const [key, label] of flags)
     if (typeof body[key] !== "boolean") return { ok: false, error: `${label}を選択してください` };
 
   const preferredProducerId = optionalId(body.preferredProducerId);
   if (preferredProducerId === undefined) return { ok: false, error: "優先する農家を選び直してください" };
+  const mixing = mixingFor(varietyId, body.allowIrregular as boolean);
 
   return {
     ok: true,
@@ -85,8 +92,10 @@ export function parsePlanRequest(body: unknown, now: Date): Result<PlanRequest> 
       slotId,
       allowFirstTime: body.allowFirstTime as boolean,
       allowIrregular: body.allowIrregular as boolean,
-      allowMixedVarieties: body.allowMixedVarieties as boolean,
-      allowMixedGrades: body.allowMixedGrades as boolean,
+      // 画面からは送らない（決まった規則で決める）。送られていれば、その値を使う：
+      // 保存済みの相談の条件（以前は画面で選んでいた値）を読み直したときに、案の内容と fingerprint が変わらないように
+      allowMixedVarieties: typeof body.allowMixedVarieties === "boolean" ? body.allowMixedVarieties : mixing.allowMixedVarieties,
+      allowMixedGrades: typeof body.allowMixedGrades === "boolean" ? body.allowMixedGrades : mixing.allowMixedGrades,
       preferredProducerId,
     },
   };

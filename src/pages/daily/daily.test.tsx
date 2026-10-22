@@ -41,6 +41,8 @@ type Json = (b: unknown, status?: number) => Response;
 // 出品の登録（POST /api/supplies）の応答。テストごとに差し替える
 const defaultSupplyPost = (b: Record<string, unknown>, json: Json) => json({ supply: { item: { name: (b.itemName as string) ?? ({ "i-tomato": "トマト", "i-nasu": "なす" } as Record<string, string>)[b.itemId as string] }, availableKg: Number(b.availableKg) } }, 201);
 let supplyPost: (b: Record<string, unknown>, json: Json) => Response = defaultSupplyPost;
+/** 出品の下書き（/api/supply-draft）の応答。null なら AI が使えない（503） */
+let draftReply: Record<string, unknown> | null = null;
 const usualUmeda = { placeId: "pl-umeda", name: "梅田エリア受渡所（仮）", address: "大阪市北区", kind: null, times: [{ seriesId: "s-umeda", weekday: 2, startTime: "10:00", endTime: "11:00", active: true }] };
 // 取引のやり取り（相談の id ごと）と受け取り完了
 let tradeMessages: Record<string, { id: string; body: string; createdAt: string; mine: boolean; sender: string; senderName: string }[]> = {};
@@ -48,6 +50,7 @@ let pickup: { usual: unknown[]; candidates: { placeId: string; name: string; add
 beforeEach(() => {
   tradeMessages = {};
   supplyPost = defaultSupplyPost;
+  draftReply = null;
   supplyRows = [supplyRow()];
   slots = [umedaSlot];
   pickup = {
@@ -105,14 +108,15 @@ beforeEach(() => {
       return r?.status === "approved" ? json({ contact: { contactPhone: "000-0000-0001", contactEmail: "a-farm@example.invalid" } }) : json({ error: "まだ連絡先は見られません" }, 403);
     }
     if (url === "/api/supplies" && method === "POST") return supplyPost(body as Record<string, unknown>, json);
-    if (url === "/api/supplies") return json({ supplies: supplyRows, slots, items: [{ id: "i-tomato", name: "トマト", varieties: [{ id: "v-tomato", name: "指定なし" }] }, { id: "i-nasu", name: "なす", varieties: [{ id: "v-nasu", name: "指定なし" }] }], prefectures: ["大阪府"] });
+    if (url === "/api/supply-draft" && method === "POST") return draftReply ? json({ draft: draftReply }) : json({ error: "AIで読み取れませんでした。手で入力してください" }, 503);
+    if (url === "/api/supplies") return json({ supplies: supplyRows, slots, items: [{ id: "i-tomato", name: "トマト", varieties: [{ id: "v-tomato", name: "指定なし" }] }, { id: "i-nasu", name: "なす", varieties: [{ id: "v-nasu", name: "指定なし" }] }], prefectures: ["大阪府", "京都府", "東京都"], places: mode === "general" ? pickup.usual : null });
     if (url === "/api/pickup-points" && method === "GET") return json({ points: [], ...pickup });
     if (url === "/api/pickup-points" && method === "POST") {
-      const b = body as { placeId?: string; name?: string; weekday: number; startTime: string; endTime: string };
-      const name = b.placeId ? pickup.candidates.find((c) => c.placeId === b.placeId)!.name : b.name!;
-      const added = { placeId: b.placeId ?? "pl-new", name, address: "", kind: null, times: [{ seriesId: "s-new", weekday: b.weekday, startTime: b.startTime, endTime: b.endTime, active: true }] };
+      // 場所だけを登録する（曜日・時間は持たない。受渡の回は出品のときに作る）
+      const b = body as { placeId?: string; name?: string; address?: string };
+      const cand = b.placeId ? pickup.candidates.find((c) => c.placeId === b.placeId)! : null;
+      const added = { placeId: b.placeId ?? "pl-new", name: cand?.name ?? b.name!, address: cand?.address ?? b.address ?? "", kind: null, times: [] };
       pickup = { ...pickup, usual: [...pickup.usual, added] };
-      slots = [{ id: "sl-new", label: "", placeId: added.placeId, placeName: name, startAt: "2099-10-30T07:00:00.000Z", endAt: "2099-10-30T09:00:00.000Z", participationConfirmed: true }];
       return json({ created: {}, points: [], usual: pickup.usual }, 201);
     }
     if (url === "/api/profile" && method === "GET") return profile ? json(profile) : json({ error: "なし" }, 404);
@@ -150,13 +154,16 @@ const badge = () => $(".bottom-nav .nav-badge")?.textContent ?? null;
 
 describe("飲食店のホーム", () => {
   beforeEach(() => { me = restaurant; });
-  it("相談なし：「進行中の相談はありません」と仕入れ案をつくる主ボタン", async () => {
+  it("相談なし：「AIに仕入れを相談する」が見出しのすぐ下の唯一の主ボタン。「進行中の相談はありません」", async () => {
     await open("/restaurant/home");
     expect($("main h1")?.textContent).toBe("まちの食堂");
     expect(text()).toContain("進行中の相談はありません");
-    expect($(".todo-text")?.textContent).toContain("仕入れ案をつくりましょう");
+    expect($(".todo")).toBeNull(); // 「仕入れ案をつくりましょう」は主ボタンと同じ案内なので出さない
     expect(el.querySelectorAll("main .btn-primary")).toHaveLength(1);
-    expect($("main .btn-primary")?.textContent).toBe("新しい仕入れ案をつくる");
+    const main = $<HTMLAnchorElement>("main .btn-primary")!;
+    expect(main.textContent).toContain("AIに仕入れを相談する");
+    expect(main.getAttribute("href")).toBe("/restaurant/buy");
+    expect(main.compareDocumentPosition($("#ongoing-title")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
   it("返事待ち：「トマト 10kg」と農家ごとの状態をふつうの言葉で", async () => {
     requests = [req("a", "pending"), req("b", "pending", { producerName: "B農園" })];
@@ -290,34 +297,38 @@ describe("飲食店の相談一覧・詳細", () => {
   it("相談がなければ案内と主ボタン", async () => {
     await open("/restaurant/consultations");
     expect(text()).toContain("まだ相談はありません");
-    expect($("main .btn-primary")?.textContent).toBe("新しい仕入れ案をつくる");
+    expect($("main .btn-primary")?.textContent).toBe("AIに仕入れを相談する");
   });
 });
 
 describe("生産者のホームと下部ナビの数", () => {
   beforeEach(() => { me = producer; });
-  it("未対応 0：知らせもバッジも出さず、主ボタンは出品の更新", async () => {
+  it("未対応 0：知らせもバッジも出さない。主ボタンは見出しのすぐ下の「農産物を出品する」だけ", async () => {
     requests = [req("a", "approved")];
     await open("/producer/home");
     expect($(".new-requests")).toBeNull();
     expect(badge()).toBeNull();
-    expect($("main .btn-primary")?.textContent).toBe("今日出せる量を更新する");
+    expect(el.querySelectorAll("main .btn-primary")).toHaveLength(1);
+    expect($("main .btn-primary")?.textContent).toContain("農産物を出品する");
+    expect($("main .btn-primary")?.getAttribute("href")).toBe("/producer/listings/new");
+    expect(text()).toContain("いま返事が必要な相談はありません");
     expect(text()).toContain("トマト");
     expect(text()).toContain("8kg");
     expect($(".next-slot")?.textContent).toContain("梅田エリア受渡所（仮）");
   });
-  it("未対応 1：最上部で「あなたの出品条件に合う仕入れ相談が1件あります」・バッジ 1・主ボタンは相談への返事", async () => {
+  it("未対応 1：出品ボタンのすぐ下に「あなたの出品条件に合う仕入れ相談が1件あります」・バッジ 1・相談への返事へのボタン", async () => {
     requests = [req("a", "pending")];
     await open("/producer/home");
     const notice = $(".new-requests")!;
     expect(notice.textContent).toContain("あなたの出品条件に合う仕入れ相談が1件あります");
-    expect(text()).toContain("返事が必要な仕入れ相談");
-    // ホームの見出しのすぐ下（出品・受渡枠より前）
-    const order = [...el.querySelectorAll("main .new-requests, main #listing-title, main #slot-title")].map((x) => x.className || x.id);
-    expect(order[0]).toBe("new-requests");
+    expect(text()).toContain("飲食店からの仕入れ相談");
+    // 主ボタン（出品）の次に相談（出品・受渡枠より前）
+    const order = [...el.querySelectorAll("main .btn-primary, main .new-requests, main #listing-title, main #slot-title")].map((x) => x.id || x.className.split(" ").find((c) => c === "btn-primary" || c === "new-requests"));
+    expect(order.slice(0, 2)).toEqual(["btn-primary", "new-requests"]);
     expect(badge()).toBe("1");
     expect($(".bottom-nav .sr-only")?.textContent).toContain("未対応 1件");
-    expect($("main .btn-primary")?.textContent).toBe("相談に返事をする");
+    expect($("main .btn-primary")?.textContent).toContain("農産物を出品する");
+    expect(button("相談に返事をする")?.getAttribute("href")).toBe("/producer/requests");
   });
   it("未対応が複数：件数とバッジ", async () => {
     requests = [req("a", "pending"), req("b", "pending", { restaurantName: "別の店" }), req("c", "pending"), req("d", "rejected"), req("e", "stale")];
@@ -356,7 +367,7 @@ describe("生産者の「依頼」", () => {
     expect(card.querySelector(".request-what")?.textContent).toBe("トマト 5kg");
     expect(card.textContent).toContain("飲食店が必要な量 10kg のうち、あなたへの相談は 5kg");
     expect(card.textContent).toContain("希望日：10月23日（金）");
-    expect([...card.querySelectorAll(".request-conds li")].map((li) => li.textContent)).toEqual(["規格外可", "初めての農家可", "産地大阪府", "品種のまぜ不可", "規格のまぜ不可"]);
+    expect([...card.querySelectorAll(".request-conds li")].map((li) => li.textContent)).toEqual(["規格外可", "初めての農家可", "産地大阪府"]); // 品種・規格の「まぜ」は飲食店が選ぶ条件ではないので出さない
     expect(text()).not.toMatch(/予算|budget/);
   });
   it("相談カード：条件を読めない古い相談でも、これまでどおりの内容で表示する", async () => {
@@ -493,8 +504,8 @@ describe("マイページ", () => {
     me = producer;
     profile = producerProfile();
     await open("/producer/mypage");
-    expect($(".style-text")?.textContent).toBe("少量対応 × 直接取引の経験あり × 少量多品目");
-    for (const t of ["山田 花子", "大阪府堺市南区", "トマト", "かぼちゃ", "少量多品目", "経験あり", "少量対応", "000-0000-9999"]) expect(text()).toContain(t);
+    expect($(".style-text")?.textContent).toBe("少量OK × 直接取引の経験あり × 少量多品目");
+    for (const t of ["山田 花子", "大阪府堺市南区", "トマト", "かぼちゃ", "少量多品目", "経験あり", "少量での販売", "000-0000-9999"]) expect(text()).toContain(t);
     await click(el.querySelector('button[aria-label="飲食店に伝える連絡先を編集する"]'));
     const phone = $<HTMLInputElement>('input[name="contactPhone"]')!;
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(phone, "");
@@ -504,6 +515,19 @@ describe("マイページ", () => {
     expect($(".field-error")?.textContent).toContain("電話番号かメールアドレスのどちらかを入力してください");
     await click(button("やめる"));
     expect(text()).toContain("000-0000-9999");
+  });
+  it("生産者：対応できる取引は3つから選ぶ。「余剰が出たときだけ」は出さないが、保存済みの値は消さずに送る", async () => {
+    me = producer;
+    const base = producerProfile();
+    profile = { ...base, profile: { ...base.profile, capabilities: ["surplus", "small_lot"] } };
+    await open("/producer/mypage");
+    expect(text()).not.toContain("余剰");
+    await click(el.querySelector('button[aria-label="対応できる取引を編集する"]'));
+    expect([...el.querySelectorAll('input[name="capabilities"]')].map((i) => i.closest("label")!.querySelector("b")!.textContent)).toEqual(["規格外品の販売", "少量での販売", "飲食店との直接取引"]);
+    await click([...el.querySelectorAll<HTMLInputElement>('input[name="capabilities"]')][0]);
+    await click(button("保存する"));
+    const sent = calls.find((c) => c.url === "/api/profile" && c.method === "PATCH")!.body as { capabilities: string[] };
+    expect(sent.capabilities).toEqual(["surplus", "small_lot", "irregular"]);
   });
 });
 
@@ -624,15 +648,19 @@ describe("生産者：いつもの受け渡し場所（物流の言葉を使わ�
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
     await act(async () => { input.dispatchEvent(new Event("input", { bubbles: true })); });
   };
+  const typeIntoEl = async (input: HTMLInputElement, value: string) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+    await act(async () => { input.dispatchEvent(new Event("input", { bubbles: true })); });
+  };
   const posted = () => calls.filter((c) => c.url === "/api/pickup-points" && c.method === "POST").map((c) => c.body);
 
   it("ホーム：未登録なら「いつもの受け渡し場所：未登録」、登録済みなら場所の名前（受渡枠という言葉は出さない）", async () => {
-    slots = [];
+    pickup = { ...pickup, usual: [] };
     await open("/producer/home");
     expect($(".usual-status")?.textContent).toContain("いつもの受け渡し場所：未登録");
     expect(text()).not.toContain("受渡枠");
     act(() => root?.unmount()); el.remove();
-    slots = [umedaSlot];
+    pickup = { ...pickup, usual: [usualUmeda] };
     await open("/producer/home");
     expect($(".usual-status")?.textContent).toBe("いつもの受け渡し場所：梅田エリア受渡所（仮）");
     expect(text()).toContain("次の受け渡し");
@@ -644,98 +672,109 @@ describe("生産者：いつもの受け渡し場所（物流の言葉を使わ�
     expect($(".next-slot")?.textContent).toContain("梅田エリア受渡所（仮）");
   });
 
-  it("マイページ：いつもの場所をカードで出し、すでにある場所で「ここで渡せる」→ 曜日と時間 → 登録", async () => {
+  it("マイページ：いつもの場所をカードで出す。追加は場所の名前と住所だけ（曜日・時間は聞かない）。登録済みの場所から選ぶこともできる", async () => {
     profile = producerProfile();
     await open("/producer/mypage");
     const card = $(".usual-place")!;
     expect(card.textContent).toContain("梅田エリア受渡所（仮）");
-    expect(card.textContent).toContain("火曜日 10:00〜11:00");
+    expect(card.textContent).toContain("火曜日 10:00〜11:00"); // 以前に曜日・時間つきで登録した場所は、その曜日と時間も出す
     await click(button("場所を追加する"));
     expect($(".ps-title")?.textContent).toBe("普段、野菜をどこで渡せますか？");
     await click(button("いつもの直売所"));
-    // 直売所の候補だけ（運営の場所は「その他」に出る）
-    expect([...el.querySelectorAll(".ps-place-name")].map((x) => x.textContent)).toEqual(["南区ふれあい直売所"]);
+    // どの種類でも、まず場所の名前と住所の入力（共通）。登録済みの場所は補助
+    expect($('input[name="name"]')).not.toBeNull();
+    expect($('input[name="address"]')).not.toBeNull();
+    expect(el.querySelector(".ps-weekday, input[type=time]")).toBeNull();
+    expect($(".ps-place")).toBeNull();
+    await click(button("登録済みの場所から選ぶ"));
+    expect([...el.querySelectorAll(".ps-place-name")].map((x) => x.textContent)).toEqual(["南区ふれあい直売所"]); // 直売所の候補だけ（運営の場所は「その他」に出る）
     expect($(".ps-place .ps-place-address")).toBeNull(); // 住所のない候補は住所の行を出さない
     await click(button("ここで渡せる"));
-    expect($(".ps-title")?.textContent).toBe("いつ渡せますか？");
-    await click(button("この場所を登録する"));
-    expect(posted()).toHaveLength(0);
-    expect(text()).toContain("渡せる曜日を選んでください");
-    await click([...el.querySelectorAll(".ps-weekday")].find((b) => b.textContent === "金")!);
-    expect($(".ps-weekday.on")?.getAttribute("aria-pressed")).toBe("true");
-    await typeInto("startTime", "16:00");
-    await typeInto("endTime", "15:00");
-    await click(button("この場所を登録する"));
-    expect(text()).toContain("終わりの時刻は、始まりより後にしてください");
-    await typeInto("endTime", "18:00");
-    await click(button("この場所を登録する"));
-    expect(posted()).toEqual([{ placeId: "pl-store", weekday: 5, startTime: "16:00", endTime: "18:00" }]);
+    await flush();
+    expect(posted()).toEqual([{ placeId: "pl-store" }]);
     expect(text()).toContain("いつもの受け渡し場所を登録しました");
-    expect(text()).toContain("金曜日 16:00〜18:00");
+    expect([...el.querySelectorAll(".usual-place-name")].map((x) => x.textContent)).toContain("南区ふれあい直売所");
   });
 
-  it("はじめての出品（一般向け・場所がない）：出品の前に場所を聞き、ここにない場所も入れられる。終わると出品へ進む", async () => {
+  it("はじめての出品（一般向け・場所がない）：出品の前に場所の名前と住所を聞く。「その他」でも入力した場所の名前を出す。終わると出品へ進む", async () => {
     supplyRows = [];
     slots = [];
     pickup = { ...pickup, usual: [] };
-    await open("/producer/listings");
+    await open("/producer/listings/new");
     expect($(".first-place")).not.toBeNull();
     expect($(".ps-title")?.textContent).toBe("普段、野菜をどこで渡せますか？");
     expect($("form")).toBeNull(); // 出品の入力はまだ出さない
+    expect($(".entry-choices")).toBeNull();
     await click(button("その他"));
+    await click(button("この場所を登録する"));
+    expect(posted()).toHaveLength(0);
+    expect(text()).toContain("場所の名前を入れてください");
+    await click(button("登録済みの場所から選ぶ"));
     expect([...el.querySelectorAll(".ps-place-name")].map((x) => x.textContent)).toEqual(["梅田エリア受渡所（仮）"]);
     expect($(".ps-place .ps-place-address")?.textContent).toBe("大阪市北区"); // 運営の場所は住所あり
-    await click(button("ここにない場所を入れる"));
-    await click(button("次へ"));
-    expect(text()).toContain("場所の名前を入れてください");
-    await typeInto("name", "山田農園の作業場");
+    await typeInto("name", "〇〇公民館");
     await typeInto("address", "大阪府堺市南区9-9");
-    await click(button("次へ"));
-    await click([...el.querySelectorAll(".ps-weekday")].find((b) => b.textContent === "土")!);
-    await typeInto("startTime", "08:00");
-    await typeInto("endTime", "10:00");
     await click(button("この場所を登録する"));
     await flush();
-    expect(posted()).toEqual([{ name: "山田農園の作業場", address: "大阪府堺市南区9-9", kind: "other", weekday: 6, startTime: "08:00", endTime: "10:00" }]);
+    expect(posted()).toEqual([{ name: "〇〇公民館", address: "大阪府堺市南区9-9", kind: "other" }]);
     expect($(".first-place")).toBeNull();
-    // 出品の入力が開いていて、受け渡しはいつもの場所が選ばれている
-    expect($("details.more")?.hasAttribute("open")).toBe(true);
-    expect($(".pickup-current-place")?.textContent).toBe("いつもの山田農園の作業場");
-    expect($('[data-field="slotId"] select')).toBeNull();
+    // 出品の入口へ進み、手入力では受け渡しにいつもの場所（入力した名前。「その他」とは出さない）が選ばれている
+    expect($(".entry-choices")).not.toBeNull();
+    await click(button("手で入力する"));
+    expect($(".pickup-current-place")?.textContent).toBe("いつもの〇〇公民館");
+    expect(text()).not.toContain("その他");
   });
 
-  it("2回目からの出品：受け渡しは「いつもの〇〇 ✓」と日時を最初から選んでおき、「変更」で選び直せる", async () => {
-    slots = [umedaSlot, { ...umedaSlot, id: "sl2", startAt: "2099-11-03T01:00:00.000Z", endAt: "2099-11-03T02:00:00.000Z" }];
-    await open("/producer/listings");
-    expect($(".first-place")).toBeNull();
+  it("出品の受け渡し：いつもの場所は選んだ状態で、今回渡せる日と時間帯（午前／午後）を選ぶ。選ぶまでは登録しない", async () => {
+    await open("/producer/listings/new");
+    await click(button("手で入力する"));
     expect($(".pickup-current-place")?.textContent).toBe("いつもの梅田エリア受渡所（仮）");
-    expect(el.querySelector(".pickup-current svg:last-child, .pickup-current-place .icon:last-child")).not.toBeNull();
-    expect(text()).not.toContain("参加登録済み");
-    await click($(".pickup-current .text-btn"));
-    const dates = [...el.querySelectorAll('[aria-label="日時"] .pickup-option')];
-    expect(dates).toHaveLength(2);
-    expect(dates[0].getAttribute("aria-pressed")).toBe("true");
+    expect($('[data-field="handover"]')?.textContent).toContain("細かい時間は、マッチングの後に飲食店とのやり取りで決められます");
+    const dates = el.querySelectorAll('[aria-labelledby="hd-date"] .pickup-option');
+    expect(dates).toHaveLength(7);
+    expect(button("もっと先の日")).toBeTruthy();
+    expect($('[aria-labelledby="hd-period"]')).toBeNull(); // 日を選ぶまで時間帯は出さない
+    const r = el.querySelector<HTMLFieldSetElement>(".supply-new-row")!;
+    const nums = r.querySelectorAll<HTMLInputElement>('input[type="number"]');
+    await typeIntoEl(r.querySelector<HTMLInputElement>('input[name="itemName"]')!, "トマト");
+    await typeIntoEl(nums[0], "5");
+    await typeIntoEl(nums[1], "600");
+    await click(el.querySelectorAll<HTMLInputElement>('input[name="pub"]')[1]);
+    await click(button("登録する"));
+    expect(calls.some((c) => c.url === "/api/supplies" && c.method === "POST")).toBe(false);
+    expect(text()).toContain("受け渡しの場所・渡せる日・時間帯を選んでください");
     await click(dates[1]);
-    expect(el.querySelectorAll('[aria-label="日時"] .pickup-option')[1].getAttribute("aria-pressed")).toBe("true");
-    await click(button("これにする"));
-    expect($(".pickup-change")).toBeNull();
+    expect([...el.querySelectorAll('[aria-labelledby="hd-period"] .pickup-option')].map((b) => b.textContent)).toEqual(["午前（9:00〜12:00）", "午後（13:00〜17:00）"]);
+    await click(button("午後（13:00〜17:00）"));
+    await click(button("登録する"));
+    await flush();
+    const post = calls.find((c) => c.url === "/api/supplies" && c.method === "POST")!.body as Record<string, unknown>;
+    expect(post.handover).toEqual({ placeId: "pl-umeda", date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), period: "pm" });
+    expect(post).not.toHaveProperty("slotId");
   });
 
-  it("場所が1か所・日時が1つなら「変更」は出さない。デモ用の環境では場所を聞かない", async () => {
-    await open("/producer/listings");
-    expect($(".pickup-current-place")).not.toBeNull();
-    expect($(".pickup-current .text-btn")).toBeNull();
+  it("いつもの場所が複数なら場所を切り替えられる。デモ用の環境では今までどおり受渡の回を選び、場所を聞かない", async () => {
+    pickup = { ...pickup, usual: [usualUmeda, { placeId: "pl-farm", name: "自分の作業場", address: "堺市", kind: "farm", times: [] }] };
+    await open("/producer/listings/new");
+    await click(button("手で入力する"));
+    expect([...el.querySelectorAll('[aria-label="場所"] .pickup-option')].map((b) => b.textContent)).toEqual(["梅田エリア受渡所（仮）", "自分の作業場"]);
+    await click(button("自分の作業場"));
+    expect(button("自分の作業場")?.getAttribute("aria-pressed")).toBe("true");
     act(() => root?.unmount()); el.remove();
     mode = "demo";
-    slots = [];
-    await open("/producer/listings");
+    await open("/producer/listings/new");
     expect($(".first-place")).toBeNull();
+    await click(button("手で入力する"));
+    expect($('[data-field="handover"]')).toBeNull();
+    expect($(".pickup-current-place")?.textContent).toBe("いつもの梅田エリア受渡所（仮）");
     expect(calls.some((c) => c.url === "/api/pickup-points")).toBe(false);
   });
 });
 
 describe("出品：複数の商品を1つの画面から登録（品目は候補つきの自由入力）", () => {
   beforeEach(() => { me = producer; });
+  /** 出品の画面を開き、「手で入力する」を選ぶ */
+  const openForm = async () => { await open("/producer/listings/new"); await click(button("手で入力する")); };
   const typeInto = async (input: HTMLInputElement, value: string) => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
     await act(async () => { input.dispatchEvent(new Event("input", { bubbles: true })); });
@@ -743,7 +782,7 @@ describe("出品：複数の商品を1つの画面から登録（品目は候補
   const rowInputs = (i: number) => {
     const row = el.querySelectorAll<HTMLFieldSetElement>(".supply-new-row")[i];
     const numbers = row.querySelectorAll<HTMLInputElement>('input[type="number"]'); // 販売できる量・価格・最低販売量の順
-    return { row, item: row.querySelector<HTMLInputElement>('input[list="supply-item-options"]')!, kg: numbers[0], price: numbers[1] };
+    return { row, item: row.querySelector<HTMLInputElement>('input[name="itemName"]')!, kg: numbers[0], price: numbers[1] };
   };
   const posts = () => calls.filter((c) => c.url === "/api/supplies" && c.method === "POST").map((c) => c.body as Record<string, unknown>);
   const fillRow = async (i: number, name: string, kg: string, price: string) => {
@@ -752,19 +791,37 @@ describe("出品：複数の商品を1つの画面から登録（品目は候補
     await typeInto(r.kg, kg);
     await typeInto(r.price, price);
   };
-  const choosePublish = async () => { await click(el.querySelectorAll<HTMLInputElement>('input[name="pub"]')[1]); };
+  /** 受け渡し（いちばん近い渡せる日と、その日の最初の時間帯）と「公開する」を選ぶ */
+  const choosePublish = async () => {
+    await click(el.querySelectorAll('[aria-labelledby="hd-date"] .pickup-option')[0]);
+    const period = el.querySelector('[aria-labelledby="hd-period"] .pickup-option');
+    if (period && period.getAttribute("aria-pressed") !== "true") await click(period);
+    await click(el.querySelectorAll<HTMLInputElement>('input[name="pub"]')[1]);
+  };
 
-  it("品目は候補（既存の品目）つきの自由入力。新しい品目名には「新しい品目として登録します」", async () => {
-    await open("/producer/listings");
+  it("品目は自由入力が主役：空のうちは候補の一覧を出さず、入力を始めたら既存の品目を候補に出す。新しい品目名には「新しい品目として登録します」", async () => {
+    await openForm();
+    expect(rowInputs(0).item.getAttribute("placeholder")).toBe("例：キャベツ、泉州水なす、九条ねぎ");
+    expect(rowInputs(0).item.hasAttribute("list")).toBe(false); // 選択肢から選ぶ欄に見せない
+    expect(rowInputs(0).row.textContent).toContain("自由に入力できます");
+    await typeInto(rowInputs(0).item, "ト");
+    expect(rowInputs(0).item.getAttribute("list")).toBe("supply-item-options");
     expect([...el.querySelectorAll("#supply-item-options option")].map((o) => o.getAttribute("value"))).toEqual(["トマト", "なす"]);
     await typeInto(rowInputs(0).item, "万願寺とうがらし");
     expect(rowInputs(0).row.textContent).toContain("新しい品目として登録します");
     await typeInto(rowInputs(0).item, "ナス"); // 表記の違いは既存の品目
     expect(rowInputs(0).row.textContent).not.toContain("新しい品目として登録します");
   });
+  it("産地：農園の所在地の都道府県を最初から選んでおく。関西の6府県を先に並べ、ほかの都道府県も選べる", async () => {
+    await openForm();
+    const select = [...el.querySelectorAll<HTMLSelectElement>(".listing-form select")].find((s) => s.querySelector("optgroup"))!;
+    expect(select.value).toBe("大阪府");
+    const groups = [...select.querySelectorAll("optgroup")].map((g) => [g.label, [...g.querySelectorAll("option")].map((o) => o.textContent)]);
+    expect(groups).toEqual([["関西", ["大阪府", "京都府", "兵庫県", "奈良県", "和歌山県", "滋賀県"]], ["その他の都道府県", ["東京都"]]]);
+  });
   it("「＋ 商品を追加」で3品目を1回で登録：既存の品目は itemId、新しい品目は itemName で、1行ずつ送る", async () => {
     supplyRows = [];
-    await open("/producer/listings");
+    await openForm();
     await click(button("商品を追加"));
     await click(button("商品を追加"));
     expect(el.querySelectorAll(".supply-new-row")).toHaveLength(3);
@@ -778,12 +835,18 @@ describe("出品：複数の商品を1つの画面から登録（品目は候補
     expect(posts().map((b) => [b.itemId ?? null, b.varietyId ?? null, b.itemName ?? null, b.availableKg])).toEqual([
       ["i-tomato", "v-tomato", null, "5"], ["i-nasu", "v-nasu", null, "8"], [null, null, "万願寺とうがらし", "3"],
     ]);
-    expect(posts().every((b) => b.slotId === "sl1" && b.originPrefecture === "大阪府" && b.published === true)).toBe(true); // 受け渡し・産地・公開は全行に共通
-    expect($("details.more [role=status]")?.textContent).toContain("3件を登録しました（トマト 5kg・なす 8kg・万願寺とうがらし 3kg）");
-    expect(el.querySelectorAll(".supply-new-row")).toHaveLength(1); // 終わったら1行に戻る
+    const h = posts()[0].handover as { placeId: string; date: string; period: string };
+    expect(h.placeId).toBe("pl-umeda");
+    expect(posts().every((b) => JSON.stringify(b.handover) === JSON.stringify(h) && !("slotId" in b) && b.originPrefecture === "大阪府" && b.published === true)).toBe(true); // 受け渡し・産地・公開は全行に共通
+    // 全部登録できたら完了の画面：ホームへ／続けて出品する
+    expect($(".entry-done [role=status]")?.textContent).toContain("3件を登録しました（トマト 5kg・なす 8kg・万願寺とうがらし 3kg）");
+    expect($(".listing-form")).toBeNull();
+    expect(button("ホームへ")?.getAttribute("href")).toBe("/producer/home");
+    await click(button("続けて出品する"));
+    expect($(".entry-choices")).not.toBeNull();
   });
   it("同じ画面の中で同じ品目（表記違いも含む）が2行あれば、送る前に止める", async () => {
-    await open("/producer/listings");
+    await openForm();
     await click(button("商品を追加"));
     await fillRow(0, "なす", "5", "400");
     await fillRow(1, "ナス", "3", "400");
@@ -791,13 +854,13 @@ describe("出品：複数の商品を1つの画面から登録（品目は候補
     await click(button("2件を登録する"));
     expect(posts()).toHaveLength(0);
     expect([...el.querySelectorAll(".supply-new-row-status")].map((x) => x.textContent)).toEqual(["同じ品目がほかの行にもあります。1つの行にまとめてください", "同じ品目がほかの行にもあります。1つの行にまとめてください"]);
-    expect($("details.more [role=status]")?.textContent).toContain("まだ登録していません");
+    expect($(".listing-form [role=status]")?.textContent).toContain("まだ登録していません");
   });
   it("一部だけ失敗：登録できた行は消え、できなかった行は理由（すでに出品中など）つきで残る", async () => {
     supplyPost = (b, json) => (b.itemId === "i-tomato"
       ? json({ error: "同じ品目・受渡枠の供給がすでにあります。数量の変更をご利用ください" }, 409)
       : json({ supply: { item: { name: (b.itemName as string) ?? "なす" }, availableKg: Number(b.availableKg) } }, 201));
-    await open("/producer/listings");
+    await openForm();
     await click(button("商品を追加"));
     await fillRow(0, "トマト", "5", "600");
     await fillRow(1, "水なす", "2", "700");
@@ -809,10 +872,43 @@ describe("出品：複数の商品を1つの画面から登録（品目は候補
     expect(left).toHaveLength(1);
     expect(rowInputs(0).item.value).toBe("トマト");
     expect(left[0].querySelector(".supply-new-row-status")?.textContent).toContain("数量の変更をご利用ください");
-    expect($("details.more [role=status]")?.textContent).toContain("1件を登録しました（水なす 2kg）。1件は登録できませんでした");
+    expect($(".listing-form [role=status]")?.textContent).toContain("1件を登録しました（水なす 2kg）。1件は登録できませんでした");
+  });
+  it("出品の入口は「写真を撮る」「手で入力する」（音声認識のない端末では「話して入力する」は出さない）。一覧からは「新しく出品する」で来る", async () => {
+    await open("/producer/listings");
+    expect(button("新しく出品する")?.getAttribute("href")).toBe("/producer/listings/new");
+    act(() => root?.unmount()); el.remove();
+    await open("/producer/listings/new");
+    expect([...el.querySelectorAll(".entry-choice b")].map((b) => b.textContent)).toEqual(["写真を撮る", "手で入力する"]);
+    expect($<HTMLInputElement>('input[type="file"]')?.getAttribute("accept")).toBe("image/*");
+    expect($("form")).toBeNull();
+  });
+  it("話して入力：AI の下書き（品目・量・価格）が入った状態で開き、直してから登録する。AI が使えなければ手入力へ案内", async () => {
+    class FakeRecognition {
+      lang = ""; interimResults = false; continuous = false; maxAlternatives = 1;
+      onresult: ((e: unknown) => void) | null = null; onerror: ((e: unknown) => void) | null = null; onend: (() => void) | null = null;
+      start() { setTimeout(() => { this.onresult?.({ resultIndex: 0, results: [Object.assign([{ transcript: "なす 8キロ 1キロ450円" }], { isFinal: true })] }); this.onend?.(); }, 0); }
+      stop() {} abort() {}
+    }
+    vi.stubGlobal("webkitSpeechRecognition", FakeRecognition);
+    // AI が使えない：入口に戻り、理由を出す（文は消さない・登録しない）
+    await open("/producer/listings/new");
+    await click(button("話して入力する"));
+    await flush();
+    expect(calls.filter((c) => c.url === "/api/supply-draft").map((c) => c.body)).toEqual([{ text: "なす 8キロ 1キロ450円" }]);
+    expect($(".entry .alert.bad")?.textContent).toContain("手で入力してください");
+    // AI が使える：下書きの入ったフォーム
+    draftReply = { itemName: "なす", availableKg: 8, priceYenPerKg: 450, grade: null };
+    await click(button("話して入力する"));
+    await flush();
+    expect($(".draft-note")?.textContent).toContain("「なす 8キロ 1キロ450円」から読み取りました");
+    const row = el.querySelector(".supply-new-row")!;
+    const numbers = row.querySelectorAll<HTMLInputElement>('input[type="number"]');
+    expect([row.querySelector<HTMLInputElement>('input[name="itemName"]')!.value, numbers[0].value, numbers[1].value]).toEqual(["なす", "8", "450"]);
+    expect(calls.some((c) => c.url === "/api/supplies" && c.method === "POST")).toBe(false); // 下書きだけでは登録しない
   });
   it("品目名の形が違う（記号）・空の行は送らずに理由を出す", async () => {
-    await open("/producer/listings");
+    await openForm();
     await fillRow(0, "<b>", "5", "600");
     await choosePublish();
     await click(button("登録する"));

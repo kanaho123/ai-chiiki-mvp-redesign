@@ -58,7 +58,11 @@ vi.mock("./db.js", () => {
         },
       },
       producerItem: { createMany: async ({ data }: { data: State["producerItems"] }) => { maybeFail("producerItem.createMany"); s.producerItems.push(...data); return { count: data.length }; } },
-      slotSeriesParticipant: { createMany: async ({ data }: { data: State["seriesParticipants"] }) => { maybeFail("slotSeriesParticipant.createMany"); s.seriesParticipants.push(...data); return { count: data.length }; } },
+      producerPlace: { findMany: async () => [] }, // いつもの受け渡し場所（初回登録では作らない）
+      slotSeriesParticipant: {
+        createMany: async ({ data }: { data: State["seriesParticipants"] }) => { maybeFail("slotSeriesParticipant.createMany"); s.seriesParticipants.push(...data); return { count: data.length }; },
+        findMany: async () => [], // いつもの受け渡し場所の一覧（/api/supplies）。この確認では中身を使わない
+      },
       slotParticipant: {
         createMany: async ({ data }: { data: State["slotParticipants"] }) => {
           const fresh = data.filter((d) => !s.slotParticipants.some((x) => x.slotId === d.slotId && x.producerId === d.producerId));
@@ -257,7 +261,6 @@ describe("生産者の初回登録", () => {
   });
   it.each([
     ["品目マスタにない ID", { itemIds: ["item-tomato", "item-nothing"] }, "itemIds"],
-    ["作物が空", { itemIds: [] }, "itemIds"],
     ["運営が止めている受渡枠", { seriesIds: ["series-off"] }, "seriesIds"],
     ["存在しない受渡枠", { seriesIds: ["series-a", "series-x"] }, "seriesIds"],
     ["ほかの生産者が登録した場所の回", { seriesIds: ["series-farm"] }, "seriesIds"],
@@ -281,6 +284,13 @@ describe("生産者の初回登録", () => {
     const res = await post(producerApi, producerBody({ salesChannels: [], capabilities: undefined }), P);
     expect(res.status).toBe(200);
     expect(mem.state.producers[0]).toMatchObject({ salesChannels: [], capabilities: [] });
+  });
+  it("主な作物・その他の作物は送らなくても登録できる（初回登録では聞かない。売る農産物は出品で登録する）", async () => {
+    const res = await post(producerApi, producerBody({ itemIds: undefined, otherCrops: undefined }), P);
+    expect(res.status).toBe(200);
+    expect(mem.state.producerItems).toHaveLength(0);
+    expect(mem.state.producers[0]).toMatchObject({ otherCrops: null });
+    expect(userOf("u-p").onboardedAt).not.toBeNull();
   });
   it("運営が止めた定期枠（active=false）：新しく参加はできないが、すでに参加している生産者・作った回は残る", async () => {
     expect((await post(producerApi, producerBody({ seriesIds: ["series-a"] }), P)).status).toBe(200);

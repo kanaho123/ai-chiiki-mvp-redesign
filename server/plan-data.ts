@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { AllocateInput, PlanSlot, PlanSupply } from "../src/lib/allocate.js";
+import { capabilityTagValues } from "../src/lib/onboarding.js";
 import { prisma } from "./db.js";
 import type { Prisma } from "./generated/prisma/client.js";
 
@@ -53,4 +54,14 @@ export function inputsVersion(i: PlanInputs): string {
     relationships: i.relationships.map((r) => [r.producerId, r.priorTrade]),
   });
   return createHash("sha256").update(key).digest("hex").slice(0, 16);
+}
+
+/**
+ * 仕入れ案の農家に添える「対応できる取引」のタグ（規格外OK・少量OK・直接取引OK）。表示のためだけに読む。
+ * 計算（allocatePlan）・在庫の版（version）・fingerprint には使わない（タグが変わっても案や相談は変わらない）
+ */
+export async function loadFarmTags(producerIds: string[]): Promise<Record<string, string[]>> {
+  if (producerIds.length === 0) return {};
+  const rows = await prisma.producer.findMany({ where: { id: { in: [...new Set(producerIds)] } }, select: { id: true, capabilities: true } });
+  return Object.fromEntries(rows.map((r) => [r.id, capabilityTagValues(r.capabilities)]).filter(([, tags]) => tags.length > 0));
 }

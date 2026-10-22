@@ -2,8 +2,9 @@ import { useState } from "react";
 import { Icon, type IconName } from "../components/Icon";
 
 // 初回のみのオンボーディング（4画面）。見終わった・スキップしたことは端末内に記録する（App 側）。
+// 同じ見た目の説明（SlideGuide）は、一般向けの新規登録の直後の「使い方」（Guide.tsx）でも使う。
 
-type Slide = { title: string[]; text: string; icon: IconName; tone: "green" | "orange" };
+export type Slide = { title: string[]; text: string; icon: IconName; tone: "green" | "orange" };
 
 const SLIDES: Slide[] = [
   { title: ["足りない仕入れを、", "地域の供給で補う"], icon: "basket", tone: "green",
@@ -22,6 +23,11 @@ const TONE = {
 } as const;
 
 export default function Onboarding({ onDone }: { onDone: () => void }) {
+  return <SlideGuide slides={SLIDES} onDone={onDone} />;
+}
+
+/** 数枚の説明を1枚ずつ見せる。最後の「はじめる」かスキップで onDone */
+export function SlideGuide({ slides: SLIDES, onDone, doneLabel = "はじめる" }: { slides: Slide[]; onDone: () => void; doneLabel?: string }) {
   const [i, setI] = useState(0);
   const s = SLIDES[i];
   const last = i === SLIDES.length - 1;
@@ -45,7 +51,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
       <div className="ob-actions">
         <div className="ob-dots" aria-hidden="true">{SLIDES.map((_, k) => <i key={k} className={k === i ? "on" : ""} />)}</div>
         <button type="button" className="btn-primary btn-block" onClick={() => (last ? onDone() : setI(i + 1))}>
-          {last ? "はじめる" : <>次へ<Icon name="arrowRight" /></>}
+          {last ? doneLabel : <>次へ<Icon name="arrowRight" /></>}
         </button>
       </div>
     </div>

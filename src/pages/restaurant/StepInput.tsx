@@ -2,8 +2,9 @@ import { REQUEST_TEXT_MAX } from "../../lib/validate.js";
 import { BottomBar } from "../../components/BottomBar";
 import { MergeMark } from "../../components/Motif";
 import { Icon, type IconName } from "../../components/Icon";
+import { VoiceButton } from "../../components/VoiceButton";
 
-// STEP 1：仕入れたい内容を普段の言葉で入力。項目を選んで入力することもできる（自然文入力を強制しない）。
+// STEP 1：仕入れたい内容を普段の言葉で入力（文字か音声）。項目を選んで入力することもできる（自然文入力を強制しない）。
 // 読み取り中は1画面の待機表示（実際の進み具合は示さない控えめな演出）。
 
 // 何を書けばいいかを目で示す4つの手がかり（押すと入力欄に加わる）。品目・量・産地・受け取り日（デモ用の環境）
@@ -61,6 +62,8 @@ export function StepInput({ text, onText, onExtract, onManual, busy, aiAvailable
             ))}
           </div>
         )}
+        {/* 音声入力：聞き取った文を入力欄に加える（使えない端末では出さない） */}
+        <div className="composer-voice"><VoiceButton onText={(t) => onText(text.trim() ? `${text.trim()} ${t}` : t)} /></div>
         <p className="ai-note" id="step1-note">AIが品目・数量・日付を読み取ります</p>
         {text.length > REQUEST_TEXT_MAX * 0.8 && <span className="count">{text.length.toLocaleString("ja-JP")}/{REQUEST_TEXT_MAX.toLocaleString("ja-JP")}</span>}
       </div>

@@ -99,3 +99,20 @@ describe("ほかの受け取り方（おまかせのときだけ）", () => {
     expect(pick).toHaveBeenCalledWith("slot-y");
   });
 });
+
+describe("農家の「対応できる取引」のタグ", () => {
+  it("農家名のすぐ下に、生産者が登録したものだけを「規格外OK・少量OK・直接取引OK」の順で出す。登録のない農家には出さない", async () => {
+    const shown = { ...shownFor([supply("A", 5), supply("B", 5)]), farmTags: { "p-A": ["direct_talk", "irregular", "small_lot"] } };
+    await open(shown, null);
+    const rows = [...el.querySelectorAll(".bundle-row")];
+    expect(rows[0].querySelector(".bundle-name")?.textContent).toBe("A農園");
+    expect([...rows[0].querySelectorAll(".farm-tag")].map((t) => t.textContent)).toEqual(["規格外OK", "少量OK", "直接取引OK"]);
+    expect(rows[1].querySelector(".farm-tags")).toBeNull();
+    expect(el.querySelector(".bundle-equation")?.textContent).toBe("A農園5kg＋B農園5kg＝合計10kg");
+  });
+  it("タグのない保存データ（farmTags なし）でも、今までどおり表示する", async () => {
+    await open(shownFor([supply("A", 10)]), null);
+    expect(el.querySelector(".farm-tags")).toBeNull();
+    expect(el.querySelector(".bundle-name")?.textContent).toBe("A農園");
+  });
+});

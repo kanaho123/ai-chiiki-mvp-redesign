@@ -75,6 +75,7 @@ model Producer {
   mainItems             ProducerItem[]
   seriesMemberships     SlotSeriesParticipant[]
   ownedPlaces           Place[]
+  usualPlaces           ProducerPlace[]
   createdAt             DateTime                @default(now())
   updatedAt             DateTime                @default(now()) @updatedAt
 
@@ -113,6 +114,20 @@ enum ProducerCapability {
 }
 
 // 主な作物（品目マスタへの参照）
+/// 生産者の「いつもの受け渡し場所」（場所だけ。曜日・時間は持たない）。受け渡せる日と時間帯は出品のときに選ぶ。
+/// 2026-10-22 以前に曜日・時間つきで登録した場所（SlotSeriesParticipant）も、いつもの場所として扱い続ける
+model ProducerPlace {
+  producerId String
+  producer   Producer @relation(fields: [producerId], references: [id])
+  placeId    String
+  place      Place    @relation(fields: [placeId], references: [id])
+  createdAt  DateTime @default(now())
+
+  @@id([producerId, placeId])
+  @@index([placeId])
+  @@map("producer_places")
+}
+
 model ProducerItem {
   producerId String
   producer   Producer @relation(fields: [producerId], references: [id])
@@ -239,7 +254,7 @@ model Variety {
 }
 
 model Place {
-  id              String         @id @default(cuid())
+  id              String          @id @default(cuid())
   name            String
   address         String
   slots           HandoverSlot[]
@@ -248,7 +263,8 @@ model Place {
   kind            PlaceKind?
   note            String?
   ownerProducerId String?
-  owner           Producer?      @relation(fields: [ownerProducerId], references: [id], onDelete: Restrict)
+  owner           Producer?       @relation(fields: [ownerProducerId], references: [id], onDelete: Restrict)
+  usedBy          ProducerPlace[]
 
   @@index([ownerProducerId])
   @@map("places")

@@ -42,8 +42,9 @@ describe("条件変更の候補（自動適用しない）", () => {
     expect(types(run([supply("a", 5), supply("b", 5, { grade: "irregular", irregularReason: "形の不揃い" })]))).toContain("allow_irregular");
   });
 
-  it("品種違いで合算できないときは「品種の混在を許可する」を候補にする", () => {
-    expect(types(run([supply("a", 5), supply("b", 5, { varietyId: "v2" })]))).toContain("allow_mixed_varieties");
+  it("品種・規格の「まぜ」は飲食店に聞かない条件なので、混在を許可する候補は出さない", () => {
+    expect(types(run([supply("a", 5), supply("b", 5, { varietyId: "v2" })]))).not.toContain("allow_mixed_varieties");
+    expect(types(run([supply("a", 5), supply("b", 5, { grade: "irregular" })], { allowIrregular: true }))).not.toContain("allow_mixed_grades");
   });
 
   it("予算超過では予算の見直しを候補にし、数量は利用者が選んだときだけ変える", () => {

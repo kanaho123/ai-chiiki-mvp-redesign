@@ -9,6 +9,33 @@ import { LineArrow, ProducerArt, RestaurantArt } from "../components/RoleArt";
 type Role = "restaurant" | "producer";
 type DemoAccount = { loginId: string; displayName: string; role: Role };
 const ROLE_TEXT: Record<Role, string> = { restaurant: "飲食店", producer: "生産者" };
+const ROLE_DESC: Record<Role, string> = { restaurant: "食材を仕入れる", producer: "今日出せる量を登録する" };
+
+/** 役割のカード（飲食店・生産者）。画面全体を「飲食店の世界」と「生産者の世界」に分ける（面積は対等）。世界全体が1つのボタン */
+export function RoleCards({ onPick, names = ROLE_TEXT, descs = ROLE_DESC }: {
+  onPick: (role: Role) => void; names?: Record<Role, string>; descs?: Record<Role, string>;
+}) {
+  return (
+    <div className="role-cards">
+      {(["restaurant", "producer"] as const).map((role) => (
+        <section key={role} className={`role-card ${role}`} aria-labelledby={`role-${role}`}>
+          <button type="button" onClick={() => onPick(role)} aria-describedby={`role-${role}-desc`}>
+            <span className="role-inner">
+              <span className="role-art">{role === "restaurant" ? <RestaurantArt /> : <ProducerArt />}</span>
+              <span className="role-text">
+                <span className="role-name" id={`role-${role}`}>{names[role]}</span>
+                <span className="role-line">
+                  <span className="role-desc" id={`role-${role}-desc`}>{descs[role]}</span>
+                  <span className="role-go" aria-hidden="true"><LineArrow /></span>
+                </span>
+              </span>
+            </span>
+          </button>
+        </section>
+      ))}
+    </div>
+  );
+}
 
 export default function RoleSelect({ onLoggedIn }: { onLoggedIn: (me: Me) => void }) {
   const [accounts, setAccounts] = useState<DemoAccount[]>([]);
@@ -25,38 +52,7 @@ export default function RoleSelect({ onLoggedIn }: { onLoggedIn: (me: Me) => voi
     <main className="screen role-screen">
       <h1 className="role-question">どちらで使いますか？</h1>
 
-      {/* 入口：画面全体を「飲食店の世界」と「生産者の世界」に分ける（面積は対等）。世界全体が1つのボタン */}
-      <div className="role-cards">
-        <section className="role-card restaurant" aria-labelledby="role-r">
-          <button type="button" onClick={() => setSheet("restaurant")} aria-describedby="role-r-desc">
-            <span className="role-inner">
-              <span className="role-art"><RestaurantArt /></span>
-              <span className="role-text">
-                <span className="role-name" id="role-r">飲食店</span>
-                <span className="role-line">
-                  <span className="role-desc" id="role-r-desc">食材を仕入れる</span>
-                  <span className="role-go" aria-hidden="true"><LineArrow /></span>
-                </span>
-              </span>
-            </span>
-          </button>
-        </section>
-        <section className="role-card producer" aria-labelledby="role-p">
-          <button type="button" onClick={() => setSheet("producer")} aria-describedby="role-p-desc">
-            <span className="role-inner">
-              <span className="role-art"><ProducerArt /></span>
-              <span className="role-text">
-                <span className="role-name" id="role-p">生産者</span>
-                <span className="role-line">
-                  <span className="role-desc" id="role-p-desc">今日出せる量を登録する</span>
-                  <span className="role-go" aria-hidden="true"><LineArrow /></span>
-                </span>
-              </span>
-            </span>
-          </button>
-        </section>
-      </div>
-
+      <RoleCards onPick={setSheet} />
 
       {sheet && (
         <LoginSheet role={sheet} accounts={accounts.filter((a) => a.role === sheet)} onClose={() => setSheet(null)} onLoggedIn={onLoggedIn} />

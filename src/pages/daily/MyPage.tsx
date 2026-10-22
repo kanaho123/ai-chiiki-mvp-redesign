@@ -6,7 +6,7 @@ import { nameOf, ROLE_TEXT } from "../../components/AppShell";
 import { Icon } from "../../components/Icon";
 import {
   BUSINESS_TYPES, checkProducer, checkRestaurant, DIRECT_TRADE_EXPERIENCES, FIRST_TIME_POLICIES, IRREGULAR_POLICIES, labelOf, LIMITS, PICKUP_TIMES,
-  PRIORITY_MAX, PRODUCER_CAPABILITIES, producerStyle, PRODUCTION_STYLES, PURCHASE_FREQUENCIES, PURCHASE_PRIORITIES, PURCHASE_VOLUMES,
+  PRIORITY_MAX, PRODUCER_CAPABILITIES, PRODUCER_CAPABILITY_CHOICES, producerStyle, PRODUCTION_STYLES, PURCHASE_FREQUENCIES, PURCHASE_PRIORITIES, PURCHASE_VOLUMES,
   restaurantStyle, SALES_CHANNELS, stepErrors, type ProducerForm, type RestaurantForm,
 } from "../../lib/onboarding";
 import { useMe, useSession } from "../../routes/session";
@@ -35,7 +35,7 @@ const P_SECTIONS = {
   farm: { title: "農園", fields: ["farmName", "producerName", "prefecture", "city"] },
   crops: { title: "作っているもの・販売", fields: ["itemIds", "otherCrops", "productionStyle", "salesChannels", "directTradeExperience"] },
   // 受け渡しの場所は「いつもの受け渡し場所」で扱う（ここでは聞かない。保存時は今の選択をそのまま送る）
-  ability: { title: "できること", fields: ["capabilities"] },
+  ability: { title: "対応できる取引", fields: ["capabilities"] },
   contact: { title: "飲食店に伝える連絡先", fields: ["contactPhone", "contactEmail"] },
 } as const;
 
@@ -234,8 +234,8 @@ export default function MyPage() {
         <Row label="地域">{p.prefecture}{p.city}</Row>
       </Section>
       <Section {...sectionProps("crops")} form={<>
-        <MultiChoiceGroup name="itemIds" legend="主な作物" options={view.items.map((i) => ({ value: i.id, label: i.name }))} value={f.itemIds} columns={2} note="出品できるのは、この一覧にある品目です" onChange={(v) => set({ itemIds: v })} error={errors.itemIds} />
-        <TextField name="otherCrops" label="その他の作物" optional value={f.otherCrops} onChange={(v) => set({ otherCrops: v })} error={errors.otherCrops} hint="プロフィール情報として登録されます（出品はできません）" maxLength={LIMITS.otherCrops} />
+        <MultiChoiceGroup name="itemIds" legend="主な作物" options={view.items.map((i) => ({ value: i.id, label: i.name }))} value={f.itemIds} columns={2} optional note="いくつでも選べます。選ばなくても保存できます" onChange={(v) => set({ itemIds: v })} error={errors.itemIds} />
+        <TextField name="otherCrops" label="その他の作物" optional value={f.otherCrops} onChange={(v) => set({ otherCrops: v })} error={errors.otherCrops} hint="プロフィール情報として登録されます" maxLength={LIMITS.otherCrops} />
         <ChoiceGroup name="productionStyle" legend="生産のスタイル" options={PRODUCTION_STYLES} value={f.productionStyle} onChange={(v) => set({ productionStyle: v })} error={errors.productionStyle} />
         <MultiChoiceGroup name="salesChannels" legend="今の販売先" optional options={SALES_CHANNELS} value={f.salesChannels} columns={2} note="選ばなくても保存できます" onChange={(v) => set({ salesChannels: v })} error={errors.salesChannels} />
         <ChoiceGroup name="directTradeExperience" legend="飲食店との直接取引の経験" options={DIRECT_TRADE_EXPERIENCES} value={f.directTradeExperience} columns={2} onChange={(v) => set({ directTradeExperience: v })} error={errors.directTradeExperience} />
@@ -247,9 +247,9 @@ export default function MyPage() {
         <Row label="直接取引の経験">{labelOf(DIRECT_TRADE_EXPERIENCES, p.directTradeExperience)}</Row>
       </Section>
       <Section {...sectionProps("ability")} form={<>
-        <MultiChoiceGroup name="capabilities" legend="対応できること" optional options={PRODUCER_CAPABILITIES} value={f.capabilities} note="選ばなくても保存できます" onChange={(v) => set({ capabilities: v })} error={errors.capabilities} />
+        <MultiChoiceGroup name="capabilities" legend="対応できる取引" optional options={PRODUCER_CAPABILITY_CHOICES} value={f.capabilities} note="飲食店に見せる仕入れ案で、農園名の近くに「規格外OK」などで表示します。選ばなくても保存できます" onChange={(v) => set({ capabilities: v })} error={errors.capabilities} />
       </>}>
-        <Row label="対応できること">{list(p.capabilities.map((v) => labelOf(PRODUCER_CAPABILITIES, v)))}</Row>
+        <Row label="対応できる取引">{list(p.capabilities.filter((v) => PRODUCER_CAPABILITY_CHOICES.some((c) => c.value === v)).map((v) => labelOf(PRODUCER_CAPABILITIES, v)))}</Row>
       </Section>
       <Section {...sectionProps("contact")} form={<>
         <p className="contact-note"><Icon name="info" size={18} />この連絡先は、あなたが「対応できます」と返事をした飲食店だけに表示されます。電話番号かメールアドレスの、どちらか1つは必要です。</p>

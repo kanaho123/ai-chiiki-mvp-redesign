@@ -29,10 +29,7 @@ export function suggestConditionChanges(req: PlanRequest, plan: PlanResult): Sug
     out.push({ type: "allow_first_time", label: "初回の農家を含める", change: { allowFirstTime: true } });
   if (!req.allowIrregular && details.has("IRREGULAR_NOT_ALLOWED"))
     out.push({ type: "allow_irregular", label: "規格外（形の不揃い等）を許可する", change: { allowIrregular: true } });
-  if (!req.allowMixedVarieties && (details.has("VARIETY_MISMATCH") || codes.has("MIXING_NOT_ALLOWED")))
-    out.push({ type: "allow_mixed_varieties", label: "異なる品種の混在を許可する", change: { allowMixedVarieties: true } });
-  if (!req.allowMixedGrades && req.allowIrregular && codes.has("MIXING_NOT_ALLOWED"))
-    out.push({ type: "allow_mixed_grades", label: "通常品と規格外品の混在を許可する", change: { allowMixedGrades: true } });
+  // 品種・規格を「まぜてよいか」は飲食店に聞かない（品種の指定・規格外の可否から決まる）ので、混在を許可する候補は出さない
   if (codes.has("OVER_BUDGET")) out.push({ type: "review_budget", label: "予算を見直す", change: null });
   if (plan.fulfilledKg > 0 && plan.shortageKg > 0)
     out.push({ type: "reduce_quantity", label: `数量を${plan.fulfilledKg}kgに変更する`, change: { quantityKg: plan.fulfilledKg } });

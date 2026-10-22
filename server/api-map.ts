@@ -9,7 +9,7 @@ export const API_FUNCTIONS = {
   supplies: ["/api/supplies", "/api/supplies/:id"],
   account: ["/api/me", "/api/inbox", "/api/profile", "/api/pickup-points"],
   purchase: ["/api/catalog", "/api/inventory-version", "/api/plan", "/api/plan-options", "/api/item-suggestions"],
-  extract: ["/api/extract"],
+  extract: ["/api/extract", "/api/supply-draft"],
 } as const;
 export type ApiFunction = keyof typeof API_FUNCTIONS;
 

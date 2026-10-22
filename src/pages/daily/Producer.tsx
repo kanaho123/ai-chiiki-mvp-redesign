@@ -47,6 +47,7 @@ export function ProducerHome() {
   const now = demoNow ? new Date(demoNow) : new Date();
   const nextSlot = supplies.data?.slots.filter((s) => new Date(s.startAt) > now).sort((a, b) => a.startAt.localeCompare(b.startAt))[0];
   const listings = supplies.data?.supplies ?? [];
+  const usual = supplies.data?.places ?? [];
   const hasPending = !!pending && pending.length > 0;
 
   return (
@@ -55,29 +56,33 @@ export function ProducerHome() {
         <span className="eyebrow">ホーム</span>
         <h1 className="display">{nameOf(me)}</h1>
       </div>
-      <WelcomeNotice role="producer" text="次は、今日出せる野菜と量を登録しましょう。" />
+      <WelcomeNotice role="producer" text="さっそく、農産物を出品してみましょう。" />
+
+      {/* いちばん大事な操作は1つだけ、画面の最初に大きく置く */}
+      <Link className="btn-primary btn-block link-btn home-main" to={PATHS.producer.newListing}>
+        <Icon name="box" size={28} />
+        <span className="home-main-text"><b>農産物を出品する</b><small>写真・声・手入力で</small></span>
+      </Link>
       {(requests.error || supplies.error) && <ErrorRetry text={(requests.error ?? supplies.error)!} onRetry={() => Promise.all([requests.reload(), supplies.reload()])} />}
 
-      <section className="todo" aria-labelledby="todo-title">
-        <h2 className="section-title" id="todo-title">今やること</h2>
+      {/* 飲食店から届いた仕入れ相談（返事が必要なもの） */}
+      <section aria-labelledby="pending-title">
+        <h2 className="section-title" id="pending-title">飲食店からの仕入れ相談</h2>
         {!pending && !requests.error && <p className="muted" aria-busy="true">読み込み中…</p>}
+        {pending && !hasPending && <p className="empty-note">いま返事が必要な相談はありません</p>}
         {hasPending && (
-          <div className="new-requests" role="status">
-            <Icon name="clipboard" size={26} />
-            <div><b>あなたの出品条件に合う仕入れ相談が{pending!.length}件あります</b><br />飲食店があなたの返事を待っています。</div>
-          </div>
+          <>
+            <div className="new-requests" role="status">
+              <Icon name="clipboard" size={26} />
+              <div><b>あなたの出品条件に合う仕入れ相談が{pending!.length}件あります</b><br />飲食店があなたの返事を待っています。</div>
+            </div>
+            <ul className="request-list compact">
+              {pending!.slice(0, 3).map((r) => <li key={r.id} className="farm-row"><RequestBody r={r} /></li>)}
+            </ul>
+            <Link className="btn-secondary btn-block link-btn" to={PATHS.producer.requests}><Icon name="clipboard" />相談に返事をする</Link>
+          </>
         )}
-        {pending && !hasPending && <p className="todo-text">いま返事が必要な相談はありません。今日出せる量を更新しておきましょう。</p>}
       </section>
-
-      {hasPending && (
-        <section aria-labelledby="pending-title">
-          <h2 className="section-title" id="pending-title">返事が必要な仕入れ相談</h2>
-          <ul className="request-list compact">
-            {pending!.slice(0, 3).map((r) => <li key={r.id} className="farm-row"><RequestBody r={r} /></li>)}
-          </ul>
-        </section>
-      )}
 
       <section aria-labelledby="listing-title">
         <h2 className="section-title" id="listing-title">いまの出品</h2>
@@ -93,23 +98,18 @@ export function ProducerHome() {
             ))}
           </ul>
         )}
+        {listings.length > 0 && <Link className="text-btn link-btn" to={PATHS.producer.listings}>量や価格を変える<Icon name="chevronRight" /></Link>}
       </section>
 
       <section aria-labelledby="slot-title">
         <h2 className="section-title" id="slot-title">次の受け渡し</h2>
-        {/* 一般向け：いつもの受け渡し場所が未登録なら、はじめての出品のときに聞く（ここでは状態だけ知らせる） */}
-        {supplies.data && !nextSlot && (appMode === "general"
+        {/* 一般向け：いつもの受け渡し場所（登録した場所）。未登録なら、はじめての出品のときに聞く（ここでは状態だけ知らせる） */}
+        {supplies.data && appMode === "general" && (usual.length === 0
           ? <p className="usual-status"><b>いつもの受け渡し場所：未登録</b><br /><span className="muted">はじめて出品するときに登録できます。</span></p>
-          : <p className="empty-note">予定している受け渡しはありません</p>)}
-        {nextSlot && appMode === "general" && <p className="usual-status"><b>いつもの受け渡し場所：{nextSlot.placeName}</b></p>}
+          : <p className="usual-status"><b>いつもの受け渡し場所：{usual.map((p) => p.name).join("・")}</b></p>)}
+        {supplies.data && !nextSlot && <p className="empty-note">予定している受け渡しはありません</p>}
         {nextSlot && <p className="next-slot"><b>{whenText(nextSlot.startAt, nextSlot.endAt)}</b><br />{nextSlot.placeName}</p>}
       </section>
-
-      {hasPending ? (
-        <Link className="btn-primary btn-block link-btn" to={PATHS.producer.requests}><Icon name="clipboard" />相談に返事をする</Link>
-      ) : (
-        <Link className="btn-primary btn-block link-btn" to={PATHS.producer.listings}><Icon name="box" />今日出せる量を更新する</Link>
-      )}
     </main>
   );
 }

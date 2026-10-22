@@ -1,14 +1,14 @@
 import { useState } from "react";
-import { Link, Navigate } from "react-router";
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router";
 import { Icon } from "../components/Icon";
-import { demoEntryUrl, PATHS } from "../routes/paths";
+import { isRole, loginOf, PATHS, signupOf } from "../routes/paths";
 import { OPERATOR } from "../lib/legal";
-import { useSession } from "../routes/session";
+import { useSession, type Role } from "../routes/session";
 import Onboarding from "./Onboarding";
-import RoleSelect from "./RoleSelect";
+import RoleSelect, { RoleCards } from "./RoleSelect";
 
 // ログイン前の画面。
-// ・一般向けの環境（general）：トップ → 新規登録／ログイン。「デモを試す」はデモ用の別の環境へ案内する
+// ・一般向けの環境（general）：トップ（役割を選ぶ）→ はじめての方（新規登録）／登録済みの方（ログイン）→ 各ホーム。中間の説明の画面は置かない
 // ・デモ用の環境（demo）：これまでどおり、初回の説明 → 役割を選んでデモ用アカウントでログイン
 
 // 初回の説明（4画面）を見終わったか（端末ごとの表示の都合だけに使う。読めなければ毎回表示）
@@ -24,46 +24,56 @@ function DemoEntry() {
   return <RoleSelect onLoggedIn={setMe} />;
 }
 
+const ROLE_TEXT: Record<Role, string> = { restaurant: "飲食店", producer: "生産者" };
+/** URL の ?role= で引き継いだ役割（なければ null） */
+const useRoleParam = (): Role | null => {
+  const v = useSearchParams()[0].get("role");
+  return isRole(v) ? v : null;
+};
+
+/** トップ：最初に「あなたはどちらですか？」だけを聞く（説明は出さない） */
 export function Welcome() {
   const { appMode } = useSession();
+  const navigate = useNavigate();
   if (appMode !== "general") return <DemoEntry />;
   return (
-    <main className="screen guest-screen">
+    <main className="screen role-screen">
+      <h1 className="role-question">あなたはどちらですか？</h1>
+      <RoleCards onPick={(role) => navigate(PATHS.start[role])} descs={{ restaurant: "として使う", producer: "として使う" }} />
+    </main>
+  );
+}
+
+/** 役割を選んだ後：はじめての方（新規登録）／登録済みの方（ログイン）の2つだけ */
+export function Start() {
+  const { appMode } = useSession();
+  const role = useParams().role;
+  if (appMode !== "general" || !isRole(role)) return <Navigate to={PATHS.welcome} replace />;
+  return (
+    <main className={`screen guest-screen role-${role}`}>
       <div className="title-block">
-        <h1 className="display">地域の食材を、<span className="nowrap">必要な分だけ</span></h1>
-        <p className="guest-value">複数の農家から集めても、受け取りは1か所。</p>
-        <p className="muted">飲食店は、足りない仕入れを近くの生産者の供給を組み合わせて補えます。生産者は、今日出せる量を数タップで登録できます。</p>
+        <span className="eyebrow">{ROLE_TEXT[role]}として使う</span>
+        <h1 className="display">はじめてですか？</h1>
       </div>
       <div className="guest-actions">
-        <Link className="btn-primary btn-block link-btn" to={PATHS.signup}>はじめての方（新規登録）</Link>
-        <Link className="btn-secondary btn-block link-btn" to={PATHS.login}>登録済みの方（ログイン）</Link>
-        {demoEntryUrl() && <a className="text-btn link-btn" href={demoEntryUrl()!}>まずはデモを試す<Icon name="chevronRight" /></a>}
+        <Link className="btn-primary btn-block link-btn" to={signupOf(role)}>はじめての方（新規登録）</Link>
+        <Link className="btn-secondary btn-block link-btn" to={loginOf(role)}>登録済みの方（ログイン）</Link>
+        <Link className="text-btn link-btn" to={PATHS.welcome}>もどる</Link>
       </div>
     </main>
   );
 }
 
+/** デモ用の環境の入口。一般向けの環境には中間の画面を置かず、トップへ戻す */
 export function Demo() {
   const { appMode } = useSession();
   if (appMode !== "general") return <DemoEntry />;
-  return (
-    <main className="screen guest-screen">
-      <div className="title-block">
-        <h1 className="display">デモを試す</h1>
-        <p className="muted">架空の農家・在庫・価格だけが入った、デモ用の別の画面を開きます。ここで登録したアカウントや情報は使いません。</p>
-      </div>
-      <div className="guest-actions">
-        {demoEntryUrl()
-          ? <a className="btn-primary btn-block link-btn" href={demoEntryUrl()!}>デモの画面を開く<Icon name="arrowRight" /></a>
-          : <p className="empty-note">デモの画面の場所が設定されていません。運営にお問い合わせください。</p>}
-        <Link className="text-btn link-btn" to={PATHS.welcome}>トップに戻る</Link>
-      </div>
-    </main>
-  );
+  return <Navigate to={PATHS.welcome} replace />;
 }
 
 export function Login() {
   const { appMode, setMe } = useSession();
+  const role = useRoleParam();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -88,8 +98,11 @@ export function Login() {
   }
 
   return (
-    <main className="screen guest-screen">
-      <h1 className="display">ログイン</h1>
+    <main className={`screen guest-screen ${role ? `role-${role}` : ""}`}>
+      <div className="title-block">
+        {role && <span className="eyebrow">{ROLE_TEXT[role]}として使う</span>}
+        <h1 className="display">ログイン</h1>
+      </div>
       <form className="form-stack" onSubmit={submit} noValidate>
         <label className="field">
           <span className="label">メールアドレス</span>
@@ -108,7 +121,7 @@ export function Login() {
         <summary>パスワードを忘れた方</summary>
         <p className="hint">いまは、画面やメールでパスワードを設定し直す機能はありません。お手数ですが、<a className="inline-link" href={`mailto:${OPERATOR.contact}`}>{OPERATOR.contact}</a> までご連絡ください。</p>
       </details>
-      <p className="guest-switch">はじめての方は <Link to={PATHS.signup}>新規登録</Link></p>
+      <p className="guest-switch">はじめての方は <Link to={role ? signupOf(role) : PATHS.signup}>新規登録</Link></p>
     </main>
   );
 }
@@ -117,7 +130,9 @@ type Field = "email" | "password" | "passwordConfirm" | "role" | "legal";
 
 export function Signup() {
   const { appMode, setMe } = useSession();
-  const [f, setF] = useState({ email: "", password: "", passwordConfirm: "", role: "" as "" | "restaurant" | "producer", legalAccepted: false });
+  // トップで役割を選んできたときは、役割をもう一度は聞かない
+  const picked = useRoleParam();
+  const [f, setF] = useState({ email: "", password: "", passwordConfirm: "", role: (picked ?? "") as "" | Role, legalAccepted: false });
   const [error, setError] = useState<{ field?: Field; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   if (appMode !== "general") return <Navigate to={PATHS.demo} replace />;
@@ -140,10 +155,13 @@ export function Signup() {
   const errorFor = (field: Field) => error?.field === field && <span className="field-error" role="alert"><Icon name="alert" size={18} />{error.text}</span>;
 
   return (
-    <main className="screen guest-screen">
-      <h1 className="display">新規登録</h1>
+    <main className={`screen guest-screen ${picked ? `role-${picked}` : ""}`}>
+      <div className="title-block">
+        {picked && <span className="eyebrow">{ROLE_TEXT[picked]}として使う</span>}
+        <h1 className="display">新規登録</h1>
+      </div>
       <form className="form-stack" onSubmit={submit} noValidate>
-        <fieldset className="field">
+        {picked ? errorFor("role") : <fieldset className="field">
           <legend className="label">どちらで使いますか</legend>
           <div className="option-cards">
             {(["restaurant", "producer"] as const).map((role) => (
@@ -155,7 +173,7 @@ export function Signup() {
             ))}
           </div>
           {errorFor("role")}
-        </fieldset>
+        </fieldset>}
         <label className="field">
           <span className="label">メールアドレス</span>
           <input type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} autoComplete="email" autoCapitalize="none" inputMode="email" aria-required="true" aria-invalid={error?.field === "email"} />
@@ -186,7 +204,7 @@ export function Signup() {
           {busy ? <><span className="spinner" aria-hidden="true" />登録しています…</> : "登録する"}
         </button>
       </form>
-      <p className="guest-switch">登録済みの方は <Link to={PATHS.login}>ログイン</Link></p>
+      <p className="guest-switch">登録済みの方は <Link to={picked ? loginOf(picked) : PATHS.login}>ログイン</Link></p>
     </main>
   );
 }
