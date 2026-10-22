@@ -31,8 +31,8 @@ export function usePickupData() {
 
 type Step = { kind: "where" } | { kind: "place"; placeKind: PlaceKind };
 
-/** 2つの質問（どこで渡せますか？ → 場所の名前と住所）で「いつもの受け渡し場所」を登録する。曜日・時間は聞かない。終わったら onDone */
-export function PickupSetup({ candidates, onDone, onCancel }: { candidates: Candidate[]; onDone: (usual: UsualPlace[]) => void; onCancel?: () => void }) {
+/** 2つの質問（どこで渡せますか？ → 場所の名前と住所）で「いつもの受け渡し場所」を登録する。曜日・時間は聞かない。終わったら onDone（登録した場所の placeId も渡す） */
+export function PickupSetup({ candidates, onDone, onCancel }: { candidates: Candidate[]; onDone: (usual: UsualPlace[], placeId?: string) => void; onCancel?: () => void }) {
   const [step, setStep] = useState<Step>({ kind: "where" });
   const [draft, setDraft] = useState({ name: "", address: "" });
   const [showList, setShowList] = useState(false);
@@ -64,8 +64,8 @@ export function PickupSetup({ candidates, onDone, onCancel }: { candidates: Cand
     setBusy(true);
     setMessage(null);
     try {
-      const d = await confirmationApi<{ usual: UsualPlace[] }>("/api/pickup-points", "POST", body);
-      onDone(d.usual);
+      const d = await confirmationApi<{ usual: UsualPlace[]; created?: { placeId?: string } }>("/api/pickup-points", "POST", body);
+      onDone(d.usual, d.created?.placeId);
     } catch (err) {
       setMessage(friendlyError(err, "登録できませんでした。もう一度お試しください"));
     } finally {

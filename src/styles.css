@@ -1008,6 +1008,8 @@ a.inline-link { display: inline-flex; align-items: center; min-height: var(--tap
 .pickup-options { display: grid; gap: 8px; }
 .pickup-option { min-height: 52px; padding: 8px 14px; border: 1.5px solid var(--color-line-strong); border-radius: var(--r-btn); background: var(--color-page); color: var(--color-text); font-size: 16px; font-weight: 700; text-align: left; }
 .pickup-option.on { border-color: var(--color-producer-dark); background: var(--color-producer-tint); }
+.pickup-option.pickup-add { display: flex; align-items: center; gap: 6px; border-style: dashed; color: var(--color-producer-ink); }
+.pickup-add-box { padding: 14px; border: 1.5px solid var(--color-line); border-radius: var(--r-input); background: var(--color-zone); min-width: 0; }
 
 /* 出品：商品ごとの行（「＋ 商品を追加」で増やす）。行ごとに登録の結果・理由を出す */
 .supply-new-row { display: grid; gap: 12px; margin: 0; padding: 12px; border: 1.5px solid var(--color-line); border-radius: var(--r-input); background: var(--color-page); min-width: 0; }
@@ -1078,7 +1080,9 @@ a.inline-link { display: inline-flex; align-items: center; min-height: var(--tap
 .review-box { display: grid; gap: 10px; padding: 14px; border: 1.5px solid var(--color-line); border-radius: var(--r-input); background: var(--color-page); min-width: 0; }
 .review-head { display: flex; align-items: center; justify-content: space-between; gap: 4px 8px; flex-wrap: wrap; }
 .review-head b { font-size: 17px; overflow-wrap: anywhere; }
-.usual-tag { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; background: var(--accent-tint); color: var(--accent-ink); font-size: 14px; font-weight: 800; white-space: nowrap; }
+/* 登録済み：評価欄全体ではなく、この札だけを黄色系で目立たせる（未登録の「☆ …に登録」ボタンは白地のまま） */
+.usual-tag { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 2px 12px 2px 8px; border: 1.5px solid var(--color-amber-line); border-radius: 999px; background: var(--color-amber-tint); color: var(--color-amber); font-size: 15px; font-weight: 800; white-space: nowrap; }
+.usual-star { color: var(--color-yellow); font-size: 20px; line-height: 1; -webkit-text-stroke: 0.6px var(--color-amber); }
 .review-form { display: grid; gap: 10px; min-width: 0; }
 .review-done { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 0; font-weight: 800; }
 .review-comment { font-weight: 400; overflow-wrap: anywhere; }

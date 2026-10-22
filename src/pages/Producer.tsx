@@ -246,7 +246,7 @@ export function NewListingPage({ me }: { me: Me }) {
           )}
           <NewSupply key={draft.key} data={{ ...data, slots: upcoming }} defaultOrigin={me.producer?.originPrefecture ?? ""}
             initial={draft.value ?? undefined} general={general}
-            onCreated={(text) => { void reload(); if (text) { setCreated(text); setStep("done"); } }} />
+            onCreated={(text) => { void reload(); if (text) { setCreated(text); setStep("done"); } }} onPlaceAdded={reload} />
           <button type="button" className="text-btn" onClick={() => { setAiError(null); setStep("choose"); }}>入力のしかたを選び直す</button>
         </>
       )}
@@ -407,29 +407,53 @@ function FirstPlaceSetup({ onDone }: { onDone: () => void }) {
   );
 }
 
+/** 出品の画面から受け渡し場所を追加する（マイページの「場所を追加する」と同じ入力） */
+function AddPlace({ onDone, onCancel }: { onDone: (usual: UsualPlace[], placeId?: string) => Promise<void>; onCancel: () => void }) {
+  const { data, error } = usePickupData();
+  return (
+    <>
+      {error && <p className="alert bad" role="alert">{error}</p>}
+      {!data && !error && <p className="muted" aria-busy="true">読み込み中…</p>}
+      {data && <PickupSetup candidates={data.candidates} onDone={(usual, placeId) => void onDone(usual, placeId)} onCancel={onCancel} />}
+      {error && <button type="button" className="text-btn" onClick={onCancel}>やめる</button>}
+    </>
+  );
+}
+
 /**
  * 受け渡し（一般向けの環境）：いつもの場所（最初から選んでおく）＋今回渡せる日＋時間帯（午前／午後）。
- * 場所に曜日・時間は持たせない（収穫や予定で変わるので、出品のたびに選ぶ）。細かい時刻はマッチング後のやり取りで決める
+ * 場所に曜日・時間は持たせない（収穫や予定で変わるので、出品のたびに選ぶ）。細かい時刻はマッチング後のやり取りで決める。
+ * 場所が1か所でも選べる形で出し、「＋ 受け渡し場所を追加」から場所を増やせる（追加した場所を今回の出品で選んでおく）
  */
-function HandoverChoice({ places, value, onChange }: {
+function HandoverChoice({ places, value, onChange, onPlaceAdded }: {
   places: UsualPlace[]; value: Pick<SupplyShared, "placeId" | "date" | "period">; onChange: (patch: Partial<SupplyShared>) => void;
+  onPlaceAdded: () => Promise<void>;
 }) {
   const [moreDays, setMoreDays] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [added, setAdded] = useState<string | null>(null);
   const choices = handoverChoices(new Date());
   const shown = moreDays ? choices : choices.slice(0, 7);
   const periods = choices.find((c) => c.date === value.date)?.periods ?? [];
   const place = places.find((p) => p.placeId === value.placeId) ?? places[0];
   if (!place) return null;
+  async function done(usual: UsualPlace[], placeId?: string) {
+    await onPlaceAdded(); // 出品の画面の場所の一覧を読み直してから選ぶ
+    const p = usual.find((x) => x.placeId === placeId);
+    if (p) { onChange({ placeId: p.placeId }); setAdded(p.name); }
+    setAdding(false);
+  }
   return (
     <div className="field pickup-choice" data-field="handover">
-      <span className="label">受け渡し</span>
-      {places.length > 1 ? (
-        <div className="pickup-options" role="group" aria-label="場所">
-          {places.map((p) => <button key={p.placeId} type="button" className={`pickup-option ${p.placeId === place.placeId ? "on" : ""}`} aria-pressed={p.placeId === place.placeId} onClick={() => onChange({ placeId: p.placeId })}>{p.name}</button>)}
-        </div>
-      ) : (
-        <div className="pickup-current"><b className="pickup-current-place"><Icon name="pin" size={20} />いつもの{place.name}<Icon name="check" size={20} strokeWidth={2.6} /></b></div>
-      )}
+      <span className="label">受け渡しの場所</span>
+      <div className="pickup-options" role="group" aria-label="場所">
+        {places.map((p) => <button key={p.placeId} type="button" className={`pickup-option ${p.placeId === place.placeId ? "on" : ""}`} aria-pressed={p.placeId === place.placeId} onClick={() => { onChange({ placeId: p.placeId }); setAdded(null); }}>{p.name}</button>)}
+        {!adding && <button type="button" className="pickup-option pickup-add" onClick={() => { setAdding(true); setAdded(null); }}><Icon name="plus" size={20} />受け渡し場所を追加</button>}
+      </div>
+      {added && <div className="alert ok" role="status"><Icon name="check" />「{added}」を追加して、今回の受け渡し場所に選びました</div>}
+      {!adding && places.length === 1 && <span className="hint">ほかの場所でも渡せるときは、追加すると出品ごとに選べます。</span>}
+      {/* 出品の入力（form）の中なので、場所の入力欄で Enter を押しても出品を送らない */}
+      {adding && <div className="pickup-add-box" onKeyDown={(e) => { if (e.key === "Enter" && e.target instanceof HTMLInputElement) e.preventDefault(); }}><AddPlace onDone={done} onCancel={() => setAdding(false)} /></div>}
       <span className="label" id="hd-date">渡せる日</span>
       <div className="pickup-options" role="group" aria-labelledby="hd-date">
         {shown.map((c) => (
@@ -494,8 +518,8 @@ function PickupChoice({ slots, value, onChange }: { slots: Slot[]; value: string
  * 新しい出品のフォーム（出品の画面）。initial は AI の下書き（最初の行に入れておき、生産者が確かめて直す）。
  * onCreated には、全部登録できたときだけ結果の文を渡す
  */
-function NewSupply({ data, defaultOrigin, onCreated, general = false, initial }: {
-  data: Data; defaultOrigin: string; onCreated: (text?: string) => void; general?: boolean; initial?: SupplyDraft;
+function NewSupply({ data, defaultOrigin, onCreated, onPlaceAdded, general = false, initial }: {
+  data: Data; defaultOrigin: string; onCreated: (text?: string) => void; onPlaceAdded: () => Promise<void>; general?: boolean; initial?: SupplyDraft;
 }) {
   const keyRef = useRef(1);
   const newRow = (): SupplyRow => ({ key: keyRef.current++, itemName: "", varietyId: "", grade: "regular", irregularReason: "", availableKg: "", priceYenPerKg: "", minKg: "1", status: null });
@@ -656,7 +680,7 @@ function NewSupply({ data, defaultOrigin, onCreated, general = false, initial }:
           </select>
         </label>
         {general
-          ? <HandoverChoice places={data.places ?? []} value={shared} onChange={(patch) => setShared((x) => ({ ...x, ...patch }))} />
+          ? <HandoverChoice places={data.places ?? []} value={shared} onChange={(patch) => setShared((x) => ({ ...x, ...patch }))} onPlaceAdded={onPlaceAdded} />
           : <PickupChoice slots={data.slots} value={shared.slotId} onChange={(id) => setShare("slotId", id)} />}
         <div className="field">
           <span className="label" id="pub-title">すぐに公開する？</span>

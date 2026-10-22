@@ -62,7 +62,7 @@ export function TradeReviewBox({ requestId, partnerName, role }: { requestId: st
   return (
     <section className="review-box" aria-label={`${partnerName}との取引の評価`}>
       {role === "restaurant" && (
-        <div className="review-head"><b>{partnerName}</b>{state?.usual && <span className="usual-tag">☆ いつもの農家</span>}</div>
+        <div className="review-head"><b>{partnerName}</b>{state?.usual && <span className="usual-tag"><span className="usual-star" aria-hidden="true">★</span>いつもの農家</span>}</div>
       )}
       {loadError && (
         <div className="alert bad" role="alert"><Icon name="alert" />{loadError}
