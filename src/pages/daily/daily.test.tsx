@@ -15,6 +15,26 @@ if (!("ResizeObserver" in globalThis)) {
   (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
 }
 
+
+/** 音声認識の偽物。start() のあと steps の結果を順に返し、end なら終わる（onend）。stop()・abort() でも終わる */
+function fakeRecognition(steps: { text: string; final: boolean }[], end = true) {
+  return class {
+    static instances = 0;
+    lang = ""; interimResults = false; continuous = false; maxAlternatives = 1;
+    onresult: ((e: unknown) => void) | null = null; onerror: ((e: unknown) => void) | null = null; onend: (() => void) | null = null;
+    ended = false;
+    start() {
+      setTimeout(() => {
+        steps.forEach((s, i) => this.onresult?.({ resultIndex: 0, results: [Object.assign([{ transcript: s.text }], { isFinal: s.final })], index: i }));
+        if (end) this.finish();
+      }, 0);
+    }
+    finish() { if (!this.ended) { this.ended = true; this.onend?.(); } }
+    stop() { setTimeout(() => this.finish(), 0); }
+    abort() { this.onerror?.({ error: "aborted" }); this.finish(); }
+  };
+}
+
 const restaurant: Me = { id: "u-r", role: "restaurant", displayName: "まちの食堂", producer: null, onboarded: true };
 const producer: Me = { id: "u-p", role: "producer", displayName: "みどり農園", producer: { id: "p-1", farmName: "みどり農園", originPrefecture: "大阪府" }, onboarded: true };
 const req = (id: string, status: ConfirmationStatus, over: Partial<Confirmation> = {}): Confirmation => ({
@@ -1002,6 +1022,47 @@ describe("出品：複数の商品を1つの画面から登録（品目は候補
     const numbers = row.querySelectorAll<HTMLInputElement>('input[type="number"]');
     expect([row.querySelector<HTMLInputElement>('input[name="itemName"]')!.value, numbers[0].value, numbers[1].value]).toEqual(["なす", "8", "450"]);
     expect(calls.some((c) => c.url === "/api/supplies" && c.method === "POST")).toBe(false); // 下書きだけでは登録しない
+  });
+  it("話して入力（iPhone など）：確定の印がないまま終わっても、聞き取った文で AI の下書きを1回だけ頼む", async () => {
+    vi.stubGlobal("webkitSpeechRecognition", fakeRecognition([{ text: "トマト", final: false }, { text: "トマト 10キロ 1キロ500円", final: false }]));
+    draftReply = { itemName: "トマト", availableKg: 10, priceYenPerKg: 500, grade: null };
+    await open("/producer/listings/new");
+    await click(button("話して入力する"));
+    await flush();
+    expect(calls.filter((c) => c.url === "/api/supply-draft").map((c) => c.body)).toEqual([{ text: "トマト 10キロ 1キロ500円" }]); // いちばん新しい文を1回だけ
+    expect($(".draft-note")?.textContent).toContain("「トマト 10キロ 1キロ500円」から読み取りました");
+  });
+  it("話して入力：確定の結果が来たら、そのあと終わっても AI は1回だけ（PC の Chrome などの従来の動き）", async () => {
+    vi.stubGlobal("webkitSpeechRecognition", fakeRecognition([{ text: "なす", final: false }, { text: "なす 3キロ", final: true }]));
+    await open("/producer/listings/new");
+    await click(button("話して入力する"));
+    await flush();
+    expect(calls.filter((c) => c.url === "/api/supply-draft").map((c) => c.body)).toEqual([{ text: "なす 3キロ" }]);
+  });
+  it("話して入力：「聞いています…」を押して止めたときも、聞き取った文で1回だけ。何も聞き取れなければ AI は呼ばない", async () => {
+    vi.stubGlobal("webkitSpeechRecognition", fakeRecognition([{ text: "きゅうり 2キロ", final: false }], false));
+    await open("/producer/listings/new");
+    await click(button("話して入力する"));
+    expect(button("聞いています…")).toBeTruthy();
+    expect(calls.some((c) => c.url === "/api/supply-draft")).toBe(false); // 止めるまでは頼まない
+    await click(button("聞いています…"));
+    await flush();
+    expect(calls.filter((c) => c.url === "/api/supply-draft").map((c) => c.body)).toEqual([{ text: "きゅうり 2キロ" }]);
+    act(() => root?.unmount()); el.remove(); calls = [];
+    vi.stubGlobal("webkitSpeechRecognition", fakeRecognition([], true));
+    await open("/producer/listings/new");
+    await click(button("話して入力する"));
+    await flush();
+    expect(calls.some((c) => c.url === "/api/supply-draft")).toBe(false);
+    expect(button("話して入力する")).toBeTruthy(); // 聞き取りは終わり、入口のまま
+  });
+  it("話して入力：聞いている途中で画面を閉じたら（abort）、AI は呼ばない", async () => {
+    vi.stubGlobal("webkitSpeechRecognition", fakeRecognition([{ text: "かぶ 4キロ", final: false }], false));
+    await open("/producer/listings/new");
+    await click(button("話して入力する"));
+    act(() => root?.unmount()); el.remove();
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+    expect(calls.some((c) => c.url === "/api/supply-draft")).toBe(false);
   });
   it("品目名の形が違う（記号）・空の行は送らずに理由を出す", async () => {
     await openForm();

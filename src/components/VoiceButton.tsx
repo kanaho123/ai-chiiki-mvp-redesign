@@ -28,7 +28,11 @@ const ERROR_TEXT: Record<string, string> = {
   "audio-capture": "マイクが見つかりませんでした",
 };
 
-/** 音声認識の開始・停止と状態。onText は聞き取れた文（確定したもの）ごとに呼ぶ */
+/**
+ * 音声認識の開始・停止と状態。onText は1回の聞き取りにつき1回だけ、聞き取れた文で呼ぶ。
+ * 確定した結果（isFinal）が届けばすぐに渡す。iPhone など（WebKit）では確定の印が付かないまま終わることがあるので、
+ * そのときは終わった時点で、届いていた文を渡す（同じ聞き取りで2回は渡さない）
+ */
 export function useSpeech(onText: (text: string) => void) {
   const Ctor = recognitionCtor();
   const [listening, setListening] = useState(false);
@@ -36,7 +40,8 @@ export function useSpeech(onText: (text: string) => void) {
   const rec = useRef<Recognition | null>(null);
   const onTextRef = useRef(onText);
   onTextRef.current = onText;
-  useEffect(() => () => rec.current?.abort(), []);
+  const closed = useRef(false); // 画面を閉じた後は渡さない（abort の後の onend を含む）
+  useEffect(() => { closed.current = false; return () => { closed.current = true; rec.current?.abort(); }; }, []);
 
   const start = () => {
     if (!Ctor || listening) return;
@@ -46,13 +51,22 @@ export function useSpeech(onText: (text: string) => void) {
     r.interimResults = false;
     r.continuous = false;
     r.maxAlternatives = 1;
+    let heard = ""; // 届いた結果の文（確定していなくても、いちばん新しいもの）
+    let delivered = false;
+    const deliver = (text: string) => {
+      const t = text.trim();
+      if (delivered || closed.current || !t) return;
+      delivered = true;
+      onTextRef.current(t);
+    };
     r.onresult = (e) => {
-      let text = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) text += e.results[i][0].transcript;
-      if (text.trim()) onTextRef.current(text.trim());
+      let final = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) final += e.results[i][0].transcript;
+      heard = Array.from(e.results, (x) => x[0].transcript).join("");
+      deliver(final);
     };
     r.onerror = (e) => { if (e.error !== "aborted") setError(ERROR_TEXT[e.error] ?? "音声入力を使えませんでした。文字で入力してください"); };
-    r.onend = () => { setListening(false); rec.current = null; };
+    r.onend = () => { deliver(heard); setListening(false); rec.current = null; };
     rec.current = r;
     try {
       r.start();

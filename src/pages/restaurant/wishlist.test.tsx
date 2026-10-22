@@ -17,6 +17,26 @@ if (!("ResizeObserver" in globalThis)) {
   (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
 }
 
+
+/** 音声認識の偽物。start() のあと steps の結果を順に返し、end なら終わる（onend）。stop()・abort() でも終わる */
+function fakeRecognition(steps: { text: string; final: boolean }[] | (() => { text: string; final: boolean }[]), end: boolean | (() => boolean) = true) {
+  return class {
+    static instances = 0;
+    lang = ""; interimResults = false; continuous = false; maxAlternatives = 1;
+    onresult: ((e: unknown) => void) | null = null; onerror: ((e: unknown) => void) | null = null; onend: (() => void) | null = null;
+    ended = false;
+    start() {
+      setTimeout(() => {
+        (typeof steps === "function" ? steps() : steps).forEach((s, i) => this.onresult?.({ resultIndex: 0, results: [Object.assign([{ transcript: s.text }], { isFinal: s.final })], index: i }));
+        if (typeof end === "function" ? end() : end) this.finish();
+      }, 0);
+    }
+    finish() { if (!this.ended) { this.ended = true; this.onend?.(); } }
+    stop() { setTimeout(() => this.finish(), 0); }
+    abort() { this.onerror?.({ error: "aborted" }); this.finish(); }
+  };
+}
+
 const me: Me = { id: "u-r", role: "restaurant", displayName: "まちの食堂", producer: null, onboarded: true };
 const formKey = `ai-chiiki:restaurant:v4:${me.id}`;
 const items = [
@@ -123,6 +143,47 @@ describe("STEP 1（一般向けの環境）：入力例は1つだけ。一覧・
     await click(button("例文を入力"));
     expect(el.querySelector("textarea")!.value).toBe("トマト10kg 大阪産 10/27午前");
     expect(calls.filter((c) => c.method !== "GET")).toEqual([]); // 入れるだけで AI は呼ばない
+  });
+});
+
+describe("STEP 1 の音声入力（話して入力）：聞き取った文を入力欄に1回だけ加える", () => {
+  const ta = () => el.querySelector("textarea")!;
+  it("確定の印がないまま終わっても（iPhone など）、いちばん新しい文が入る。AI はまだ呼ばない", async () => {
+    vi.stubGlobal("webkitSpeechRecognition", fakeRecognition([{ text: "トマト", final: false }, { text: "トマト10kg 大阪産", final: false }]));
+    await open();
+    await click(button("話して入力"));
+    await flush();
+    expect(ta().value).toBe("トマト10kg 大阪産");
+    expect(calls.filter((c) => c.method !== "GET")).toEqual([]); // 入れるだけで「条件を整理する」までは AI を呼ばない
+  });
+  it("確定の結果のあとに終わっても、文は1回だけ。すでに書いた文の後ろに加える（PC の Chrome などの従来の動き）", async () => {
+    let said = [{ text: "10/27午前", final: false }, { text: "10/27午前", final: true }];
+    vi.stubGlobal("webkitSpeechRecognition", fakeRecognition(() => said));
+    await open();
+    await writeText("トマト10kg");
+    await click(button("話して入力"));
+    await flush();
+    expect(ta().value).toBe("トマト10kg 10/27午前");
+    // もう一度話すと、そのときの文の後ろに加わる（古い入力欄の値で上書きしない）
+    said = [{ text: "大阪産", final: false }];
+    await click(button("話して入力"));
+    await flush();
+    expect(ta().value).toBe("トマト10kg 10/27午前 大阪産");
+  });
+  it("押して止めたときも1回だけ。何も聞き取れなければ入力欄は変わらない", async () => {
+    let said = [{ text: "なす5kg", final: false }], ends = false;
+    vi.stubGlobal("webkitSpeechRecognition", fakeRecognition(() => said, () => ends));
+    await open();
+    await click(button("話して入力"));
+    expect(ta().value).toBe("");
+    await click(button("聞いています…"));
+    await flush();
+    expect(ta().value).toBe("なす5kg");
+    said = []; ends = true; // 何も聞き取れずに終わる
+    await click(button("話して入力"));
+    await flush();
+    expect(button("聞いています…")).toBeUndefined(); // 聞き取りは終わっている（止まったまま聞き続けていない）
+    expect(ta().value).toBe("なす5kg");
   });
 });
 
